@@ -20,9 +20,7 @@ class AssistantEngine:
 
     async def run(self) -> None:
         self._running = True
-        await self.pipeline.tts.speak(
-            f"Olá, sou a {config.assistant_name}. Como posso ajudar?"
-        )
+        logger.info("Assistente iniciada de forma silenciosa.")
 
         while self._running:
             if config.wake_word_enabled:
