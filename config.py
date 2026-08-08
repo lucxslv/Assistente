@@ -31,6 +31,7 @@ class Config:
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     openrouter_model: str = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_llm_model: str = os.getenv("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
 
     # Áudio
     stt_provider: str = os.getenv("STT_PROVIDER", "whisper")

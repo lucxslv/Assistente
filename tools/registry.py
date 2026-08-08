@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from tools import home_assistant, system_info, weather, media_player
+from memory.database import db
 
 logger = logging.getLogger(__name__)
 
@@ -153,3 +154,45 @@ class ToolRegistry:
                 "required": ["level"],
             },
         )
+        self.register(
+            name="memorize_fact",
+            handler=self._wrap_memorize_fact,
+            description="Salva um fato importante sobre o usuário (ex: 'O usuário tem um cachorro chamado Rex', 'O usuário trabalha com Python').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "fact": {
+                        "type": "string",
+                        "description": "Fato a ser memorizado de forma clara",
+                    }
+                },
+                "required": ["fact"],
+            },
+        )
+        self.register(
+            name="memorize_preference",
+            handler=self._wrap_memorize_pref,
+            description="Salva uma preferência do usuário (ex: tema=escuro, musica_favorita=rock).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Chave da preferência (sem espaços, ex: estilo_musical)",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Valor da preferência",
+                    }
+                },
+                "required": ["key", "value"],
+            },
+        )
+
+    def _wrap_memorize_fact(self, fact: str) -> str:
+        db.add_fact(fact)
+        return f"Fato memorizado: {fact}"
+
+    def _wrap_memorize_pref(self, key: str, value: str) -> str:
+        db.set_preference(key, value)
+        return f"Preferência salva: {key} = {value}"
