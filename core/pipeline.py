@@ -14,6 +14,7 @@ from core.memory import ConversationMemory
 from memory.retrieval.retriever import MemoryRetriever
 from providers import (
     GeminiProvider,
+    GroqProvider,
     OllamaProvider,
     OpenAIProvider,
     OpenRouterProvider,
@@ -51,6 +52,8 @@ class AssistantPipeline:
             return OllamaProvider()
         if provider == "openrouter":
             return OpenRouterProvider()
+        if provider == "groq":
+            return GroqProvider()
         raise ValueError(f"Provedor LLM desconhecido: {provider}")
 
     async def process_voice_input(self) -> str | None:
