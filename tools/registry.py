@@ -5,7 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from tools import home_assistant, system_info, weather, media_player
+from tools import home_assistant, system_info, weather, media_player, web_search
 from memory.database import db
 
 logger = logging.getLogger(__name__)
@@ -186,6 +186,36 @@ class ToolRegistry:
                     }
                 },
                 "required": ["key", "value"],
+            },
+        )
+        self.register(
+            name="search_web",
+            handler=web_search.search_web,
+            description="Pesquisa na internet usando um motor de busca e retorna um resumo dos sites encontrados. Ideal para buscar notícias, tirar dúvidas ou descobrir sites.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "A frase ou termo de pesquisa a ser buscado no DuckDuckGo",
+                    }
+                },
+                "required": ["query"],
+            },
+        )
+        self.register(
+            name="read_webpage",
+            handler=web_search.read_webpage,
+            description="Lê e extrai todo o texto do conteúdo de uma página web específica através de uma URL. Utilize após fazer uma busca caso o resumo não seja suficiente.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "O endereço completo (URL) do site a ser lido",
+                    }
+                },
+                "required": ["url"],
             },
         )
 
