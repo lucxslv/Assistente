@@ -1,0 +1,27 @@
+# Environments & Secrets
+.env
+.venv/
+env/
+venv/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary & Audio Cache
+*.mp3
+*.wav
+*.tmp
+.pytest_cache/
