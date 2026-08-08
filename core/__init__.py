@@ -1,6 +1,6 @@
-"""Núcleo da assistente — orquestração e memória."""
+"""Núcleo da Assistente — Engine e Pipeline."""
 
 from core.engine import AssistantEngine
-from core.memory import ConversationMemory
+from core.pipeline import AssistantPipeline
 
-__all__ = ["AssistantEngine", "ConversationMemory"]
+__all__ = ["AssistantEngine", "AssistantPipeline"]

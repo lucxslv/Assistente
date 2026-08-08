@@ -26,6 +26,15 @@ class ConversationMemory:
             }
         )
 
+    def add_assistant_tool_calls(self, tool_calls: list) -> None:
+        self._append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"function": {"name": tc.name, "arguments": tc.arguments}} for tc in tool_calls]
+            }
+        )
+
     def get_messages(self) -> list[dict[str, Any]]:
         return list(self.messages)
 

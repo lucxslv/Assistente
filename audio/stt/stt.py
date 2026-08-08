@@ -42,7 +42,9 @@ class SpeechToText:
         if audio is None or len(audio) == 0:
             return None
 
-        return await asyncio.to_thread(self._transcribe_audio, audio)
+        if config.stt_provider.lower() == "groq":
+            return await asyncio.to_thread(self._transcribe_groq, audio)
+        return await asyncio.to_thread(self._transcribe_local, audio)
 
     def _record_dynamic(self, fixed_duration: float | None = None) -> np.ndarray | None:
         chunk_sec = 0.05  # Bloco de 50ms (800 amostras)
@@ -106,7 +108,7 @@ class SpeechToText:
 
         return np.concatenate(recorded_chunks)
 
-    def _transcribe_audio(self, audio: np.ndarray) -> str | None:
+    def _transcribe_local(self, audio: np.ndarray) -> str | None:
         model = self._load_model()
         language = config.language.split("-")[0] if config.language else "pt"
 
@@ -122,9 +124,68 @@ class SpeechToText:
 
         if full_text:
             logger.debug(
-                "Transcrição concluída (idioma detectado: %s, prob: %.2f): %s",
+                "Transcrição local (idioma: %s, prob: %.2f): %s",
                 info.language,
                 info.language_probability,
                 full_text,
             )
         return full_text or None
+
+    def _transcribe_groq(self, audio: np.ndarray) -> str | None:
+        if not config.groq_api_key:
+            logger.error("Chave GROQ_API_KEY não configurada no .env!")
+            return None
+
+        import io
+        import httpx
+        import soundfile as sf
+
+        # Converte numpy array para formato WAV em memória
+        wav_io = io.BytesIO()
+        sf.write(wav_io, audio, SAMPLE_RATE, format="WAV", subtype="PCM_16")
+        wav_io.seek(0)
+
+        language = config.language.split("-")[0] if config.language else "pt"
+        url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {config.groq_api_key}"}
+        
+        files = {"file": ("audio.wav", wav_io, "audio/wav")}
+        data = {
+            "model": "whisper-large-v3",
+            "language": language,
+            "response_format": "json",
+            "temperature": "0.0",
+            "prompt": "Voz do usuário, transcrição limpa. Sem legendas, sem agradecimentos, sem notas musicais."
+        }
+
+        try:
+            logger.debug("Enviando áudio para nuvem Groq (whisper-large-v3)...")
+            response = httpx.post(url, headers=headers, files=files, data=data, timeout=30.0)
+            response.raise_for_status()
+            
+            result = response.json()
+            text = result.get("text", "").strip()
+            
+            import re
+            # Remove notas musicais e legendas em colchetes comuns em silêncio
+            text = re.sub(r'\[.*?\]', '', text)
+            text = re.sub(r'\(.*?\)', '', text)
+            text = text.replace('♪', '').replace('♫', '').strip()
+            
+            # Filtro contra alucinações curtas e comuns
+            lower_text = text.lower()
+            bad_words = ["obrigado", "obrigada", "inscreva", "assistir", "canal", "amém", "tchau", "legendado", "áudio:"]
+            
+            word_count = len(lower_text.split())
+            if word_count <= 4 and any(bw in lower_text for bw in bad_words):
+                logger.debug("Transcrição ignorada (alucinação detectada): %s", text)
+                return None
+                
+            if not any(c.isalpha() for c in text):
+                return None
+            
+            logger.debug("Transcrição Groq concluída: %s", text)
+            return text
+        except Exception:
+            logger.exception("Erro na transcrição via Groq")
+            return None

@@ -5,7 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from tools import home_assistant, system_info, weather
+from tools import home_assistant, system_info, weather, media_player
 
 logger = logging.getLogger(__name__)
 
@@ -103,5 +103,53 @@ class ToolRegistry:
                     },
                 },
                 "required": ["entity_id", "action"],
+            },
+        )
+        self.register(
+            name="play_music",
+            handler=media_player.play_music,
+            description="Toca uma música, artista ou áudio de forma invisível em background.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Nome da música ou artista para buscar e tocar",
+                    }
+                },
+                "required": ["query"],
+            },
+        )
+        self.register(
+            name="pause_music",
+            handler=media_player.pause_music,
+            description="Pausa a música que está tocando atualmente.",
+            parameters={"type": "object", "properties": {}},
+        )
+        self.register(
+            name="resume_music",
+            handler=media_player.resume_music,
+            description="Retoma a música que estava pausada.",
+            parameters={"type": "object", "properties": {}},
+        )
+        self.register(
+            name="stop_music",
+            handler=media_player.stop_music,
+            description="Para a música que está tocando.",
+            parameters={"type": "object", "properties": {}},
+        )
+        self.register(
+            name="set_volume",
+            handler=media_player.set_volume,
+            description="Ajusta o volume da música em background.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "integer",
+                        "description": "Nível de volume de 0 a 100",
+                    }
+                },
+                "required": ["level"],
             },
         )
