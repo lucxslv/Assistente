@@ -28,13 +28,19 @@ class WakeWordDetector:
             # openwakeword usa underline para nomes compostos
             base_name = config.wake_word.strip().lower().replace(" ", "_")
             
-            # Busca o caminho correto do modelo pré-treinado
+            # Busca o caminho correto do modelo pré-treinado interno
             paths = openwakeword.get_pretrained_model_paths()
             model_path = next((p for p in paths if base_name in p), None)
             
+            # Se não achou na biblioteca interna, tenta procurar na raiz do projeto (Ex: "charlie.onnx")
             if not model_path:
-                logger.error("Modelo de Wake Word '%s' não encontrado. Usando 'hey_jarvis' fallback.", base_name)
-                model_path = next(p for p in paths if "hey_jarvis" in p)
+                import os
+                custom_model = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), f"{base_name}.onnx")
+                if os.path.exists(custom_model):
+                    model_path = custom_model
+                else:
+                    logger.error("Modelo de Wake Word '%s' não encontrado (nem interno, nem customizado). Usando 'hey_jarvis' fallback.", base_name)
+                    model_path = next(p for p in paths if "hey_jarvis" in p)
 
             logger.info("Carregando modelo Wake Word: %s", model_path)
             
