@@ -28,6 +28,9 @@ class Config:
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
+    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+    openrouter_model: str = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
 
     # Áudio
     stt_provider: str = os.getenv("STT_PROVIDER", "whisper")

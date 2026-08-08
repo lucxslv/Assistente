@@ -1,0 +1,2 @@
+class UserPreferencesMemory:
+    pass
