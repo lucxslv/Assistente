@@ -117,6 +117,11 @@ class AssistantPipeline:
         else:
             reply = response.content or "Desculpe, não consegui formular uma resposta."
 
+        import re
+        reply = re.sub(r'<[^>]+>', '', reply).strip()
+        if not reply:
+            reply = "Ação concluída."
+
         # Etapa 8: Validador
         if not self.planner.validate_response(reply):
             reply = "Desculpe, ocorreu um erro ao gerar a resposta."
