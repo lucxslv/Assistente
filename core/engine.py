@@ -20,10 +20,11 @@ class AssistantEngine:
 
     async def run(self) -> None:
         self._running = True
+        continuous_mode = False
         logger.info("Assistente iniciada de forma silenciosa.")
 
         while self._running:
-            if config.wake_word_enabled:
+            if config.wake_word_enabled and not continuous_mode:
                 await self.wakeword.wait_for_wake_word()
 
             try:
@@ -33,19 +34,24 @@ class AssistantEngine:
                     user_text = await self.pipeline.process_voice_input()
                 except Exception:
                     logger.exception("Erro na captura/transcrição de voz")
+                    continuous_mode = False
                     continue
 
                 if not user_text:
+                    continuous_mode = False
                     continue
 
                 if self._is_exit_command(user_text):
                     await self.pipeline.tts.speak("Até logo!")
+                    continuous_mode = False
                     break
 
                 try:
                     await self.pipeline.run_pipeline(user_text)
+                    continuous_mode = True
                 except Exception:
                     logger.exception("Erro ao processar solicitação")
+                    continuous_mode = False
                     await self.pipeline.tts.speak(
                         "Ocorreu um erro ao processar sua solicitação."
                     )
