@@ -54,10 +54,11 @@ class GroqProvider(BaseLLMProvider):
             role = msg.get("role", "user")
             
             if role == "tool":
+                func_name = msg.get("name", "unknown")
                 normalized.append({
                     "role": "tool",
                     "content": msg.get("content", ""),
-                    "tool_call_id": msg.get("name", "call_123") # Mock simples
+                    "tool_call_id": f"call_{func_name}"
                 })
             elif role == "assistant":
                 new_msg = {"role": "assistant", "content": msg.get("content", "")}
@@ -66,11 +67,12 @@ class GroqProvider(BaseLLMProvider):
                     new_msg["tool_calls"] = []
                     for tc in msg["tool_calls"]:
                         func = tc.get("function", {})
+                        func_name = func.get("name", "unknown")
                         new_msg["tool_calls"].append({
-                            "id": tc.get("id", "call_123"),
+                            "id": f"call_{func_name}",
                             "type": "function",
                             "function": {
-                                "name": func.get("name"),
+                                "name": func_name,
                                 "arguments": json.dumps(func.get("arguments", {}))
                             }
                         })
