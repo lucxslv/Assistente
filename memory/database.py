@@ -2,16 +2,21 @@
 
 import sqlite3
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Resolve o caminho absoluto para a raiz do projeto (duas pastas acima de memory/database.py)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_DB_PATH = os.path.join(BASE_DIR, "charlie_memory.db")
 
 class MemoryDatabase:
     """Singleton para gerenciar a conexão e operações no banco de dados SQLite."""
     
     _instance = None
 
-    def __new__(cls, db_path: str = "charlie_memory.db"):
+    def __new__(cls, db_path: str = DEFAULT_DB_PATH):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance.db_path = db_path
