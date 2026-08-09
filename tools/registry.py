@@ -5,7 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from tools import home_assistant, system_info, weather, media_player, web_search
+from tools import home_assistant, system_info, weather, media_player, web_search, system_control
 from memory.database import db
 
 logger = logging.getLogger(__name__)
@@ -216,6 +216,41 @@ class ToolRegistry:
                     }
                 },
                 "required": ["url"],
+            },
+        )
+        self.register(
+            name="set_system_volume",
+            handler=system_control.set_system_volume,
+            description="Altera o volume principal do computador (Windows) de 0 a 100, ou muta/desmuta completamente o PC.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "integer",
+                        "description": "O nível do volume em porcentagem, de 0 a 100.",
+                    },
+                    "mute": {
+                        "type": "boolean",
+                        "description": "True para mutar o PC, False para desmutar.",
+                    }
+                },
+                "required": [],
+            },
+        )
+        self.register(
+            name="system_power_action",
+            handler=system_control.system_power_action,
+            description="Executa ações de energia ou segurança no Windows: bloquear tela, desligar, reiniciar ou suspender.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["lock", "sleep", "shutdown", "restart"],
+                        "description": "A ação a ser executada no PC.",
+                    }
+                },
+                "required": ["action"],
             },
         )
 
