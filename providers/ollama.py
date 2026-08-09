@@ -59,17 +59,17 @@ class OllamaProvider(BaseLLMProvider):
         for msg in messages:
             role = msg.get("role", "user")
             if role == "tool":
-                tool_msg = {
-                    "role": "tool",
-                    "content": msg.get("content", ""),
-                }
-                # Algumas versões da API do Ollama ignoram, mas é seguro enviar se existir
-                if "tool_call_id" in msg:
-                    tool_msg["tool_call_id"] = msg["tool_call_id"]
-                normalized.append(tool_msg)
+                # Modelos pequenos do Ollama alucinam com histórico nativo de ferramentas, 
+                # então convertemos o resultado da ferramenta para uma observação do sistema
+                normalized.append({
+                    "role": "user",
+                    "content": f"[SISTEMA - Resultado da ferramenta '{msg.get('name', 'desconhecida')}']: {msg.get('content', '')}",
+                })
             elif role == "assistant":
                 new_msg = {"role": "assistant", "content": msg.get("content", "")}
-                if "tool_calls" in msg:
+                # Se for a ÚLTIMA mensagem, mantemos o tool_calls.
+                # Para mensagens antigas, removemos para não induzir o modelo a repetir a ação
+                if "tool_calls" in msg and msg is messages[-1]:
                     new_msg["tool_calls"] = msg["tool_calls"]
                 normalized.append(new_msg)
             elif role == "user":
