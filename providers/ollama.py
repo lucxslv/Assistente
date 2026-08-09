@@ -67,11 +67,20 @@ class OllamaProvider(BaseLLMProvider):
                 })
             elif role == "assistant":
                 new_msg = {"role": "assistant", "content": msg.get("content", "")}
-                # Se for a ÚLTIMA mensagem, mantemos o tool_calls.
-                # Para mensagens antigas, removemos para não induzir o modelo a repetir a ação
-                if "tool_calls" in msg and msg is messages[-1]:
-                    new_msg["tool_calls"] = msg["tool_calls"]
-                normalized.append(new_msg)
+                
+                if "tool_calls" in msg:
+                    if msg is messages[-1]:
+                        # Mantém as ferramentas se for a última mensagem (ação ativa)
+                        new_msg["tool_calls"] = msg["tool_calls"]
+                    else:
+                        # Se for histórico antigo, converte a ferramenta em texto para não confundir o LLM
+                        if not new_msg["content"]:
+                            names = [tc.get("function", {}).get("name", "unknown") for tc in msg["tool_calls"]]
+                            new_msg["content"] = f"[Acionei a ferramenta: {', '.join(names)}]"
+                
+                # Só adiciona se houver algum conteúdo (evita mensagens vazias)
+                if new_msg.get("content") or new_msg.get("tool_calls"):
+                    normalized.append(new_msg)
             elif role == "user":
                 normalized.append({"role": "user", "content": msg.get("content", "")})
         return normalized
