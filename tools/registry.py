@@ -5,7 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from tools import home_assistant, system_info, weather, media_player, web_search, system_control
+from tools import home_assistant, system_info, weather, media_player, web_search, system_control, app_launcher
 from memory.database import db
 
 logger = logging.getLogger(__name__)
@@ -251,6 +251,26 @@ class ToolRegistry:
                     }
                 },
                 "required": ["action"],
+            },
+        )
+        self.register(
+            name="manage_application",
+            handler=app_launcher.manage_application,
+            description="Abre ou fecha um aplicativo no computador (ex: chrome, spotify, vscode, calculadora).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "app_name": {
+                        "type": "string",
+                        "description": "Nome do aplicativo (ex: 'chrome', 'spotify', 'vscode', 'calculadora').",
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["open", "close"],
+                        "description": "'open' para abrir o aplicativo, 'close' para fechar.",
+                    }
+                },
+                "required": ["app_name", "action"],
             },
         )
 

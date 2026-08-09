@@ -16,10 +16,10 @@ class LLMRouter:
         if any(w in normalized for w in ["escreva", "crie", "poema", "redação", "texto"]):
             return IntentCategory.WRITE
             
-        if any(w in normalized for w in ["pesquise", "quem é", "o que é", "onde", "qual a capital"]):
+        if any(w in normalized for w in ["pesquise", "pesquisar", "quem é", "quem foi", "o que é", "onde", "qual a", "notícia", "notícias"]):
             return IntentCategory.SEARCH
             
-        if any(w in normalized for w in ["desligue", "ligue", "abra", "feche", "luz", "horas", "tempo", "toca", "toque", "música", "som", "pausar", "pausa", "parar", "volume", "continua", "despausa", "aumenta", "abaixa"]):
+        if any(w in normalized for w in ["desligue", "desligar", "ligue", "abra", "abrir", "feche", "fechar", "luz", "horas", "tempo", "toca", "tocar", "toque", "música", "som", "pausar", "pausa", "parar", "volume", "continua", "despausa", "aumenta", "abaixa", "mutar", "muta", "bloqueie", "bloquear", "tela", "suspender", "reiniciar"]):
             return IntentCategory.COMMAND
             
         if any(w in normalized for w in ["calcule", "quanto é", "matemática", "raiz"]):
