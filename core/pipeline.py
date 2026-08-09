@@ -5,7 +5,7 @@ import logging
 from audio.stt import SpeechToText
 from audio.tts import TextToSpeech
 from brain.context.manager import ContextManager
-from brain.planner.planner import IntentPlanner
+from brain.planner.planner import IntentPlanner, IntentCategory
 from brain.profile import AssistantProfile
 from brain.prompts.prompts import build_system_prompt
 from brain.router.router import LLMRouter
@@ -91,11 +91,14 @@ class AssistantPipeline:
         
         self.memory.add_user(user_text)
 
+        # Oculta as ferramentas se a intenção for puramente casual
+        active_tools = self.tools.get_schemas() if intent != IntentCategory.CASUAL else None
+
         # Etapa 7: LLM
         response = await self.llm.chat(
             system_prompt=system_prompt,
             messages=self.memory.get_messages(),
-            tools=self.tools.get_schemas(),
+            tools=active_tools,
         )
 
         if response.tool_calls:
@@ -110,7 +113,7 @@ class AssistantPipeline:
             response = await self.llm.chat(
                 system_prompt=system_prompt,
                 messages=self.memory.get_messages(),
-                tools=self.tools.get_schemas(),
+                tools=active_tools,
             )
             
             reply = response.content or last_result or "Ação concluída."
