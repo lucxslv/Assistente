@@ -118,7 +118,14 @@ class AssistantPipeline:
             reply = response.content or "Desculpe, não consegui formular uma resposta."
 
         import re
+        # Remove HTML/XML tags
         reply = re.sub(r'<[^>]+>', '', reply).strip()
+        
+        # Blindagem: Modelos pequenos (Llama 3 8B) podem alucinar JSON (ex: {"name": "..."}) no texto.
+        # Removemos blocos parecidos com JSON bruto para a IA não falar isso em voz alta
+        reply = re.sub(r'\{.*?"name".*?\}', '', reply, flags=re.DOTALL).strip()
+        reply = re.sub(r'\{.*?"action".*?\}', '', reply, flags=re.DOTALL).strip()
+        
         if not reply:
             reply = "Ação concluída."
 
