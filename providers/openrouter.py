@@ -28,5 +28,5 @@ class OpenRouterProvider(BaseLLMProvider):
         tool_calls = []
         if 'tool_calls' in msg:
             for tc in msg['tool_calls']:
-                tool_calls.append(ToolCall(name=tc['function']['name'], arguments=json.loads(tc['function']['arguments'])))
+                tool_calls.append(ToolCall(id=tc.get('id', f"call_{tc['function']['name']}"), name=tc['function']['name'], arguments=json.loads(tc['function']['arguments'])))
         return LLMResponse(content=msg.get('content'), tool_calls=tool_calls)

@@ -36,6 +36,7 @@ class OpenAIProvider(BaseLLMProvider):
             for tc in choice.tool_calls:
                 tool_calls.append(
                     ToolCall(
+                        id=tc.id,
                         name=tc.function.name,
                         arguments=json.loads(tc.function.arguments or "{}"),
                     )

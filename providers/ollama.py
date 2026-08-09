@@ -41,8 +41,11 @@ class OllamaProvider(BaseLLMProvider):
         if "tool_calls" in message:
             for tc in message["tool_calls"]:
                 func = tc.get("function", {})
+                # A API do Ollama pode ou não retornar id dependendo da versão, criamos um mock seguro
+                tc_id = tc.get("id", f"call_{func.get('name')}")
                 tool_calls.append(
                     ToolCall(
+                        id=tc_id,
                         name=func.get("name"),
                         arguments=func.get("arguments", {}),
                     )
@@ -56,12 +59,14 @@ class OllamaProvider(BaseLLMProvider):
         for msg in messages:
             role = msg.get("role", "user")
             if role == "tool":
-                normalized.append(
-                    {
-                        "role": "tool",
-                        "content": msg.get("content", ""),
-                    }
-                )
+                tool_msg = {
+                    "role": "tool",
+                    "content": msg.get("content", ""),
+                }
+                # Algumas versões da API do Ollama ignoram, mas é seguro enviar se existir
+                if "tool_call_id" in msg:
+                    tool_msg["tool_call_id"] = msg["tool_call_id"]
+                normalized.append(tool_msg)
             elif role == "assistant":
                 new_msg = {"role": "assistant", "content": msg.get("content", "")}
                 if "tool_calls" in msg:
