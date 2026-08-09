@@ -39,6 +39,7 @@ class GroqProvider(BaseLLMProvider):
             for tc in choice.tool_calls:
                 tool_calls.append(
                     ToolCall(
+                        id=tc.id,
                         name=tc.function.name,
                         arguments=json.loads(tc.function.arguments or "{}"),
                     )
@@ -55,10 +56,11 @@ class GroqProvider(BaseLLMProvider):
             
             if role == "tool":
                 func_name = msg.get("name", "unknown")
+                tool_call_id = msg.get("tool_call_id") or f"call_{func_name}"
                 normalized.append({
                     "role": "tool",
                     "content": msg.get("content", ""),
-                    "tool_call_id": f"call_{func_name}"
+                    "tool_call_id": tool_call_id
                 })
             elif role == "assistant":
                 new_msg = {"role": "assistant", "content": msg.get("content", "")}
@@ -68,8 +70,9 @@ class GroqProvider(BaseLLMProvider):
                     for tc in msg["tool_calls"]:
                         func = tc.get("function", {})
                         func_name = func.get("name", "unknown")
+                        tool_call_id = tc.get("id") or f"call_{func_name}"
                         new_msg["tool_calls"].append({
-                            "id": f"call_{func_name}",
+                            "id": tool_call_id,
                             "type": "function",
                             "function": {
                                 "name": func_name,

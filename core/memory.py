@@ -17,12 +17,13 @@ class ConversationMemory:
     def add_assistant(self, content: str) -> None:
         self._append({"role": "assistant", "content": content})
 
-    def add_tool_result(self, tool_name: str, result: str) -> None:
+    def add_tool_result(self, tool_name: str, result: str, tool_call_id: str = None) -> None:
         self._append(
             {
                 "role": "tool",
                 "name": tool_name,
                 "content": result,
+                "tool_call_id": tool_call_id,
             }
         )
 
@@ -31,7 +32,7 @@ class ConversationMemory:
             {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{"function": {"name": tc.name, "arguments": tc.arguments}} for tc in tool_calls]
+                "tool_calls": [{"id": tc.id, "function": {"name": tc.name, "arguments": tc.arguments}} for tc in tool_calls]
             }
         )
 

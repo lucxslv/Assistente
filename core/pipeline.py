@@ -104,7 +104,7 @@ class AssistantPipeline:
             last_result = ""
             for call in response.tool_calls:
                 result = await self.tools.execute(call.name, call.arguments)
-                self.memory.add_tool_result(call.name, result)
+                self.memory.add_tool_result(call.name, result, tool_call_id=call.id)
                 last_result = result
 
             response = await self.llm.chat(
