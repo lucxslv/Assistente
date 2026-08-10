@@ -1,5 +1,6 @@
 """Pipeline Sequencial de 9 Etapas da Assistente."""
 
+import asyncio
 import logging
 
 from audio.stt import SpeechToText
@@ -94,31 +95,37 @@ class AssistantPipeline:
         # Oculta as ferramentas se a intenção for puramente casual
         active_tools = self.tools.get_schemas() if intent != IntentCategory.CASUAL else None
 
-        # Etapa 7: LLM
-        response = await self.llm.chat(
-            system_prompt=system_prompt,
-            messages=self.memory.get_messages(),
-            tools=active_tools,
-        )
-
-        if response.tool_calls:
-            self.memory.add_assistant_tool_calls(response.tool_calls)
+        # Etapa 7: LLM (Loop Multitarefas)
+        MAX_ITERATIONS = 5
+        iterations = 0
+        reply = ""
+        
+        while iterations < MAX_ITERATIONS:
+            iterations += 1
             
-            last_result = ""
-            for call in response.tool_calls:
-                result = await self.tools.execute(call.name, call.arguments)
-                self.memory.add_tool_result(call.name, result, tool_call_id=call.id)
-                last_result = result
-
             response = await self.llm.chat(
                 system_prompt=system_prompt,
                 messages=self.memory.get_messages(),
                 tools=active_tools,
             )
             
-            reply = response.content or last_result or "Ação concluída."
-        else:
-            reply = response.content or "Desculpe, não consegui formular uma resposta."
+            if not response.tool_calls:
+                reply = response.content or "Ação concluída."
+                break
+                
+            self.memory.add_assistant_tool_calls(response.tool_calls)
+            
+            # Função auxiliar para executar e salvar o resultado de uma ferramenta
+            async def execute_and_store(call):
+                res = await self.tools.execute(call.name, call.arguments)
+                self.memory.add_tool_result(call.name, res, tool_call_id=call.id)
+            
+            # Executa todas as ferramentas solicitadas em paralelo
+            await asyncio.gather(*(execute_and_store(call) for call in response.tool_calls))
+            
+            if iterations == MAX_ITERATIONS:
+                reply = response.content or "Atingi o limite máximo de ações consecutivas."
+                break
 
         import re
         # Remove HTML/XML tags

@@ -54,6 +54,8 @@ class WakeWordDetector:
         logger.info("Aguardando wake word ('%s')...", config.wake_word)
         
         try:
+            import msvcrt
+            
             with sd.InputStream(
                 samplerate=self._sample_rate,
                 channels=1,
@@ -61,6 +63,12 @@ class WakeWordDetector:
                 blocksize=self._chunk_size
             ) as stream:
                 while True:
+                    # Verifica se o usuário pressionou Enter (Interrupção para Texto)
+                    if msvcrt.kbhit():
+                        key = msvcrt.getch()
+                        if key in (b'\r', b'\n'):
+                            return True
+                            
                     audio_chunk, overflow = stream.read(self._chunk_size)
                     if overflow:
                         logger.warning("Estouro de buffer no wake word.")
@@ -73,18 +81,23 @@ class WakeWordDetector:
                         # Um score maior que 0.5 (50%) é geralmente um gatilho confiável
                         if score > 0.5:
                             logger.info("Wake word '%s' detectado! (Confiança: %.2f)", mdl, score)
-                            # Reseta o estado interno do modelo para não acionar duas vezes seguidas com o mesmo áudio passado
+                            # Reseta o estado interno do modelo para não acionar duas vezes seguidas
                             self._model.reset()
-                            return
+                            return False
         except Exception as e:
             logger.exception("Erro no loop do wake word: %s", e)
+            return False
 
-    async def wait_for_wake_word(self) -> None:
-        """Trava a execução até a palavra mágica ser dita."""
+    async def wait_for_wake_word(self) -> bool:
+        """Trava a execução até a palavra mágica ser dita ou o usuário teclar Enter.
+        Retorna:
+            True: se o usuário interrompeu via teclado (texto)
+            False: se ativado por voz (wake word)
+        """
         if not self._enabled:
-            return
+            return False
             
-        await asyncio.to_thread(self._listen_sync)
+        return await asyncio.to_thread(self._listen_sync)
 
     async def close(self) -> None:
         """Libera o modelo da memória."""
