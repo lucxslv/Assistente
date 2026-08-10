@@ -26,6 +26,10 @@ class TextToSpeech:
 
         logger.info("Assistente: %s", text)
         audio_path = await self._synthesize(text)
+        
+        if not audio_path:
+            return
+            
         try:
             await asyncio.to_thread(self._play, audio_path)
         finally:
@@ -37,8 +41,13 @@ class TextToSpeech:
         tmp_path = Path(tmp.name)
         tmp.close()
 
-        await communicate.save(str(tmp_path))
-        return tmp_path
+        try:
+            await communicate.save(str(tmp_path))
+            return tmp_path
+        except edge_tts.exceptions.NoAudioReceived:
+            logger.warning("Nenhum áudio gerado pelo TTS (texto provavelmente contém apenas emojis ou símbolos impronunciáveis).")
+            tmp_path.unlink(missing_ok=True)
+            return None
 
     def _play(self, path: Path) -> None:
         data, sample_rate = sf.read(str(path), dtype="float32")

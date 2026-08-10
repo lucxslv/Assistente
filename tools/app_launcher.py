@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 COMMON_APPS = {
     "chrome": {"cmd": "chrome", "process": "chrome.exe"},
     "google chrome": {"cmd": "chrome", "process": "chrome.exe"},
+    "brave": {"cmd": "brave", "process": "brave.exe"},
     "vscode": {"cmd": "code", "process": "Code.exe"},
     "code": {"cmd": "code", "process": "Code.exe"},
     "spotify": {"cmd": "spotify", "process": "Spotify.exe"},
@@ -34,6 +35,11 @@ def manage_application(app_name: str, action: str) -> str:
     
     try:
         if action == "open":
+            if app_key in ["navegador", "browser", "internet"]:
+                import webbrowser
+                webbrowser.open("https://google.com")
+                return "Navegador padrão aberto com sucesso."
+                
             # No Windows, 'start' usa o registro App Paths ou o PATH do sistema
             result = os.system(f"start {app_info['cmd']}")
             if result == 0:
