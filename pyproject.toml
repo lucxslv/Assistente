@@ -23,6 +23,7 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "pycaw>=20251023",
     "comtypes>=1.4.16",
+    "pyautogui>=0.9.54",
 ]
 
 [build-system]

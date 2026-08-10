@@ -5,7 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from tools import home_assistant, system_info, weather, media_player, web_search, system_control, app_launcher
+from tools import home_assistant, system_info, weather, media_player, web_search, system_control, app_launcher, automation
 from memory.database import db
 
 logger = logging.getLogger(__name__)
@@ -271,6 +271,49 @@ class ToolRegistry:
                     }
                 },
                 "required": ["app_name", "action"],
+            },
+        )
+        
+        self.register(
+            name="press_key",
+            handler=automation.press_key,
+            description="Pressiona uma tecla ou atalho do teclado do computador (ex: 'space', 'enter', 'ctrl+c', 'win+d', 'f5').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "A tecla ou combinação a ser pressionada (ex: 'space', 'esc', 'ctrl+shift+esc').",
+                    }
+                },
+                "required": ["key"],
+            },
+        )
+        
+        self.register(
+            name="type_text",
+            handler=automation.type_text,
+            description="Digita um texto na janela que estiver em foco no momento usando o teclado virtual.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "O texto exato a ser digitado.",
+                    }
+                },
+                "required": ["text"],
+            },
+        )
+        
+        self.register(
+            name="take_screenshot",
+            handler=automation.take_screenshot,
+            description="Tira um print (captura) da tela inteira e salva na pasta do projeto.",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         )
 

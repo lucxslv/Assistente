@@ -24,20 +24,35 @@ class AssistantEngine:
         logger.info("Assistente iniciada de forma silenciosa.")
 
         while self._running:
+            manual_text_trigger = False
+            
             if config.wake_word_enabled and not continuous_mode:
-                await self.wakeword.wait_for_wake_word()
+                print("\n" + "="*50)
+                print(" 🗣️ Diga a palavra mágica para falar...")
+                print(" ⌨️ Ou aperte 'ENTER' para digitar seu comando.")
+                print("="*50 + "\n")
+                
+                manual_text_trigger = await self.wakeword.wait_for_wake_word()
 
             try:
-                media_manager.set_ducking(True)
+                user_text = None
                 
-                try:
-                    user_text = await self.pipeline.process_voice_input()
-                except Exception:
-                    logger.exception("Erro na captura/transcrição de voz")
-                    continuous_mode = False
-                    continue
+                if manual_text_trigger:
+                    import asyncio
+                    # Pede o texto no terminal sem bloquear o loop assíncrono
+                    user_text = await asyncio.to_thread(input, "📝 Digite seu comando: ")
+                else:
+                    media_manager.set_ducking(True)
+                    try:
+                        user_text = await self.pipeline.process_voice_input()
+                    except Exception:
+                        logger.exception("Erro na captura/transcrição de voz")
+                        continuous_mode = False
+                        continue
+                    finally:
+                        media_manager.set_ducking(False)
 
-                if not user_text:
+                if not user_text or not user_text.strip():
                     continuous_mode = False
                     continue
 
@@ -55,8 +70,9 @@ class AssistantEngine:
                     await self.pipeline.tts.speak(
                         "Ocorreu um erro ao processar sua solicitação."
                     )
-            finally:
-                media_manager.set_ducking(False)
+            except Exception as e:
+                logger.exception("Erro fatal no loop principal: %s", e)
+                continuous_mode = False
 
     async def shutdown(self) -> None:
         self._running = False
