@@ -6,6 +6,7 @@ from audio.wakeword import WakeWordDetector
 from config import config
 from core.pipeline import AssistantPipeline
 from tools.media_player import media_manager
+from brain.memory_consolidation import MemoryConsolidator
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class AssistantEngine:
     def __init__(self) -> None:
         self.pipeline = AssistantPipeline()
         self.wakeword = WakeWordDetector()
+        self.consolidator = MemoryConsolidator(self.pipeline)
         self._running = False
 
     async def run(self) -> None:
@@ -76,6 +78,8 @@ class AssistantEngine:
 
     async def shutdown(self) -> None:
         self._running = False
+        print("\n🧠 Consolidando memórias do dia, um momento...")
+        await self.consolidator.consolidate()
         await self.wakeword.close()
 
     @staticmethod
