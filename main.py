@@ -23,7 +23,10 @@ async def main() -> None:
     except KeyboardInterrupt:
         logger.info("Encerrando assistente...")
     finally:
-        await engine.shutdown()
+        try:
+            await engine.shutdown()
+        except KeyboardInterrupt:
+            logger.info("Desligamento forçado.")
 
 
 if __name__ == "__main__":
