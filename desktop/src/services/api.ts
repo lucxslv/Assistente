@@ -198,8 +198,13 @@ export function connectSystemWebSocket(
 
   const connect = () => {
     if (isClosed) return;
+    const wsUrl = `${getWsBase()}/chat/ws`;
+    // Vercel serverless não suporta WebSockets persistentes; o app usa fallback de polling HTTP a cada 5s
+    if (wsUrl.includes("vercel.app")) {
+      return;
+    }
     try {
-      ws = new WebSocket(`${getWsBase()}/chat/ws`);
+      ws = new WebSocket(wsUrl);
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);

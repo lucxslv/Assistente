@@ -54,12 +54,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div className="p-3.5 rounded-xl border border-border/60 bg-muted/20 space-y-3">
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Deixe em branco para usar o backend local (<code className="text-primary font-mono">http://127.0.0.1:8005</code>) ou insira a URL pública do seu deploy no Render/Railway.
+                Deixe em branco para usar o backend local (<code className="text-primary font-mono">http://127.0.0.1:8005</code>) ou insira a URL pública da Vercel (ex: <code className="text-primary font-mono">https://assistente-xi.vercel.app</code>).
               </p>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="https://seu-charlie.onrender.com"
+                  placeholder="https://assistente-xi.vercel.app"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
                   className="flex-1 bg-background border border-border/70 rounded-lg px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
