@@ -3,8 +3,15 @@
 import logging
 import asyncio
 
-import vlc
-import yt_dlp
+try:
+    import vlc
+except Exception:
+    vlc = None
+
+try:
+    import yt_dlp
+except Exception:
+    yt_dlp = None
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +28,26 @@ class MediaManager:
         return cls._instance
 
     def _init_player(self):
-        # --no-video garante que janelas do VLC não pipoquem na tela
-        self.vlc_instance = vlc.Instance("--no-video --quiet")
-        self.player = self.vlc_instance.media_player_new()
-        self._user_volume = 100
-        self._is_ducking = False
-        self.player.audio_set_volume(self._user_volume)
+        if not vlc:
+            logger.debug("LibVLC não disponível neste ambiente.")
+            self.vlc_instance = None
+            self.player = None
+            self._user_volume = 100
+            self._is_ducking = False
+            return
+        try:
+            # --no-video garante que janelas do VLC não pipoquem na tela
+            self.vlc_instance = vlc.Instance("--no-video --quiet")
+            self.player = self.vlc_instance.media_player_new()
+            self._user_volume = 100
+            self._is_ducking = False
+            self.player.audio_set_volume(self._user_volume)
+        except Exception as e:
+            logger.warning("Falha ao inicializar player VLC: %s", e)
+            self.vlc_instance = None
+            self.player = None
+            self._user_volume = 100
+            self._is_ducking = False
         
     def _apply_volume(self):
         if self._is_ducking:
