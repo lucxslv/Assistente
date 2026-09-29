@@ -6,7 +6,7 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from api.db import get_db_pool
+from api.db import get_or_init_db_pool
 
 router = APIRouter(prefix="/threads", tags=["Threads"])
 
@@ -18,7 +18,7 @@ class ThreadCreate(BaseModel):
 @router.get("")
 async def list_threads():
     """Lista todas as conversas do usuário ordenadas pela mais recente."""
-    pool = get_db_pool()
+    pool = await get_or_init_db_pool()
     if not pool:
         return []
 
@@ -43,7 +43,7 @@ async def list_threads():
 @router.post("")
 async def create_thread(data: ThreadCreate):
     """Cria uma nova conversa limpa."""
-    pool = get_db_pool()
+    pool = await get_or_init_db_pool()
     thread_id = str(uuid.uuid4())
     now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -60,7 +60,7 @@ async def create_thread(data: ThreadCreate):
 @router.delete("/{thread_id}")
 async def delete_thread(thread_id: str):
     """Marca uma conversa como excluída (soft delete)."""
-    pool = get_db_pool()
+    pool = await get_or_init_db_pool()
     if not pool:
         return {"status": "ok"}
 

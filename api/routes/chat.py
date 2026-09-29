@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api.db import get_db_pool
+from api.db import get_or_init_db_pool
 from api.state import CharlieStatus, state
 from brain.broker.device_broker import device_broker
 from brain.context.presence import presence_manager
@@ -40,7 +40,7 @@ class ChatRequest(BaseModel):
 
 async def _prepare_thread_and_store_user_message(message: str, thread_id: Optional[str] = None) -> str:
     """Garante a existência da thread e persiste a mensagem do usuário no Supabase."""
-    pool = get_db_pool()
+    pool = await get_or_init_db_pool()
     now = datetime.datetime.now(datetime.timezone.utc)
 
     if not thread_id:
@@ -83,7 +83,7 @@ async def _prepare_thread_and_store_user_message(message: str, thread_id: Option
 
 async def _store_assistant_message(thread_id: str, reply: str):
     """Persiste a resposta final do Charlie no Supabase."""
-    pool = get_db_pool()
+    pool = await get_or_init_db_pool()
     if pool and reply:
         try:
             t_uuid = uuid.UUID(thread_id)
