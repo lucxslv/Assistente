@@ -1,0 +1,16 @@
+# Exclui arquivos pesados locais do deploy serverless da Vercel
+desktop/
+node_modules/
+target/
+dist/
+.venv/
+__pycache__/
+*.db
+charlie_memory.db
+uv.lock
+pyproject.toml
+.dockerignore
+Dockerfile
+render.yaml
+railway.json
+run_desktop.bat
