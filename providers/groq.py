@@ -13,6 +13,7 @@ class GroqProvider(BaseLLMProvider):
         system_prompt: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> LLMResponse:
         from openai import AsyncOpenAI
 
@@ -24,7 +25,7 @@ class GroqProvider(BaseLLMProvider):
         api_messages.extend(self._normalize_messages(messages))
 
         kwargs: dict[str, Any] = {
-            "model": config.groq_llm_model,
+            "model": model_override or config.groq_llm_model,
             "messages": api_messages,
         }
         if tools:

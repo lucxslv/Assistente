@@ -46,7 +46,12 @@ class MediaManager:
             'noplaylist': True,
             'quiet': True,
             'default_search': 'ytsearch',
-            'extract_flat': False
+            'extract_flat': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android']
+                }
+            }
         }
         
         logger.info("Buscando música: %s", query)
@@ -57,15 +62,31 @@ class MediaManager:
                     info = ydl.extract_info(f"ytsearch:{query}", download=False)
                     if 'entries' in info and len(info['entries']) > 0:
                         entry = info['entries'][0]
-                        return entry.get('url'), entry.get('title')
-                    return None, None
+                        stream_url = entry.get('url')
+                        if not stream_url and 'formats' in entry:
+                            audio_formats = [
+                                f for f in entry['formats']
+                                if f.get('acodec') != 'none' and f.get('url')
+                            ]
+                            if audio_formats:
+                                audio_formats.sort(
+                                    key=lambda x: x.get('abr') or x.get('tbr') or 0,
+                                    reverse=True
+                                )
+                                stream_url = audio_formats[0].get('url')
+                        return stream_url, entry.get('title'), entry.get('http_headers', {})
+                    return None, None, {}
             
-            stream_url, title = await asyncio.to_thread(_search_and_get_url)
+            stream_url, title, http_headers = await asyncio.to_thread(_search_and_get_url)
             
             if not stream_url:
                 return "Não encontrei nenhuma música com esse nome."
                 
             media = self.vlc_instance.media_new(stream_url)
+            media.add_option(":network-caching=1000")
+            if http_headers and 'User-Agent' in http_headers:
+                media.add_option(f":http-user-agent={http_headers['User-Agent']}")
+                
             self.player.set_media(media)
             self.player.play()
             

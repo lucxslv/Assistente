@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: charlie-cloud-brain
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: ASSISTANT_NAME
+        value: Charlie
+      - key: LANGUAGE
+        value: pt-BR

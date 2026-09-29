@@ -1,14 +1,16 @@
 """Gerenciamento de histórico de conversa e contexto."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ConversationMemory:
-    """Armazena mensagens da conversa com limite configurável."""
+    """Armazena mensagens da conversa integrando com Supabase via Chainlit."""
 
-    max_messages: int = 20
+    max_messages: int = 50
     messages: list[dict[str, Any]] = field(default_factory=list)
 
     def add_user(self, content: str) -> None:
@@ -38,9 +40,6 @@ class ConversationMemory:
 
     def get_messages(self) -> list[dict[str, Any]]:
         return list(self.messages)
-
-    def clear(self) -> None:
-        self.messages.clear()
 
     def _append(self, message: dict[str, Any]) -> None:
         self.messages.append(message)
