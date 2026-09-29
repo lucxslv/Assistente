@@ -1,0 +1,17 @@
+.venv
+.git
+.gitignore
+.env
+.env.*
+*.db
+desktop/
+node_modules/
+target/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.gemini/

@@ -21,9 +21,17 @@ dependencies = [
     "python-vlc>=3.0.21203",
     "ddgs>=9.14.4",
     "beautifulsoup4>=4.15.0",
-    "pycaw>=20251023",
-    "comtypes>=1.4.16",
-    "pyautogui>=0.9.54",
+    "chainlit>=1.1.400",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "websockets>=12.0",
+    "supabase>=2.3.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "psycopg[binary]>=3.0.0",
+    "asyncpg>=0.29.0",
+    "pycaw>=20251023; sys_platform == 'win32'",
+    "comtypes>=1.4.16; sys_platform == 'win32'",
+    "pyautogui>=0.9.54; sys_platform == 'win32'",
 ]
 
 [build-system]
@@ -31,4 +39,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["audio", "brain", "core", "memory", "providers", "tools", "events", "skills"]
+packages = ["api", "audio", "brain", "core", "memory", "providers", "tools", "events", "skills"]
