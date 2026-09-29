@@ -2,7 +2,10 @@
 
 import logging
 
-from audio.wakeword import WakeWordDetector
+try:
+    from audio.wakeword import WakeWordDetector
+except Exception:
+    WakeWordDetector = None
 from config import config
 from core.pipeline import AssistantPipeline
 from tools.media_player import media_manager

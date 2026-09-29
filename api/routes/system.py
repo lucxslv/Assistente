@@ -1,6 +1,9 @@
 """Rotas de monitoramento e status do sistema operacional, presença e telemetria do Charlie."""
 
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 from fastapi import APIRouter
 from api.db import get_db_pool
 from api.state import state
@@ -14,7 +17,24 @@ router = APIRouter(prefix="/system", tags=["System"])
 async def system_status():
     """Retorna a telemetria ao vivo do Charlie e do computador."""
     pool = get_db_pool()
-    mem = psutil.virtual_memory()
+    host_info = {
+        "cpu_percent": 0.0,
+        "memory_used_mb": 0,
+        "memory_total_mb": 0,
+        "memory_percent": 0.0,
+    }
+    if psutil:
+        try:
+            mem = psutil.virtual_memory()
+            host_info = {
+                "cpu_percent": psutil.cpu_percent(interval=None),
+                "memory_used_mb": int(mem.used / (1024 * 1024)),
+                "memory_total_mb": int(mem.total / (1024 * 1024)),
+                "memory_percent": mem.percent,
+            }
+        except Exception:
+            pass
+
     active_devices = presence_manager.get_active_clients()
 
     return {
@@ -29,12 +49,7 @@ async def system_status():
         "uptime_seconds": state.to_dict()["uptime_seconds"],
         "database_connected": pool is not None,
         "connected_devices_count": len(active_devices),
-        "host": {
-            "cpu_percent": psutil.cpu_percent(interval=None),
-            "memory_used_mb": int(mem.used / (1024 * 1024)),
-            "memory_total_mb": int(mem.total / (1024 * 1024)),
-            "memory_percent": mem.percent,
-        },
+        "host": host_info,
     }
 
 

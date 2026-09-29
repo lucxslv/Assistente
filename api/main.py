@@ -22,7 +22,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"Aviso: Não foi possível conectar ao banco de dados: {e}")
 
     # Inicializa pipeline de IA
-    chat.get_pipeline()
+    try:
+        chat.get_pipeline()
+    except Exception as e:
+        logger.error(f"Aviso: Não foi possível pré-carregar o pipeline no lifespan: {e}")
 
     yield
 
@@ -55,6 +58,19 @@ app.include_router(system.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 
 
+@app.get("/")
+async def root():
+    """Rota raiz da API do Charlie Cloud Brain."""
+    return {
+        "status": "online",
+        "service": "Charlie Cloud Brain API",
+        "version": "2.0.0",
+        "docs": "/docs",
+        "health": "/api/health",
+    }
+
+
+@app.get("/health")
 @app.get("/api/health")
 async def health_check():
     """Healthcheck rápido e diagnóstico."""
