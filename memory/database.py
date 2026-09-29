@@ -1,90 +1,155 @@
-"""Banco de Dados SQLite para Persistência de Memória do Assistente."""
+"""Banco de Dados de Memória do Charlie integrado ao Supabase (PostgreSQL + pgvector)."""
 
-import sqlite3
+import json
 import logging
 import os
-from typing import Any
+from typing import Any, Dict, List, Optional
+import psycopg
+from dotenv import load_dotenv
+from memory.embeddings import generate_embedding
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("charlie.memory.db")
+load_dotenv()
 
-# Resolve o caminho absoluto para a raiz do projeto (duas pastas acima de memory/database.py)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DB_PATH = os.path.join(BASE_DIR, "charlie_memory.db")
 
 class MemoryDatabase:
-    """Singleton para gerenciar a conexão e operações no banco de dados SQLite."""
-    
+    """Gerenciador de Memória Duradoura e RAG Semântico no Supabase."""
+
     _instance = None
 
-    def __new__(cls, db_path: str = DEFAULT_DB_PATH):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance.db_path = db_path
-            cls._instance._init_db()
+            cls._instance._init_config()
         return cls._instance
 
-    def _init_db(self):
+    def _init_config(self):
+        raw_url = os.getenv("DATABASE_URL", "")
+        self.db_url = raw_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+    def _get_connection(self):
+        return psycopg.connect(self.db_url, autocommit=True)
+
+    # ================= Fatos & Memórias Vetoriais =================
+
+    def add_fact(self, fact: str, user_id: str = "default") -> None:
+        """Salva um fato gerando automaticamente seu embedding vetorial."""
+        self.add_memory(content=fact, category="fact", user_id=user_id)
+
+    def add_memory(self, content: str, category: str = "fact", user_id: str = "default") -> None:
+        """Insere uma nova memória com vetor semântico no Supabase."""
+        content = content.strip()
+        if not content:
+            return
+
+        embedding = generate_embedding(content)
+        vec_str = "[" + ",".join(map(str, embedding)) + "]" if embedding else None
+
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                # Tabela de Preferências (Chave-Valor)
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS preferences (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Verifica duplicata exata
+                    cur.execute(
+                        'SELECT id FROM "UserMemory" WHERE user_id = %s AND content = %s',
+                        (user_id, content),
                     )
-                ''')
-                # Tabela de Fatos de Longo Prazo
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS facts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        fact TEXT NOT NULL UNIQUE
+                    if cur.fetchone():
+                        logger.info("Memória já existente, ignorando inserção.")
+                        return
+
+                    cur.execute(
+                        """
+                        INSERT INTO "UserMemory" (user_id, content, category, embedding)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (user_id, content, category, vec_str),
                     )
-                ''')
-                conn.commit()
+                    logger.info("Nova memória salva com sucesso no Supabase: %s", content[:40])
         except Exception as e:
-            logger.exception("Erro ao inicializar o banco de dados de memória: %s", e)
+            logger.error("Erro ao salvar memória no Supabase: %s", e)
 
-    def set_preference(self, key: str, value: str) -> None:
+    def get_all_facts(self, user_id: str = "default") -> List[str]:
+        """Retorna todos os fatos conhecidos do usuário."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO preferences (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (key, value)
-                )
-                conn.commit()
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'SELECT content FROM "UserMemory" WHERE user_id = %s ORDER BY created_at ASC',
+                        (user_id,),
+                    )
+                    return [row[0] for row in cur.fetchall()]
         except Exception as e:
-            logger.error("Erro ao salvar preferência: %s", e)
-
-    def get_all_preferences(self) -> dict[str, str]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT key, value FROM preferences")
-                return {row[0]: row[1] for row in cursor.fetchall()}
-        except Exception as e:
-            logger.error("Erro ao buscar preferências: %s", e)
-            return {}
-
-    def add_fact(self, fact: str) -> None:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("INSERT OR IGNORE INTO facts (fact) VALUES (?)", (fact,))
-                conn.commit()
-        except Exception as e:
-            logger.error("Erro ao salvar fato: %s", e)
-
-    def get_all_facts(self) -> list[str]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT fact FROM facts")
-                return [row[0] for row in cursor.fetchall()]
-        except Exception as e:
-            logger.error("Erro ao buscar fatos: %s", e)
+            logger.error("Erro ao buscar fatos no Supabase: %s", e)
             return []
 
-# Instância global do BD
+    def search_memories(
+        self, query: str, limit: int = 5, threshold: float = 0.35, user_id: str = "default"
+    ) -> List[Dict[str, Any]]:
+        """Busca memórias semanticamente relevantes usando similaridade de cosseno (RAG)."""
+        query_emb = generate_embedding(query)
+        if not query_emb:
+            return []
+
+        vec_str = "[" + ",".join(map(str, query_emb)) + "]"
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, content, category, similarity
+                        FROM match_memories(%s::vector, %s, %s, %s)
+                        """,
+                        (vec_str, threshold, limit, user_id),
+                    )
+                    rows = cur.fetchall()
+                    return [
+                        {
+                            "id": str(r[0]),
+                            "content": r[1],
+                            "category": r[2],
+                            "similarity": float(r[3]),
+                        }
+                        for r in rows
+                    ]
+        except Exception as e:
+            logger.error("Erro ao realizar busca semântica no Supabase: %s", e)
+            return []
+
+    # ================= Preferências Chave-Valor =================
+
+    def set_preference(self, key: str, value: str, user_id: str = "default") -> None:
+        """Salva ou atualiza uma preferência do usuário."""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO "UserPreference" (user_id, key, value, updated_at)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (user_id, key) DO UPDATE 
+                        SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (user_id, key, value),
+                    )
+                    logger.info("Preferência atualizada: %s = %s", key, value)
+        except Exception as e:
+            logger.error("Erro ao salvar preferência no Supabase: %s", e)
+
+    def get_all_preferences(self, user_id: str = "default") -> Dict[str, str]:
+        """Retorna todas as preferências salvas do usuário."""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'SELECT key, value FROM "UserPreference" WHERE user_id = %s',
+                        (user_id,),
+                    )
+                    return {row[0]: row[1] for row in cur.fetchall()}
+        except Exception as e:
+            logger.error("Erro ao buscar preferências no Supabase: %s", e)
+            return {}
+
+
+# Instância global compartilhada
 db = MemoryDatabase()

@@ -1,11 +1,11 @@
-"""Mapeador/registrador de funções para a LLM."""
-
+import enum
 import inspect
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Optional
 
-from tools import home_assistant, system_info, weather, media_player, web_search, system_control, app_launcher, automation
+from tools import home_assistant, system_info, weather, media_player, web_search, system_control, app_launcher, automation, file_explorer
 from memory.database import db
 
 logger = logging.getLogger(__name__)
@@ -13,12 +13,19 @@ logger = logging.getLogger(__name__)
 ToolHandler = Callable[..., str | Awaitable[str]]
 
 
+class ToolScope(enum.Enum):
+    CLOUD = "cloud"       # Executa no cérebro na nuvem (IA, memórias, clima, web search)
+    DEVICE = "device"     # Executa no computador local (aplicativos, arquivos, áudio, sistema)
+    HOME = "home"         # Executa na automação residencial (Home Assistant)
+
+
 class ToolRegistry:
-    """Registra e executa ferramentas disponíveis para a LLM."""
+    """Registra e executa ferramentas disponíveis para a LLM com suporte a escopos e despacho remoto."""
 
     def __init__(self) -> None:
         self._handlers: dict[str, ToolHandler] = {}
         self._schemas: dict[str, dict[str, Any]] = {}
+        self._scopes: dict[str, ToolScope] = {}
         self._register_defaults()
 
     def register(
@@ -27,8 +34,10 @@ class ToolRegistry:
         handler: ToolHandler,
         description: str,
         parameters: dict[str, Any] | None = None,
+        scope: ToolScope = ToolScope.CLOUD,
     ) -> None:
         self._handlers[name] = handler
+        self._scopes[name] = scope
         self._schemas[name] = {
             "type": "function",
             "function": {
@@ -45,10 +54,40 @@ class ToolRegistry:
     def get_schemas(self) -> list[dict[str, Any]]:
         return list(self._schemas.values())
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> str:
+    def get_scope(self, name: str) -> ToolScope:
+        return self._scopes.get(name, ToolScope.CLOUD)
+
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        prefer_remote: bool = False,
+        call_id: Optional[str] = None,
+    ) -> str:
         handler = self._handlers.get(name)
         if handler is None:
             return f"Ferramenta '{name}' não encontrada."
+
+        scope = self.get_scope(name)
+
+        # Se for ferramenta local e houver solicitação ou broker remoto disponível
+        if scope == ToolScope.DEVICE and prefer_remote:
+            try:
+                from brain.broker.device_broker import device_broker
+                if device_broker.has_active_device():
+                    c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
+                    return await device_broker.dispatch_device_tool(c_id, name, arguments)
+            except Exception as e:
+                logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Executando localmente.")
+
+        # Notifica o observador de estado (se o módulo de API estiver ativo)
+        state_mgr = None
+        try:
+            from api.state import state
+            state.set_tool_start(name, arguments)
+            state_mgr = state
+        except Exception:
+            pass
 
         try:
             if inspect.iscoroutinefunction(handler):
@@ -59,6 +98,9 @@ class ToolRegistry:
         except Exception as exc:
             logger.exception("Erro ao executar tool '%s'", name)
             return f"Erro ao executar '{name}': {exc}"
+        finally:
+            if state_mgr:
+                state_mgr.set_tool_end()
 
     def _register_defaults(self) -> None:
         self.register(
@@ -85,6 +127,7 @@ class ToolRegistry:
             name="get_system_status",
             handler=system_info.get_system_status,
             description="Retorna informações básicas do sistema (CPU, memória, disco).",
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="control_device",
@@ -105,6 +148,7 @@ class ToolRegistry:
                 },
                 "required": ["entity_id", "action"],
             },
+            scope=ToolScope.HOME,
         )
         self.register(
             name="play_music",
@@ -120,24 +164,28 @@ class ToolRegistry:
                 },
                 "required": ["query"],
             },
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="pause_music",
             handler=media_player.pause_music,
             description="Pausa a música que está tocando atualmente.",
             parameters={"type": "object", "properties": {}},
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="resume_music",
             handler=media_player.resume_music,
             description="Retoma a música que estava pausada.",
             parameters={"type": "object", "properties": {}},
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="stop_music",
             handler=media_player.stop_music,
             description="Para a música que está tocando.",
             parameters={"type": "object", "properties": {}},
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="set_volume",
@@ -153,6 +201,7 @@ class ToolRegistry:
                 },
                 "required": ["level"],
             },
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="memorize_fact",
@@ -236,6 +285,7 @@ class ToolRegistry:
                 },
                 "required": [],
             },
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="system_power_action",
@@ -252,6 +302,7 @@ class ToolRegistry:
                 },
                 "required": ["action"],
             },
+            scope=ToolScope.DEVICE,
         )
         self.register(
             name="manage_application",
@@ -272,6 +323,7 @@ class ToolRegistry:
                 },
                 "required": ["app_name", "action"],
             },
+            scope=ToolScope.DEVICE,
         )
         
         self.register(
@@ -288,6 +340,7 @@ class ToolRegistry:
                 },
                 "required": ["key"],
             },
+            scope=ToolScope.DEVICE,
         )
         
         self.register(
@@ -304,6 +357,7 @@ class ToolRegistry:
                 },
                 "required": ["text"],
             },
+            scope=ToolScope.DEVICE,
         )
         
         self.register(
@@ -315,6 +369,95 @@ class ToolRegistry:
                 "properties": {},
                 "required": [],
             },
+            scope=ToolScope.DEVICE,
+        )
+
+        self.register(
+            name="list_directory",
+            handler=file_explorer.list_directory,
+            description="Lista todos os arquivos e pastas de um diretório específico. Muito útil para explorar projetos.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "O caminho da pasta a ser listada (ex: '.' para a pasta atual, ou 'c:/projetos').",
+                    }
+                },
+                "required": [],
+            },
+            scope=ToolScope.DEVICE,
+        )
+        
+        self.register(
+            name="read_file",
+            handler=file_explorer.read_file,
+            description="Lê o conteúdo de um arquivo. ATENÇÃO: O resultado desta ferramenta é enviado apenas para você (IA). O usuário NÃO VÊ o resultado. Se o usuário pedir para ver o código ou texto, você DEVE transcrever/copiar o conteúdo na sua resposta.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "O caminho completo ou relativo do arquivo a ser lido.",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "Linha inicial da leitura (opcional, padrão 1).",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "Linha final da leitura (opcional, lê até o fim se não especificado).",
+                    }
+                },
+                "required": ["path"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+
+        self.register(
+            name="write_file",
+            handler=file_explorer.write_file,
+            description="Cria ou sobrescreve completamente um arquivo com um novo conteúdo. ATENÇÃO: Substitui tudo no arquivo.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho do arquivo a ser criado ou sobrescrito.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "O conteúdo completo que será gravado no arquivo.",
+                    }
+                },
+                "required": ["path", "content"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+
+        self.register(
+            name="replace_in_file",
+            handler=file_explorer.replace_in_file,
+            description="Substitui um trecho específico de texto por outro dentro de um arquivo. Muito útil para fazer pequenas edições sem reescrever tudo.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Caminho do arquivo.",
+                    },
+                    "target_text": {
+                        "type": "string",
+                        "description": "O texto EXATO que existe hoje e será substituído (inclua espaços e quebras de linha exatas).",
+                    },
+                    "replacement_text": {
+                        "type": "string",
+                        "description": "O novo texto que vai entrar no lugar.",
+                    }
+                },
+                "required": ["path", "target_text", "replacement_text"],
+            },
+            scope=ToolScope.DEVICE,
         )
 
     def _wrap_memorize_fact(self, fact: str) -> str:

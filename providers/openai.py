@@ -13,6 +13,7 @@ class OpenAIProvider(BaseLLMProvider):
         system_prompt: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        model_override: str | None = None,
     ) -> LLMResponse:
         from openai import AsyncOpenAI
 
@@ -21,7 +22,7 @@ class OpenAIProvider(BaseLLMProvider):
         api_messages.extend(self._normalize_messages(messages))
 
         kwargs: dict[str, Any] = {
-            "model": config.openai_model,
+            "model": model_override or config.openai_model,
             "messages": api_messages,
         }
         if tools:
