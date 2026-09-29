@@ -2,7 +2,7 @@
 
 import uuid
 from fastapi import APIRouter, HTTPException, Query
-from api.db import get_db_pool
+from api.db import get_or_init_db_pool
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/messages", tags=["Messages"])
 @router.get("")
 async def list_messages(thread_id: str = Query(..., description="ID da conversa")):
     """Retorna todas as mensagens da conversa informada."""
-    pool = get_db_pool()
+    pool = await get_or_init_db_pool()
     if not pool:
         return []
 
