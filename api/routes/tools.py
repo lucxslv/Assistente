@@ -1,11 +1,16 @@
-"""Rotas de inspeção e status das ferramentas do Charlie."""
-
+from typing import Any, Dict
+from pydantic import BaseModel
 from fastapi import APIRouter
 from api.state import state
 from tools.registry import ToolRegistry
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
 _tools = ToolRegistry()
+
+
+class ToolExecuteRequest(BaseModel):
+    name: str
+    arguments: Dict[str, Any] = {}
 
 
 @router.get("")
@@ -15,6 +20,13 @@ async def list_tools():
         "total": len(_tools.list_tools()),
         "tools": _tools.get_schemas(),
     }
+
+
+@router.post("/execute")
+async def execute_tool(req: ToolExecuteRequest):
+    """Executa uma ferramenta diretamente na máquina local."""
+    result = await _tools.execute(req.name, req.arguments, prefer_remote=False)
+    return {"status": "ok", "name": req.name, "result": result}
 
 
 @router.get("/status")

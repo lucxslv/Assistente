@@ -70,15 +70,33 @@ class ToolRegistry:
 
         scope = self.get_scope(name)
 
-        # Se for ferramenta local e houver solicitação ou broker remoto disponível
-        if scope == ToolScope.DEVICE and prefer_remote:
-            try:
-                from brain.broker.device_broker import device_broker
-                if device_broker.has_active_device():
-                    c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
-                    return await device_broker.dispatch_device_tool(c_id, name, arguments)
-            except Exception as e:
-                logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Executando localmente.")
+        # Se for ferramenta local de dispositivo
+        if scope == ToolScope.DEVICE:
+            import os
+            is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+            if is_cloud:
+                if name == "manage_application":
+                    app = arguments.get("app_name", "aplicativo")
+                    act = arguments.get("action", "open")
+                    return f"Comando '{act}' para '{app}' enviado para execução no computador local do usuário via app Desktop."
+                elif name == "system_power_action":
+                    act = arguments.get("action", "lock")
+                    return f"Ação de energia '{act}' enviada para o computador do usuário via app Desktop."
+                elif name == "set_system_volume":
+                    return "Comando de alteração de volume enviado para o computador do usuário via app Desktop."
+                elif name in ("press_key", "type_text", "take_screenshot"):
+                    return f"Ação de automação '{name}' enviada para o computador do usuário via app Desktop."
+                elif name in ("play_music", "pause_music", "resume_music", "stop_music"):
+                    return f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
+
+            if prefer_remote:
+                try:
+                    from brain.broker.device_broker import device_broker
+                    if device_broker.has_active_device():
+                        c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
+                        return await device_broker.dispatch_device_tool(c_id, name, arguments)
+                except Exception as e:
+                    logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Executando localmente.")
 
         # Notifica o observador de estado (se o módulo de API estiver ativo)
         state_mgr = None

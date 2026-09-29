@@ -155,10 +155,11 @@ class AssistantPipeline:
 
             # Executa ferramentas notificando o stream
             for call in tool_calls:
-                yield StreamEvent(type="tool_start", data={"name": call.name, "args": call.arguments})
+                tool_scope = self.tools.get_scope(call.name).value
+                yield StreamEvent(type="tool_start", data={"name": call.name, "args": call.arguments, "scope": tool_scope})
                 res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=call.id)
                 self.memory.add_tool_result(call.name, res, tool_call_id=call.id)
-                yield StreamEvent(type="tool_end", data={"name": call.name, "result": res})
+                yield StreamEvent(type="tool_end", data={"name": call.name, "result": res, "scope": tool_scope})
 
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 

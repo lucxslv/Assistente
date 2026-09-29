@@ -15,6 +15,7 @@ import {
   sendChatMessageStream,
   SystemStatus,
 } from "./services/api";
+import { executeDeviceTool } from "./services/deviceExecutor";
 
 export function App() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -184,6 +185,16 @@ export function App() {
               )
             );
           } else if (ev.type === "tool_start") {
+            // Executa ferramentas locais nativamente no Windows
+            if (
+              ev.data.scope === "device" ||
+              ["manage_application", "set_system_volume", "system_power_action", "press_key", "type_text", "take_screenshot"].includes(ev.data.name)
+            ) {
+              executeDeviceTool(ev.data.name, ev.data.args || {}).catch((err) =>
+                console.warn("Erro ao executar ferramenta local:", err)
+              );
+            }
+
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantMsgId) return m;
