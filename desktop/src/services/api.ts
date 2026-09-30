@@ -124,6 +124,105 @@ export function setCustomApiUrl(url: string): void {
   }
 }
 
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface AuthResponse {
+  user: UserProfile;
+  token: string;
+}
+
+export function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("charlie_auth_token");
+}
+
+export function getStoredUser(): UserProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const data = localStorage.getItem("charlie_user");
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveAuthSession(data: AuthResponse): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("charlie_auth_token", data.token);
+  localStorage.setItem("charlie_user", JSON.stringify(data.user));
+}
+
+export function clearAuthSession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("charlie_auth_token");
+  localStorage.removeItem("charlie_user");
+}
+
+export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...extraHeaders,
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function registerUser(name: string, email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${getApiBase()}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Falha ao criar conta.");
+  }
+  saveAuthSession(data);
+  return data;
+}
+
+export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${getApiBase()}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Falha ao realizar login.");
+  }
+  saveAuthSession(data);
+  return data;
+}
+
+export async function fetchCurrentUser(): Promise<UserProfile | null> {
+  const token = getStoredToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${getApiBase()}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      clearAuthSession();
+      return null;
+    }
+    const user: UserProfile = await res.json();
+    localStorage.setItem("charlie_user", JSON.stringify(user));
+    return user;
+  } catch {
+    return getStoredUser();
+  }
+}
+
 export interface SystemStatus {
   assistant_name: string;
   is_online: boolean;
@@ -170,7 +269,9 @@ export async function fetchToolsStatus(): Promise<ToolsStatus> {
 }
 
 export async function fetchThreads(): Promise<Thread[]> {
-  const res = await fetch(`${getApiBase()}/threads`);
+  const res = await fetch(`${getApiBase()}/threads`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Falha ao buscar conversas");
   return res.json();
 }
@@ -178,7 +279,7 @@ export async function fetchThreads(): Promise<Thread[]> {
 export async function createThread(name: string = "Novo Chat"): Promise<Thread> {
   const res = await fetch(`${getApiBase()}/threads`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new Error("Falha ao criar conversa");
@@ -186,7 +287,9 @@ export async function createThread(name: string = "Novo Chat"): Promise<Thread> 
 }
 
 export async function fetchThreadSteps(threadId: string): Promise<Message[]> {
-  const res = await fetch(`${getApiBase()}/messages?thread_id=${encodeURIComponent(threadId)}`);
+  const res = await fetch(`${getApiBase()}/messages?thread_id=${encodeURIComponent(threadId)}`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Falha ao buscar mensagens");
   return res.json();
 }
@@ -194,6 +297,7 @@ export async function fetchThreadSteps(threadId: string): Promise<Message[]> {
 export async function deleteThread(threadId: string): Promise<void> {
   const res = await fetch(`${getApiBase()}/threads/${encodeURIComponent(threadId)}`, {
     method: "DELETE",
+    headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Falha ao excluir conversa");
 }
@@ -201,7 +305,7 @@ export async function deleteThread(threadId: string): Promise<void> {
 export async function renameThread(threadId: string, name: string): Promise<void> {
   const res = await fetch(`${getApiBase()}/threads/${encodeURIComponent(threadId)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new Error("Falha ao renomear conversa");
@@ -216,7 +320,7 @@ export async function sendChatMessage(
   try {
     const res = await fetch(`${base}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
     });
     if (!res.ok) throw new Error("Falha ao enviar mensagem");
@@ -227,7 +331,7 @@ export async function sendChatMessage(
       activeApiBase = CLOUD_API;
       const res = await fetch(`${CLOUD_API}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
       });
       if (!res.ok) throw new Error("Falha ao enviar mensagem");
@@ -251,7 +355,7 @@ export async function sendChatMessageStream(
   try {
     res = await fetch(`${base}/chat/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
     });
   } catch (err) {
@@ -261,7 +365,7 @@ export async function sendChatMessageStream(
       base = CLOUD_API;
       res = await fetch(`${base}/chat/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
       });
     } else {

@@ -4,6 +4,7 @@ import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
+import { AuthModal } from "./components/AuthModal";
 import { Message, Settings, Thread, ToolCallInfo } from "./types";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -20,6 +21,10 @@ import {
   fetchLocalHardwareMetrics,
   humanizeErrorMessage,
   LocalSystemMetrics,
+  UserProfile,
+  fetchCurrentUser,
+  getStoredUser,
+  clearAuthSession,
 } from "./services/api";
 import { executeDeviceTool } from "./services/deviceExecutor";
 
@@ -32,6 +37,8 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -117,6 +124,15 @@ export function App() {
     }
   }, []);
 
+  // Verifica sessão do usuário ao iniciar o aplicativo
+  useEffect(() => {
+    fetchCurrentUser()
+      .then((u) => {
+        if (u) setCurrentUser(u);
+      })
+      .catch(() => {});
+  }, []);
+
   // Polling e WebSocket de telemetria em tempo real
   useEffect(() => {
     loadStatus();
@@ -163,11 +179,30 @@ export function App() {
     setMessages([]);
   }, []);
 
+  const handleAuthSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    showToast(`Bem-vindo, ${user.name}!`);
+    loadThreads();
+  };
+
+  const handleLogout = () => {
+    clearAuthSession();
+    setCurrentUser(null);
+    showToast("Sessão encerrada com sucesso");
+    loadThreads();
+    setMessages([]);
+  };
+
   // Atalhos de Teclado Globais do App
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Esc: Fechar janelas modais ativas
       if (e.key === "Escape") {
+        if (isAuthModalOpen) {
+          e.preventDefault();
+          setIsAuthModalOpen(false);
+          return;
+        }
         if (isShortcutsOpen) {
           e.preventDefault();
           setIsShortcutsOpen(false);
@@ -269,6 +304,7 @@ export function App() {
     isSettingsOpen,
     isCommandPaletteOpen,
     isShortcutsOpen,
+    isAuthModalOpen,
     messages,
     handleNewThread,
     showToast,
@@ -437,6 +473,8 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        user={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
         isConnected={isConnected}
         systemStatus={systemStatus}
         localMetrics={localMetrics}
@@ -449,16 +487,26 @@ export function App() {
           isLoading={isLoading}
           onSendMessage={handleSendMessage}
           currentThreadName={activeThread?.name}
-          userName="Lucas"
+          userName={currentUser?.name || "Lucas"}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
         />
       </main>
+
+      {/* Modal de Autenticação (Login / Cadastro) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
 
       {/* Modal de Configurações */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
+        user={currentUser}
+        onLogout={handleLogout}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
       {/* Central de Atalhos (Ctrl + /) */}
