@@ -14,20 +14,28 @@ import {
   Save,
   Loader2,
   Sliders,
+  User,
+  LogOut,
 } from "lucide-react";
 import { Settings } from "../types";
-import { updateSettings } from "../services/api";
+import { updateSettings, UserProfile } from "../services/api";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: Settings | null;
+  user?: UserProfile | null;
+  onLogout?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   settings,
+  user,
+  onLogout,
+  onOpenAuth,
 }) => {
   // 1. Modo de Operação (Estilo de Resposta)
   const [operationMode, setOperationMode] = useState<"balanced" | "creative" | "fast">(() => {
@@ -453,6 +461,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="rounded border-border/60 text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* 5. Conta e Autenticação */}
+          <div className="space-y-3">
+            <label className="font-semibold text-foreground flex items-center gap-2 text-xs">
+              <User className="w-4 h-4 text-primary" />
+              <span>Conta e Autenticação</span>
+            </label>
+
+            <div className="p-3.5 rounded-xl border border-border/60 bg-muted/15 flex items-center justify-between">
+              {user ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/20 border border-primary/40 text-primary flex items-center justify-center font-bold text-sm">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">{user.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{user.email}</div>
+                    </div>
+                  </div>
+                  {onLogout && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onLogout();
+                        onClose();
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Desconectar</span>
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Modo Convidado</div>
+                    <div className="text-[11px] text-muted-foreground">Você está usando sem uma conta conectada</div>
+                  </div>
+                  {onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenAuth();
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors cursor-pointer"
+                    >
+                      Entrar / Criar Conta
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -7,11 +7,12 @@ import logging
 import platform
 import uuid
 from typing import Optional
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.db import get_or_init_db_pool
+from api.routes.auth import get_current_user_optional
 from api.state import CharlieStatus, state
 from brain.broker.device_broker import device_broker
 from brain.context.presence import presence_manager
@@ -38,7 +39,11 @@ class ChatRequest(BaseModel):
     skip_tts: bool = True
 
 
-async def _prepare_thread_and_store_user_message(message: str, thread_id: Optional[str] = None) -> str:
+async def _prepare_thread_and_store_user_message(
+    message: str,
+    thread_id: Optional[str] = None,
+    user: Optional[dict] = None,
+) -> str:
     """Garante a existência da thread e persiste a mensagem do usuário no Supabase."""
     pool = await get_or_init_db_pool()
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -55,13 +60,16 @@ async def _prepare_thread_and_store_user_message(message: str, thread_id: Option
 
     if pool:
         async with pool.acquire() as conn:
-            existing = await conn.fetchrow('SELECT id, name FROM "Thread" WHERE id = $1', t_uuid)
+            existing = await conn.fetchrow('SELECT id, name, "userId" FROM "Thread" WHERE id = $1', t_uuid)
             title = message[:35] + ("..." if len(message) > 35 else "")
+            u_id = uuid.UUID(user["id"]) if (user and user.get("id")) else None
+            u_ident = user.get("email") if user else None
+
             if not existing:
                 await conn.execute("""
-                    INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", metadata)
-                    VALUES ($1, $2, $3, $4, $5)
-                """, t_uuid, title, now, now, json.dumps({}))
+                    INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", "userId", "userIdentifier", metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """, t_uuid, title, now, now, u_id, u_ident, json.dumps({}))
             elif existing["name"] in ("Novo Chat", None, ""):
                 await conn.execute("""
                     UPDATE "Thread" SET name = $1, "updatedAt" = $2 WHERE id = $3
@@ -101,10 +109,11 @@ async def _store_assistant_message(thread_id: str, reply: str):
 # ================= Endpoints =================
 
 @router.post("")
-async def chat_post(req: ChatRequest):
+async def chat_post(req: ChatRequest, authorization: Optional[str] = Header(None)):
     """Processa uma mensagem de texto de forma síncrona (espera resposta completa)."""
+    user = await get_current_user_optional(authorization)
     pipeline = get_pipeline()
-    thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id)
+    thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
 
     state.set_status(CharlieStatus.THINKING)
     try:
@@ -126,10 +135,11 @@ async def chat_post(req: ChatRequest):
 
 
 @router.post("/stream")
-async def chat_stream_sse(req: ChatRequest):
+async def chat_stream_sse(req: ChatRequest, authorization: Optional[str] = Header(None)):
     """Endpoint de streaming em tempo real via Server-Sent Events (SSE)."""
+    user = await get_current_user_optional(authorization)
     pipeline = get_pipeline()
-    thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id)
+    thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
 
     async def event_generator():
         final_reply = ""

@@ -4,9 +4,10 @@ import datetime
 import json
 import uuid
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from api.db import get_or_init_db_pool
+from api.routes.auth import get_current_user_optional
 
 router = APIRouter(prefix="/threads", tags=["Threads"])
 
@@ -16,19 +17,30 @@ class ThreadCreate(BaseModel):
 
 
 @router.get("")
-async def list_threads():
+async def list_threads(user: Optional[dict] = Depends(get_current_user_optional)):
     """Lista todas as conversas do usuário ordenadas pela mais recente."""
     pool = await get_or_init_db_pool()
     if not pool:
         return []
 
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT id, name, "createdAt", "updatedAt"
-            FROM "Thread"
-            WHERE "deletedAt" IS NULL
-            ORDER BY "updatedAt" DESC
-        """)
+        if user and user.get("id"):
+            u_uuid = uuid.UUID(user["id"])
+            rows = await conn.fetch("""
+                SELECT id, name, "createdAt", "updatedAt"
+                FROM "Thread"
+                WHERE "deletedAt" IS NULL
+                  AND ("userId" = $1 OR "userId" IS NULL)
+                ORDER BY "updatedAt" DESC
+            """, u_uuid)
+        else:
+            rows = await conn.fetch("""
+                SELECT id, name, "createdAt", "updatedAt"
+                FROM "Thread"
+                WHERE "deletedAt" IS NULL
+                ORDER BY "updatedAt" DESC
+            """)
+
         return [
             {
                 "id": str(r["id"]),
@@ -41,18 +53,25 @@ async def list_threads():
 
 
 @router.post("")
-async def create_thread(data: ThreadCreate):
-    """Cria uma nova conversa limpa."""
+async def create_thread(data: ThreadCreate, user: Optional[dict] = Depends(get_current_user_optional)):
+    """Cria uma nova conversa limpa vinculada ao usuário caso autenticado."""
     pool = await get_or_init_db_pool()
     thread_id = str(uuid.uuid4())
     now = datetime.datetime.now(datetime.timezone.utc)
 
     if pool:
         async with pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", metadata)
-                VALUES ($1, $2, $3, $4, $5)
-            """, uuid.UUID(thread_id), data.name, now, now, json.dumps({}))
+            if user and user.get("id"):
+                u_uuid = uuid.UUID(user["id"])
+                await conn.execute("""
+                    INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", "userId", "userIdentifier", metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """, uuid.UUID(thread_id), data.name, now, now, u_uuid, user.get("email"), json.dumps({}))
+            else:
+                await conn.execute("""
+                    INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", metadata)
+                    VALUES ($1, $2, $3, $4, $5)
+                """, uuid.UUID(thread_id), data.name, now, now, json.dumps({}))
 
     return {"id": thread_id, "name": data.name}
 

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import close_db_pool, init_db_pool
-from api.routes import chat, messages, settings, system, threads, tools
+from api.routes import auth, chat, messages, settings, system, threads, tools
 
 logger = logging.getLogger("charlie.api")
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +50,7 @@ app.add_middleware(
 )
 
 # Registro Modular de Rotas
+app.include_router(auth.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(threads.router, prefix="/api")
 app.include_router(messages.router, prefix="/api")

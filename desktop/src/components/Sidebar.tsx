@@ -7,9 +7,10 @@ import {
   Search,
   Settings as SettingsIcon,
   Keyboard,
+  User,
 } from "lucide-react";
 import { Thread } from "../types";
-import { SystemStatus, LocalSystemMetrics } from "../services/api";
+import { SystemStatus, LocalSystemMetrics, UserProfile } from "../services/api";
 
 interface SidebarProps {
   threads: Thread[];
@@ -21,6 +22,8 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onOpenShortcuts?: () => void;
   onOpenCommandPalette?: () => void;
+  user?: UserProfile | null;
+  onOpenAuth?: () => void;
   isConnected: boolean;
   systemStatus: SystemStatus | null;
   localMetrics?: LocalSystemMetrics;
@@ -41,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onOpenShortcuts,
   onOpenCommandPalette,
+  user,
+  onOpenAuth,
   isConnected,
   systemStatus,
   localMetrics,
@@ -354,8 +359,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* 4. Estatísticas de Hardware Discretas (.system-stats) */}
-      <div className="mt-auto pt-3 border-t border-[var(--border)]">
+      {/* 4. Perfil do Usuário */}
+      <div className="mt-auto pt-3 border-t border-[var(--border)] mb-3">
+        {user ? (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex items-center gap-2.5 w-full p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--surface-hover)] transition-colors text-left cursor-pointer group"
+            title="Minha Conta e Preferências"
+          >
+            <div className="w-7 h-7 rounded-full bg-[var(--accent)]/20 border border-[var(--accent)]/40 text-[var(--accent)] flex items-center justify-center text-[12px] font-semibold shrink-0">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium text-[var(--text-primary)] truncate">
+                {user.name}
+              </div>
+              <div className="text-[10px] text-[var(--text-muted)] truncate">
+                {user.email}
+              </div>
+            </div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] hover:bg-[var(--accent-soft-bg)]/80 transition-colors text-[12px] font-medium cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5" />
+              <span>Entrar na Conta</span>
+            </span>
+            <span className="text-[11px]">→</span>
+          </button>
+        )}
+      </div>
+
+      {/* 5. Estatísticas de Hardware Discretas (.system-stats) */}
+      <div className="pt-2 border-t border-[var(--border)]/60">
         <div className="flex justify-between items-center text-[12px] text-[var(--text-muted)] mb-1">
           <span>CPU</span>
           <span className="font-mono">{cpuPercent}%</span>
