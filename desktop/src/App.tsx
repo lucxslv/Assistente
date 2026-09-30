@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
+import { CommandPalette } from "./components/CommandPalette";
 import { Message, Settings, Thread, ToolCallInfo } from "./types";
 import {
   checkHealth,
@@ -24,6 +25,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
@@ -106,20 +108,24 @@ export function App() {
   // Atalhos de Teclado Globais do App
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key.toLowerCase() === "n") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      } else if (e.ctrlKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
         handleNewThread();
       } else if (e.ctrlKey && e.key === ",") {
         e.preventDefault();
         setIsSettingsOpen((prev) => !prev);
-      } else if (e.key === "Escape" && isSettingsOpen) {
-        setIsSettingsOpen(false);
+      } else if (e.key === "Escape") {
+        if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
+        if (isSettingsOpen) setIsSettingsOpen(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSettingsOpen]);
+  }, [isSettingsOpen, isCommandPaletteOpen]);
 
   // Ações
   const handleNewThread = async () => {
@@ -283,6 +289,7 @@ export function App() {
         onNewThread={handleNewThread}
         onDeleteThread={handleDeleteThread}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isConnected={isConnected}
         systemStatus={systemStatus}
       />
@@ -302,6 +309,29 @@ export function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
+      />
+
+      {/* Paleta de Comandos Rápidos (Ctrl+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        threads={threads}
+        onSelectThread={(id) => {
+          setActiveThreadId(id);
+          setIsCommandPaletteOpen(false);
+        }}
+        onNewThread={() => {
+          handleNewThread();
+          setIsCommandPaletteOpen(false);
+        }}
+        onOpenSettings={() => {
+          setIsSettingsOpen(true);
+          setIsCommandPaletteOpen(false);
+        }}
+        onSendMessage={(text) => {
+          handleSendMessage(text, true);
+          setIsCommandPaletteOpen(false);
+        }}
       />
     </div>
   );
