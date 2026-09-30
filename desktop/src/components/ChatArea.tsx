@@ -16,6 +16,10 @@ import {
   Volume2,
   VolumeX,
   Keyboard,
+  RotateCcw,
+  Pencil,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Message, ToolCallInfo } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -24,6 +28,7 @@ interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
   onSendMessage: (text: string, skipTts: boolean) => void;
+  onRegenerate?: (messageId: string) => void;
   currentThreadName?: string;
   userName?: string;
   onOpenShortcuts?: () => void;
@@ -72,8 +77,9 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
   );
 };
 
-// Card discreto de feedback de ferramentas executadas
+// ReAct Tool Call Mini-Card interativo com sanfona/accordion expansível
 const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const isExecuting = tool.status === "executing";
   const isError = tool.status === "error";
 
@@ -87,8 +93,10 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
         return `Lendo arquivo: ${tool.args?.path || "Arquivo"}`;
       case "write_file":
         return `Escrevendo arquivo: ${tool.args?.path || "Arquivo"}`;
+      case "take_screenshot":
+        return "Captura de tela local";
       case "set_system_volume":
-        return `Ajustando volume`;
+        return "Ajuste de volume";
       case "system_power_action":
         return `Ação do sistema: ${tool.args?.action || "Energia"}`;
       case "search_web":
@@ -99,18 +107,70 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
   };
 
   return (
-    <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] border border-[var(--border)] text-[11.5px] text-[var(--text-secondary)] my-1 select-none">
-      {isExecuting ? (
-        <Loader2 className="w-3 h-3 animate-spin text-[var(--accent)] shrink-0" />
-      ) : isError ? (
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)]" />
-      ) : (
-        <Terminal className="w-3 h-3 text-[var(--success)] shrink-0" />
+    <div className="my-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[#101217] overflow-hidden text-left max-w-full select-none transition-all">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[11.5px]"
+      >
+        <div className="flex items-center gap-2 min-w-0 pr-2">
+          {isExecuting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)] shrink-0" />
+          ) : isError ? (
+            <span className="w-2 h-2 rounded-full bg-[var(--danger)] shrink-0" />
+          ) : (
+            <Terminal className="w-3.5 h-3.5 text-[var(--success)] shrink-0" />
+          )}
+          <span className="font-medium text-[var(--text-primary)] truncate">
+            {getFriendlyToolName(tool.name)}
+          </span>
+          <span
+            className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono font-medium ${
+              isExecuting
+                ? "bg-[var(--accent-soft-bg)] text-[var(--accent)] border border-[var(--accent-soft-border)]"
+                : isError
+                ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+            }`}
+          >
+            {isExecuting ? "Executando..." : isError ? "Falha" : "Concluído"}
+          </span>
+        </div>
+        <div className="text-[var(--text-muted)] shrink-0">
+          {isExpanded ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5" />
+          )}
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="p-3 border-t border-[var(--border)] bg-[#0A0B0E] text-[11px] font-mono space-y-2 select-text overflow-x-auto">
+          {tool.args && Object.keys(tool.args).length > 0 && (
+            <div>
+              <div className="text-[9.5px] uppercase font-bold text-[var(--text-muted)] mb-1">
+                Parâmetros (JSON)
+              </div>
+              <pre className="p-2 rounded bg-[var(--surface)] text-[var(--text-secondary)] overflow-x-auto whitespace-pre-wrap">
+                {JSON.stringify(tool.args, null, 2)}
+              </pre>
+            </div>
+          )}
+          {tool.result !== undefined && (
+            <div>
+              <div className="text-[9.5px] uppercase font-bold text-[var(--text-muted)] mb-1">
+                Retorno / Resultado
+              </div>
+              <pre className="p-2 rounded bg-[var(--surface)] text-emerald-300 overflow-x-auto whitespace-pre-wrap">
+                {typeof tool.result === "string"
+                  ? tool.result
+                  : JSON.stringify(tool.result, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
       )}
-      <span className="font-medium text-[var(--text-primary)]">
-        {getFriendlyToolName(tool.name)}
-      </span>
-      {isExecuting && <span className="text-[10px] text-[var(--text-muted)]">(executando...)</span>}
     </div>
   );
 };
@@ -119,6 +179,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   messages,
   isLoading,
   onSendMessage,
+  onRegenerate,
   currentThreadName,
   userName = "Lucas",
   onOpenShortcuts,
@@ -126,6 +187,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [input, setInput] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -174,6 +236,63 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     navigator.clipboard.writeText(text);
     setCopiedMessageId(id);
     setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  // Saudação dinâmica por período do dia
+  const getGreeting = (name: string) => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return `Bom dia, ${name}.`;
+    if (hour >= 12 && hour < 18) return `Boa tarde, ${name}.`;
+    return `Boa noite, ${name}.`;
+  };
+
+  // Reproduzir áudio (TTS) com sintetizador nativo do navegador / WebView
+  const handleSpeakMessage = (id: string, text: string) => {
+    if (!("speechSynthesis" in window)) return;
+    if (speakingMessageId === id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    setSpeakingMessageId(id);
+
+    const cleanText = text.replace(/[*_`#]/g, "").trim();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = "pt-BR";
+    utterance.rate = 1.05;
+
+    const voices = window.speechSynthesis.getVoices();
+    const ptVoice = voices.find((v) => v.lang.includes("pt") || v.lang.includes("BR"));
+    if (ptVoice) utterance.voice = ptVoice;
+
+    utterance.onend = () => setSpeakingMessageId(null);
+    utterance.onerror = () => setSpeakingMessageId(null);
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Editar pergunta (preenche no composer e foca)
+  const handleEditMessage = (text: string) => {
+    setInput(text);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      setTimeout(adjustTextareaHeight, 20);
+    }
+  };
+
+  // Regenerar resposta do Charlie
+  const handleRegenerateMessage = (msgIdx: number) => {
+    for (let i = msgIdx - 1; i >= 0; i--) {
+      if (messages[i].type === "user_message" && messages[i].content) {
+        if (onRegenerate) {
+          onRegenerate(messages[msgIdx].id);
+        } else {
+          onSendMessage(messages[i].content, !voiceActive);
+        }
+        return;
+      }
+    }
   };
 
   // Controles de Janela Nativa (Tauri)
@@ -230,8 +349,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         data-tauri-drag-region
         className="h-[52px] border-b border-[var(--border)] flex items-center justify-between px-6 select-none bg-[var(--background)] shrink-0 z-20"
       >
-        <div data-tauri-drag-region className="flex items-center gap-2 text-[13px] text-[var(--text-muted)] cursor-default">
-          <span className="text-[var(--accent)] font-semibold select-none">✦</span>
+        <div data-tauri-drag-region className="flex items-center gap-2.5 text-[13px] text-[var(--text-muted)] cursor-default">
+          <img
+            src="/charlie-logo.png"
+            alt="Charlie"
+            className="w-4 h-4 object-contain opacity-90 drop-shadow-[0_0_6px_rgba(139,124,255,0.4)]"
+          />
           <span className="font-medium text-[var(--text-secondary)]">
             {currentThreadName || "Charlie"}
           </span>
@@ -295,14 +418,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           ================================================================ */}
       {isEmptyState ? (
         <section className="flex-1 flex flex-col justify-center items-center p-10 max-w-[700px] mx-auto w-full select-none animate-fade-in">
-          <div className="text-[32px] text-[var(--accent)] drop-shadow-[0_0_30px_var(--accent-glow)] mb-6 opacity-80">
-            ✦
+          <div className="w-16 h-16 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center mb-6 shadow-[0_0_35px_rgba(139,124,255,0.25)]">
+            <img
+              src="/charlie-logo.png"
+              alt="Charlie"
+              className="w-10 h-10 object-contain drop-shadow-[0_0_12px_rgba(139,124,255,0.6)]"
+            />
           </div>
-          <h1 className="text-[28px] font-light text-[var(--text-primary)] mb-2 text-center tracking-tight">
-            E aí, {userName}.
+          <h1 className="greeting-title text-[28px] font-light text-[var(--text-primary)] mb-2 text-center tracking-tight">
+            {getGreeting(userName)}
           </h1>
           <h2 className="text-[16px] text-[var(--text-secondary)] mb-10 text-center font-normal">
-            O que vamos fazer?
+            O que vamos fazer agora?
           </h2>
 
           {/* Composer Centralizado */}
@@ -396,109 +523,185 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             3. ESTADO ATIVO (LISTA DE MENSAGENS COM ROLAGEM VERTICAL)
             ================================================================ */
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
             {messages.map((m, idx) => {
               const isUser = m.type === "user_message";
               const messageId = m.id || `msg-${idx}`;
               const isCopied = copiedMessageId === messageId;
+              const isSpeaking = speakingMessageId === messageId;
 
               return (
                 <div
                   key={messageId}
-                  className={`flex gap-3.5 group ${isUser ? "justify-end" : "justify-start"}`}
+                  className={`group flex flex-col ${isUser ? "items-end" : "items-start"} space-y-1.5`}
                 >
-                  {!isUser && (
-                    <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] flex items-center justify-center shrink-0 mt-0.5 select-none font-bold text-xs">
-                      ✦
-                    </div>
-                  )}
-
                   <div
-                    className={`max-w-[78%] px-4 py-3 rounded-[var(--radius-lg)] text-[14px] leading-relaxed transition-all ${
-                      isUser
-                        ? "bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
-                        : "bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)]"
+                    className={`flex gap-3.5 max-w-[85%] ${
+                      isUser ? "flex-row-reverse" : "flex-row"
+                    }`}
+                  >
+                    {!isUser && (
+                      <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[#0A0B0E] border border-[var(--border)] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1 shadow-sm">
+                        <img
+                          src="/charlie-logo.png"
+                          alt="Charlie"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
+
+                    <div
+                      className={`px-4 py-3 rounded-[var(--radius-lg)] text-[14px] leading-relaxed transition-all ${
+                        isUser
+                          ? "bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+                          : "bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {isUser ? (
+                        <div className="whitespace-pre-wrap select-text">{m.content}</div>
+                      ) : (
+                        <div className="space-y-2 select-text">
+                          {/* Ferramentas executadas com accordion expansível */}
+                          {m.tools && m.tools.length > 0 && (
+                            <div className="flex flex-col gap-1 mb-2">
+                              {m.tools.map((t, tIdx) => (
+                                <ToolExecutionBadge key={tIdx} tool={t} />
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Conteúdo Markdown com Syntax Highlighting */}
+                          <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
+                            {m.content ? (
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  code({ node, inline, className, children, ...props }: any) {
+                                    const match = /language-(\w+)/.exec(className || "");
+                                    const codeString = String(children).replace(/\n$/, "");
+                                    if (!inline && (match || codeString.includes("\n"))) {
+                                      return (
+                                        <CodeBlock
+                                          language={match ? match[1] : "code"}
+                                          code={codeString}
+                                        />
+                                      );
+                                    }
+                                    return (
+                                      <code
+                                        className="px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] text-[var(--accent)] font-mono text-[12px] border border-[var(--border)]"
+                                        {...props}
+                                      >
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                }}
+                              >
+                                {m.content}
+                              </ReactMarkdown>
+                            ) : m.streaming ? (
+                              <span className="text-[var(--text-muted)] flex items-center gap-2 italic py-0.5">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
+                                Charlie está raciocinando...
+                              </span>
+                            ) : null}
+
+                            {m.streaming && m.content && (
+                              <span className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--accent)] animate-pulse align-middle rounded-full" />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Barra de Ações Flutuante Externa (Hover Action Toolbar) */}
+                  <div
+                    className={`flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity select-none ${
+                      isUser ? "pr-1" : "pl-10"
                     }`}
                   >
                     {isUser ? (
-                      <div className="whitespace-pre-wrap select-text">{m.content}</div>
-                    ) : (
-                      <div className="space-y-2 select-text">
-                        {/* Ferramentas executadas */}
-                        {m.tools && m.tools.length > 0 && (
-                          <div className="flex flex-col gap-1 mb-2">
-                            {m.tools.map((t, tIdx) => (
-                              <ToolExecutionBadge key={tIdx} tool={t} />
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Conteúdo Markdown com Syntax Highlighting */}
-                        <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
-                          {m.content ? (
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                code({ node, inline, className, children, ...props }: any) {
-                                  const match = /language-(\w+)/.exec(className || "");
-                                  const codeString = String(children).replace(/\n$/, "");
-                                  if (!inline && (match || codeString.includes("\n"))) {
-                                    return (
-                                      <CodeBlock
-                                        language={match ? match[1] : "code"}
-                                        code={codeString}
-                                      />
-                                    );
-                                  }
-                                  return (
-                                    <code
-                                      className="px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] text-[var(--accent)] font-mono text-[12px] border border-[var(--border)]"
-                                      {...props}
-                                    >
-                                      {children}
-                                    </code>
-                                  );
-                                },
-                              }}
-                            >
-                              {m.content}
-                            </ReactMarkdown>
-                          ) : m.streaming ? (
-                            <span className="text-[var(--text-muted)] flex items-center gap-2 italic py-0.5">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
-                              Charlie está raciocinando...
-                            </span>
-                          ) : null}
-
-                          {m.streaming && m.content && (
-                            <span className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--accent)] animate-pulse align-middle rounded-full" />
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleEditMessage(m.content)}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                          title="Editar e reenviar pergunta"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyMessage(messageId, m.content)}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                          title="Copiar pergunta"
+                        >
+                          {isCopied ? (
+                            <>
+                              <Check className="w-3 h-3 text-[var(--success)]" />
+                              <span className="text-[var(--success)]">Copiado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copiar</span>
+                            </>
                           )}
-                        </div>
+                        </button>
+                      </>
+                    ) : (
+                      !m.streaming &&
+                      m.content && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(messageId, m.content)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                            title="Copiar resposta"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="w-3 h-3 text-[var(--success)]" />
+                                <span className="text-[var(--success)]">Copiado</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copiar</span>
+                              </>
+                            )}
+                          </button>
 
-                        {/* Botão Copiar */}
-                        {!m.streaming && m.content && (
-                          <div className="flex items-center justify-end pt-1.5 border-t border-[var(--border)]/40 opacity-30 group-hover:opacity-100 transition-opacity">
-                            <button
-                              type="button"
-                              onClick={() => handleCopyMessage(messageId, m.content)}
-                              className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
-                              title="Copiar resposta"
-                            >
-                              {isCopied ? (
-                                <>
-                                  <Check className="w-3 h-3 text-[var(--success)]" />
-                                  <span className="text-[var(--success)]">Copiado</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>Copiar</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakMessage(messageId, m.content)}
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] transition-colors cursor-pointer ${
+                              isSpeaking
+                                ? "text-[var(--accent)] bg-[var(--accent-soft-bg)] font-medium"
+                                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                            }`}
+                            title={isSpeaking ? "Parar áudio" : "Ouvir resposta (TTS)"}
+                          >
+                            <Volume2
+                              className={`w-3 h-3 ${isSpeaking ? "animate-pulse" : ""}`}
+                            />
+                            <span>{isSpeaking ? "Parar" : "Ouvir"}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRegenerateMessage(idx)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                            title="Regenerar esta resposta"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Regenerar</span>
+                          </button>
+                        </>
+                      )
                     )}
                   </div>
                 </div>
@@ -509,8 +712,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               (messages.length === 0 ||
                 messages[messages.length - 1].type === "user_message") && (
                 <div className="flex gap-3.5 justify-start animate-fade-in">
-                  <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] flex items-center justify-center shrink-0 mt-0.5 select-none font-bold text-xs">
-                    ✦
+                  <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[#0A0B0E] border border-[var(--border)] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1 shadow-sm">
+                    <img
+                      src="/charlie-logo.png"
+                      alt="Charlie"
+                      className="w-full h-full object-contain"
+                    />
                   </div>
                   <div className="bg-[var(--surface)] border border-[var(--border)] px-4 py-3 rounded-[var(--radius-lg)] flex items-center gap-2 text-[13px] text-[var(--text-muted)]">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />

@@ -497,3 +497,23 @@ export async function updateSettings(data: Partial<Settings>): Promise<any> {
   if (!res.ok) throw new Error("Falha ao atualizar configurações");
   return res.json();
 }
+
+export async function fetchUserMemories(): Promise<{ facts: string[]; preferences: Record<string, string>; count: number }> {
+  try {
+    const res = await fetch(`${getApiBase()}/settings/memory`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) return { facts: [], preferences: {}, count: 0 };
+    return res.json();
+  } catch {
+    return { facts: [], preferences: {}, count: 0 };
+  }
+}
+
+export async function clearUserMemories(): Promise<void> {
+  const res = await fetch(`${getApiBase()}/settings/memory`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Falha ao limpar memórias");
+}
