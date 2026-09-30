@@ -3,36 +3,53 @@
 @tailwind utilities;
 
 :root {
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-  --card: 222 47% 14%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222 47% 12%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 217 33% 22%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217 33% 18%;
-  --muted-foreground: 215 20% 65%;
-  --accent: 217 33% 25%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 63% 31%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217 33% 22%;
-  --input: 217 33% 20%;
-  --ring: 217 91% 60%;
-  --radius: 0.75rem;
+  --background: #0E0F12;
+  --surface: #15171C;
+  --surface-hover: #1B1E24;
+  --surface-elevated: #20232A;
+  --border: #292D35;
+
+  --text-primary: #F2F3F5;
+  --text-secondary: #A4A8B2;
+  --text-muted: #6F7480;
+
+  --accent: #8B7CFF;
+  --accent-hover: #9B8EFF;
+  --accent-soft-bg: rgba(139, 124, 255, 0.12);
+  --accent-soft-border: rgba(139, 124, 255, 0.25);
+  --accent-glow: rgba(139, 124, 255, 0.18);
+
+  --success: #4ADE80;
+  --warning: #F5C451;
+  --danger: #F87171;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --transition-fast: 150ms ease;
+
+  /* Aliases para compatibilidade Tailwind */
+  --foreground: #F2F3F5;
+  --card: #15171C;
+  --card-foreground: #F2F3F5;
+  --primary: #8B7CFF;
+  --primary-foreground: #FFFFFF;
+  --muted: #1B1E24;
+  --muted-foreground: #A4A8B2;
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--background);
+  color: var(--text-primary);
+  height: 100vh;
   overflow: hidden;
   user-select: none;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Custom modern scrollbar */
@@ -46,12 +63,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.2);
-  border-radius: 9999px;
+  background: var(--border);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.4);
+  background: var(--text-muted);
 }
 
 /* Modo Transparente para Charlie Spotlight */

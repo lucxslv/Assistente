@@ -2,32 +2,32 @@ import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Send,
-  Volume2,
-  VolumeX,
-  Sparkles,
-  Music,
-  Cloud,
-  Search,
-  AppWindow,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
   Copy,
   Check,
-  ChevronDown,
-  ChevronRight,
+  Loader2,
+  Minus,
+  Square,
+  X,
+  Plus,
+  Paperclip,
+  Mic,
+  ArrowUp,
+  Terminal,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { Message, ToolCallInfo } from "../types";
+import { invoke } from "@tauri-apps/api/core";
 
 interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
   onSendMessage: (text: string, skipTts: boolean) => void;
   currentThreadName?: string;
+  userName?: string;
 }
 
-// Componente para blocos de código com destaque e botão de copiar
+// Componente para blocos de código com destaque e botão de cópia
 const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
 
@@ -38,29 +38,20 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
   };
 
   return (
-    <div className="relative my-3 rounded-xl overflow-hidden border border-border/70 bg-[#0a0e17] shadow-xl text-left">
-      {/* Barra de cabeçalho do código */}
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#121826] border-b border-border/50 text-[11px] font-mono select-none">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1.5 items-center">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/70 inline-block" />
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/70 inline-block" />
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/70 inline-block" />
-          </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1.5">
-            {language || "code"}
-          </span>
-        </div>
+    <div className="relative my-3 rounded-[var(--radius-md)] overflow-hidden border border-[var(--border)] bg-[#0A0B0E] text-left">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)] text-[11px] font-mono select-none">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+          {language || "code"}
+        </span>
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-white/10 text-muted-foreground hover:text-foreground transition-all text-[11px]"
-          title="Copiar código"
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] transition-colors cursor-pointer"
         >
           {copied ? (
             <>
-              <Check className="w-3 h-3 text-emerald-400" />
-              <span className="text-emerald-400 font-medium">Copiado!</span>
+              <Check className="w-3 h-3 text-[var(--success)]" />
+              <span className="text-[var(--success)] font-medium">Copiado</span>
             </>
           ) : (
             <>
@@ -70,9 +61,7 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
           )}
         </button>
       </div>
-
-      {/* Conteúdo do código */}
-      <div className="p-3.5 overflow-x-auto text-[11.5px] font-mono leading-relaxed text-zinc-100 selection:bg-primary/30">
+      <div className="p-3.5 overflow-x-auto text-[12px] font-mono leading-relaxed text-[#E6E8ED]">
         <pre className="!bg-transparent !p-0 !m-0">
           <code>{code}</code>
         </pre>
@@ -81,90 +70,45 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
   );
 };
 
-// Componente para detalhes expansíveis de ferramentas executadas
-const ToolCallCard: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
+// Card discreto de feedback de ferramentas executadas
+const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
   const isExecuting = tool.status === "executing";
   const isError = tool.status === "error";
 
+  const getFriendlyToolName = (name: string) => {
+    switch (name) {
+      case "manage_application":
+        return `Comando: ${tool.args?.app_name || "Aplicativo"}`;
+      case "list_directory":
+        return `Explorando pasta: ${tool.args?.path || "Diretório"}`;
+      case "read_file":
+        return `Lendo arquivo: ${tool.args?.path || "Arquivo"}`;
+      case "write_file":
+        return `Escrevendo arquivo: ${tool.args?.path || "Arquivo"}`;
+      case "set_system_volume":
+        return `Ajustando volume`;
+      case "system_power_action":
+        return `Ação do sistema: ${tool.args?.action || "Energia"}`;
+      case "search_web":
+        return `Pesquisa na Web: ${tool.args?.query || ""}`;
+      default:
+        return `Ferramenta: ${name}`;
+    }
+  };
+
   return (
-    <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden transition-all text-xs mb-2">
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-muted/30 transition-colors text-left font-mono"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {isExecuting ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
-          ) : isError ? (
-            <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          )}
-          <span className="font-semibold text-foreground/90 truncate text-[11.5px]">
-            {tool.name}
-          </span>
-          <span
-            className={`text-[9.5px] px-2 py-0.5 rounded-full font-sans tracking-wide uppercase font-semibold ${
-              isExecuting
-                ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
-                : isError
-                ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-                : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-            }`}
-          >
-            {isExecuting ? "Executando..." : isError ? "Falha" : "Concluído"}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1 text-muted-foreground shrink-0">
-          <span className="text-[10px] hidden sm:inline opacity-70">
-            {isExpanded ? "Ocultar detalhes" : "Ver parâmetros"}
-          </span>
-          {isExpanded ? (
-            <ChevronDown className="w-3.5 h-3.5" />
-          ) : (
-            <ChevronRight className="w-3.5 h-3.5" />
-          )}
-        </div>
-      </button>
-
-      {isExpanded && (
-        <div className="px-3.5 py-2.5 bg-black/40 border-t border-border/30 text-[11px] font-mono space-y-2.5">
-          {tool.args && Object.keys(tool.args).length > 0 && (
-            <div>
-              <span className="text-[10px] text-muted-foreground font-sans block mb-1 font-semibold uppercase tracking-wider">
-                Argumentos Enviados:
-              </span>
-              <pre className="p-2 rounded-lg bg-black/50 border border-border/40 text-blue-300 overflow-x-auto text-[11px] leading-relaxed">
-                {JSON.stringify(tool.args, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {tool.result !== undefined && (
-            <div>
-              <span className="text-[10px] text-muted-foreground font-sans block mb-1 font-semibold uppercase tracking-wider">
-                Resultado da Execução:
-              </span>
-              <pre className="p-2 rounded-lg bg-black/50 border border-border/40 text-emerald-300 overflow-x-auto text-[11px] leading-relaxed max-h-40 overflow-y-auto">
-                {typeof tool.result === "string"
-                  ? tool.result
-                  : JSON.stringify(tool.result, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {(!tool.args || Object.keys(tool.args).length === 0) &&
-            tool.result === undefined && (
-              <span className="text-muted-foreground italic text-[11px] block">
-                Nenhum argumento ou retorno registrado para esta ferramenta.
-              </span>
-            )}
-        </div>
+    <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] border border-[var(--border)] text-[11.5px] text-[var(--text-secondary)] my-1 select-none">
+      {isExecuting ? (
+        <Loader2 className="w-3 h-3 animate-spin text-[var(--accent)] shrink-0" />
+      ) : isError ? (
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)]" />
+      ) : (
+        <Terminal className="w-3 h-3 text-[var(--success)] shrink-0" />
       )}
+      <span className="font-medium text-[var(--text-primary)]">
+        {getFriendlyToolName(tool.name)}
+      </span>
+      {isExecuting && <span className="text-[10px] text-[var(--text-muted)]">(executando...)</span>}
     </div>
   );
 };
@@ -174,12 +118,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   isLoading,
   onSendMessage,
   currentThreadName,
+  userName = "Lucas",
 }) => {
   const [input, setInput] = useState("");
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -189,28 +137,33 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // Redimensionamento automático do textarea
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 140)}px`;
+  // Auto-resize do textarea
+  const adjustTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
     }
+  };
+
+  useEffect(() => {
+    adjustTextareaHeight();
   }, [input]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!input.trim() || isLoading) return;
-    onSendMessage(input.trim(), !voiceEnabled);
+  const handleSend = (textToSend?: string) => {
+    const finalMsg = (textToSend !== undefined ? textToSend : input).trim();
+    if (!finalMsg || isLoading) return;
+
+    onSendMessage(finalMsg, !voiceActive);
     setInput("");
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      handleSend();
     }
   };
 
@@ -220,278 +173,424 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
+  // Controles de Janela Nativa (Tauri)
+  const handleMinimize = async () => {
+    try {
+      await invoke("minimize_window");
+    } catch {
+      // Browser fallback
+    }
+  };
+
+  const handleToggleMaximize = async () => {
+    try {
+      await invoke("toggle_maximize_window");
+    } catch {
+      // Browser fallback
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      await invoke("close_window");
+    } catch {
+      // Browser fallback
+    }
+  };
+
+  // Upload/Anexo de arquivo
+  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const promptText = `Analise o arquivo '${file.name}':\n`;
+      setInput((prev) => (prev ? `${prev}\n${promptText}` : promptText));
+      textareaRef.current?.focus();
+    }
+    e.target.value = "";
+  };
+
   const suggestions = [
-    { icon: Music, label: "Tocar música", prompt: "Toca Imagine Dragons Believer" },
-    { icon: Cloud, label: "Previsão do tempo", prompt: "Como está o tempo hoje?" },
-    { icon: Search, label: "Pesquisar na Web", prompt: "Quais as principais novidades em IA hoje?" },
-    { icon: AppWindow, label: "Abrir aplicativo", prompt: "Abre o Chrome pra mim" },
+    { label: "Analisa meu projeto", prompt: "Analise a estrutura do projeto atual e me dê um resumo." },
+    { label: "Abre o Chrome", prompt: "Abre o Google Chrome para mim." },
+    { label: "Pesquisa as notícias", prompt: "Pesquise as principais notícias e novidades em tecnologia de hoje." },
+    { label: "Como está o desempenho?", prompt: "Como está o desempenho atual do processador e memória do meu computador?" },
   ];
 
+  const isEmptyState = messages.length === 0;
+
   return (
-    <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
-      {/* Topo / Barra de Título */}
-      <div className="h-14 border-b border-border/40 px-6 flex items-center justify-between bg-card/30 backdrop-blur-md z-10 select-none">
-        <div className="flex items-center gap-2.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-primary/80 animate-pulse" />
-          <span className="text-xs font-semibold text-foreground tracking-wide">
-            {currentThreadName || "Conversa Atual"}
+    <div className="flex-1 flex flex-col h-full bg-[var(--background)] relative overflow-hidden">
+      {/* ================================================================
+          1. HEADER NATIVO COM ÁREA DE ARRASTE E CONTROLES DE JANELA
+          ================================================================ */}
+      <header
+        data-tauri-drag-region
+        className="h-[52px] border-b border-[var(--border)] flex items-center justify-between px-6 select-none bg-[var(--background)] shrink-0 z-20"
+      >
+        <div data-tauri-drag-region className="flex items-center gap-2 text-[13px] text-[var(--text-muted)] cursor-default">
+          <span className="text-[var(--accent)] font-semibold select-none">✦</span>
+          <span className="font-medium text-[var(--text-secondary)]">
+            {currentThreadName || "Charlie"}
           </span>
         </div>
 
-        {/* Botão de Voz / TTS */}
-        <button
-          onClick={() => setVoiceEnabled(!voiceEnabled)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-            voiceEnabled
-              ? "bg-primary/20 text-primary border border-primary/30 shadow-sm shadow-primary/10"
-              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-          }`}
-          title={voiceEnabled ? "Voz ativada (Charlie vai falar)" : "Modo silencioso (apenas texto)"}
-        >
-          {voiceEnabled ? (
-            <>
-              <Volume2 className="w-3.5 h-3.5" />
-              <span>Voz Ativada</span>
-            </>
-          ) : (
-            <>
-              <VolumeX className="w-3.5 h-3.5 opacity-70" />
-              <span>Silencioso</span>
-            </>
-          )}
-        </button>
-      </div>
+        {/* Controles de Janela Sutis */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setVoiceActive(!voiceActive)}
+            className={`p-1.5 rounded-[var(--radius-sm)] transition-colors cursor-pointer mr-2 ${
+              voiceActive
+                ? "text-[var(--accent)] bg-[var(--accent-soft-bg)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            }`}
+            title={voiceActive ? "Resposta por voz ativada" : "Modo silencioso (apenas texto)"}
+          >
+            {voiceActive ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+          </button>
 
-      {/* Área de Mensagens */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto select-none py-12">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600/30 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center shadow-2xl shadow-blue-500/10 mb-4 animate-bounce-slow">
-              <Sparkles className="w-8 h-8 text-primary" />
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-1.5">Como posso te ajudar hoje?</h2>
-            <p className="text-xs text-muted-foreground mb-8 max-w-sm">
-              Controle seu computador nativamente, pesquise informações, gerencie arquivos ou converse com raciocínio avançado.
-            </p>
+          <button
+            type="button"
+            onClick={handleMinimize}
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+            title="Minimizar"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleMaximize}
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+            title="Maximizar"
+          >
+            <Square className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--danger)]/15 transition-colors cursor-pointer"
+            title="Fechar"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </header>
 
-            <div className="grid grid-cols-2 gap-3 w-full">
-              {suggestions.map((s, idx) => {
-                const Icon = s.icon;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setInput(s.prompt);
-                      inputRef.current?.focus();
-                    }}
-                    className="p-3.5 rounded-xl border border-border/50 bg-card/40 hover:bg-card/90 hover:border-primary/40 text-left transition-all group flex items-start gap-3 shadow-sm hover:shadow-md"
-                  >
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-foreground/90">{s.label}</div>
-                      <div className="text-[11px] text-muted-foreground truncate">{s.prompt}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+      {/* ================================================================
+          2. ESTADO VAZIO (ASSISTANT-VIEW CENTRALIZADO)
+          ================================================================ */}
+      {isEmptyState ? (
+        <section className="flex-1 flex flex-col justify-center items-center p-10 max-w-[700px] mx-auto w-full select-none animate-fade-in">
+          <div className="text-[32px] text-[var(--accent)] drop-shadow-[0_0_30px_var(--accent-glow)] mb-6 opacity-80">
+            ✦
           </div>
-        ) : (
-          messages.map((m, idx) => {
-            const isUser = m.type === "user_message";
-            const messageId = m.id || `msg-${idx}`;
-            const isCopied = copiedMessageId === messageId;
+          <h1 className="text-[28px] font-light text-[var(--text-primary)] mb-2 text-center tracking-tight">
+            E aí, {userName}.
+          </h1>
+          <h2 className="text-[16px] text-[var(--text-secondary)] mb-10 text-center font-normal">
+            O que vamos fazer?
+          </h2>
 
-            return (
-              <div
-                key={messageId}
-                className={`flex gap-3 group ${isUser ? "justify-end" : "justify-start"}`}
-              >
-                {!isUser && (
-                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20 mt-1">
-                    <Sparkles className="w-3.5 h-3.5 text-white" />
+          {/* Composer Centralizado */}
+          <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-4 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)] mb-6">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Fala comigo..."
+              disabled={isLoading}
+              className="w-full bg-transparent border-none text-[var(--text-primary)] text-[15px] leading-relaxed resize-none outline-none min-h-[26px] max-h-[120px] placeholder:text-[var(--text-muted)]"
+            />
+            <div className="flex justify-between items-center mt-3">
+              <div className="flex gap-1 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowPlusMenu(!showPlusMenu)}
+                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[16px]"
+                  title="Ações rápidas"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                  title="Anexar arquivo"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVoiceActive(!voiceActive)}
+                  className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors cursor-pointer ${
+                    voiceActive
+                      ? "text-[var(--accent)] bg-[var(--accent-soft-bg)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                  }`}
+                  title={voiceActive ? "Resposta por voz ligada" : "Modo texto (silencioso)"}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Menu popup do botão + */}
+                {showPlusMenu && (
+                  <div className="absolute left-0 bottom-10 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-[var(--radius-md)] p-1 shadow-2xl z-30 min-w-[160px] text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPlusMenu(false);
+                        handleSend("Limpe o histórico desta conversa.");
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                    >
+                      Limpar conversa
+                    </button>
                   </div>
                 )}
+              </div>
 
+              <button
+                type="button"
+                onClick={() => handleSend()}
+                disabled={!input.trim() || isLoading}
+                className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:hover:bg-[var(--accent)] cursor-pointer"
+                title="Enviar mensagem"
+              >
+                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            </div>
+          </div>
+
+          {/* Sugestões Clicáveis */}
+          <div className="flex gap-2 flex-wrap justify-center">
+            {suggestions.map((s, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSend(s.prompt)}
+                className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-secondary)] text-[13px] cursor-pointer hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)] transition-all font-sans"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : (
+        /* ================================================================
+            3. ESTADO ATIVO (LISTA DE MENSAGENS COM ROLAGEM VERTICAL)
+            ================================================================ */
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+            {messages.map((m, idx) => {
+              const isUser = m.type === "user_message";
+              const messageId = m.id || `msg-${idx}`;
+              const isCopied = copiedMessageId === messageId;
+
+              return (
                 <div
-                  className={`max-w-[82%] px-4 py-3 rounded-2xl text-xs leading-relaxed transition-all ${
-                    isUser
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/15 rounded-tr-xs"
-                      : "bg-card/75 border border-border/60 text-foreground shadow-md rounded-tl-xs backdrop-blur-md"
-                  }`}
+                  key={messageId}
+                  className={`flex gap-3.5 group ${isUser ? "justify-end" : "justify-start"}`}
                 >
-                  {isUser ? (
-                    <div className="whitespace-pre-wrap select-text">{m.content}</div>
-                  ) : (
-                    <div className="space-y-2 select-text">
-                      {/* Ferramentas executadas nesta mensagem */}
-                      {m.tools && m.tools.length > 0 && (
-                        <div className="space-y-1 mb-3">
-                          {m.tools.map((t, tIdx) => (
-                            <ToolCallCard key={tIdx} tool={t} />
-                          ))}
-                        </div>
-                      )}
+                  {!isUser && (
+                    <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] flex items-center justify-center shrink-0 mt-0.5 select-none font-bold text-xs">
+                      ✦
+                    </div>
+                  )}
 
-                      {/* Conteúdo em Markdown com CodeBlocks e tabelas estilizadas */}
-                      <div className="prose prose-invert prose-xs max-w-none text-foreground/95">
-                        {m.content ? (
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              code({ node, inline, className, children, ...props }: any) {
-                                const match = /language-(\w+)/.exec(className || "");
-                                const codeString = String(children).replace(/\n$/, "");
-                                const isMultiline = codeString.includes("\n");
+                  <div
+                    className={`max-w-[78%] px-4 py-3 rounded-[var(--radius-lg)] text-[14px] leading-relaxed transition-all ${
+                      isUser
+                        ? "bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+                        : "bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {isUser ? (
+                      <div className="whitespace-pre-wrap select-text">{m.content}</div>
+                    ) : (
+                      <div className="space-y-2 select-text">
+                        {/* Ferramentas executadas */}
+                        {m.tools && m.tools.length > 0 && (
+                          <div className="flex flex-col gap-1 mb-2">
+                            {m.tools.map((t, tIdx) => (
+                              <ToolExecutionBadge key={tIdx} tool={t} />
+                            ))}
+                          </div>
+                        )}
 
-                                if (!inline && (match || isMultiline)) {
+                        {/* Conteúdo Markdown com Syntax Highlighting */}
+                        <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
+                          {m.content ? (
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                code({ node, inline, className, children, ...props }: any) {
+                                  const match = /language-(\w+)/.exec(className || "");
+                                  const codeString = String(children).replace(/\n$/, "");
+                                  if (!inline && (match || codeString.includes("\n"))) {
+                                    return (
+                                      <CodeBlock
+                                        language={match ? match[1] : "code"}
+                                        code={codeString}
+                                      />
+                                    );
+                                  }
                                   return (
-                                    <CodeBlock
-                                      language={match ? match[1] : "code"}
-                                      code={codeString}
-                                    />
-                                  );
-                                }
-                                return (
-                                  <code
-                                    className="px-1.5 py-0.5 rounded-md bg-muted/60 text-amber-300 font-mono text-[11px] border border-border/40"
-                                    {...props}
-                                  >
-                                    {children}
-                                  </code>
-                                );
-                              },
-                              a({ node, href, children, ...props }: any) {
-                                return (
-                                  <a
-                                    href={href}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
-                                    {...props}
-                                  >
-                                    {children}
-                                  </a>
-                                );
-                              },
-                              table({ children }: any) {
-                                return (
-                                  <div className="overflow-x-auto my-3 rounded-lg border border-border/50">
-                                    <table className="min-w-full divide-y divide-border/40 text-left text-xs">
+                                    <code
+                                      className="px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] text-[var(--accent)] font-mono text-[12px] border border-[var(--border)]"
+                                      {...props}
+                                    >
                                       {children}
-                                    </table>
-                                  </div>
-                                );
-                              },
-                              th({ children }: any) {
-                                return (
-                                  <th className="px-3 py-2 bg-card/80 font-semibold text-foreground border-b border-border/40">
-                                    {children}
-                                  </th>
-                                );
-                              },
-                              td({ children }: any) {
-                                return (
-                                  <td className="px-3 py-2 border-b border-border/20 text-muted-foreground">
-                                    {children}
-                                  </td>
-                                );
-                              },
-                            }}
-                          >
-                            {m.content}
-                          </ReactMarkdown>
-                        ) : m.streaming ? (
-                          <span className="text-muted-foreground flex items-center gap-2 italic py-1">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                            Charlie está pensando...
-                          </span>
-                        ) : null}
+                                    </code>
+                                  );
+                                },
+                              }}
+                            >
+                              {m.content}
+                            </ReactMarkdown>
+                          ) : m.streaming ? (
+                            <span className="text-[var(--text-muted)] flex items-center gap-2 italic py-0.5">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
+                              Charlie está raciocinando...
+                            </span>
+                          ) : null}
 
-                        {m.streaming && m.content && (
-                          <span className="inline-block w-1.5 h-3.5 ml-1 bg-primary animate-pulse align-middle rounded-full" />
+                          {m.streaming && m.content && (
+                            <span className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--accent)] animate-pulse align-middle rounded-full" />
+                          )}
+                        </div>
+
+                        {/* Botão Copiar */}
+                        {!m.streaming && m.content && (
+                          <div className="flex items-center justify-end pt-1.5 border-t border-[var(--border)]/40 opacity-30 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyMessage(messageId, m.content)}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                              title="Copiar resposta"
+                            >
+                              {isCopied ? (
+                                <>
+                                  <Check className="w-3 h-3 text-[var(--success)]" />
+                                  <span className="text-[var(--success)]">Copiado</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>Copiar</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
                         )}
                       </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
 
-                      {/* Barra de Ações do Charlie (Copiar Resposta) */}
-                      {!m.streaming && m.content && (
-                        <div className="flex items-center justify-end pt-2 border-t border-border/30 opacity-40 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => handleCopyMessage(messageId, m.content)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-muted/50 text-[10.5px] text-muted-foreground hover:text-foreground transition-all"
-                            title="Copiar resposta inteira"
-                          >
-                            {isCopied ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                <span className="text-emerald-400">Copiado</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3" />
-                                <span>Copiar</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      )}
+            {isLoading &&
+              (messages.length === 0 ||
+                messages[messages.length - 1].type === "user_message") && (
+                <div className="flex gap-3.5 justify-start animate-fade-in">
+                  <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] flex items-center justify-center shrink-0 mt-0.5 select-none font-bold text-xs">
+                    ✦
+                  </div>
+                  <div className="bg-[var(--surface)] border border-[var(--border)] px-4 py-3 rounded-[var(--radius-lg)] flex items-center gap-2 text-[13px] text-[var(--text-muted)]">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
+                    <span>Charlie está pensando...</span>
+                  </div>
+                </div>
+              )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Composer Ancorado no Rodapé */}
+          <div className="p-4 border-t border-[var(--border)] bg-[var(--background)]">
+            <div className="max-w-[800px] mx-auto w-full bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-3.5 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)]">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Fala comigo..."
+                disabled={isLoading}
+                className="w-full bg-transparent border-none text-[var(--text-primary)] text-[14px] leading-relaxed resize-none outline-none min-h-[24px] max-h-[120px] placeholder:text-[var(--text-muted)]"
+              />
+              <div className="flex justify-between items-center mt-2.5">
+                <div className="flex gap-1 relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowPlusMenu(!showPlusMenu)}
+                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[16px]"
+                    title="Ações rápidas"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                    title="Anexar arquivo"
+                  >
+                    <Paperclip className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceActive(!voiceActive)}
+                    className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors cursor-pointer ${
+                      voiceActive
+                        ? "text-[var(--accent)] bg-[var(--accent-soft-bg)]"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                    }`}
+                    title={voiceActive ? "Resposta por voz ligada" : "Modo texto (silencioso)"}
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Menu popup do botão + */}
+                  {showPlusMenu && (
+                    <div className="absolute left-0 bottom-10 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-[var(--radius-md)] p-1 shadow-2xl z-30 min-w-[160px] text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPlusMenu(false);
+                          handleSend("Limpe o histórico desta conversa.");
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                      >
+                        Limpar conversa
+                      </button>
                     </div>
                   )}
                 </div>
-              </div>
-            );
-          })
-        )}
 
-        {/* Indicador de Carregamento Geral */}
-        {isLoading &&
-          (messages.length === 0 ||
-            messages[messages.length - 1].type === "user_message") && (
-            <div className="flex gap-3 justify-start animate-fade-in">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20 mt-1 animate-pulse">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
-              </div>
-              <div className="bg-card/75 border border-border/60 px-4 py-3 rounded-2xl rounded-tl-xs flex items-center gap-2 text-xs text-muted-foreground shadow-md backdrop-blur-md">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                <span>Charlie está raciocinando...</span>
+                <button
+                  type="button"
+                  onClick={() => handleSend()}
+                  disabled={!input.trim() || isLoading}
+                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:hover:bg-[var(--accent)] cursor-pointer"
+                  title="Enviar mensagem"
+                >
+                  <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+                </button>
               </div>
             </div>
-          )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Caixa de Entrada com Auto-expand */}
-      <div className="p-4 border-t border-border/40 bg-card/40 backdrop-blur-lg">
-        <form onSubmit={handleSubmit} className="relative flex items-end gap-2 max-w-4xl mx-auto">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Mande uma mensagem ou comando para o Charlie... (Enter para enviar, Shift+Enter para nova linha)"
-            rows={1}
-            disabled={isLoading}
-            className="w-full bg-input/40 border border-border/70 rounded-xl px-4 py-3 pr-12 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all resize-none max-h-36 leading-relaxed"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className="absolute right-2.5 bottom-2.5 p-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:hover:bg-primary transition-all active:scale-95 shadow-md shadow-primary/20"
-            title="Enviar mensagem"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
-        </form>
-        <div className="text-[10px] text-muted-foreground/60 text-center mt-2 flex items-center justify-center gap-2 select-none">
-          <span>
-            Atalho rápido: <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Alt</kbd> + <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Espaço</kbd> para Charlie Spotlight
-          </span>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Input de Arquivo Oculto para o botão de clipe 📎 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileAttach}
+        className="hidden"
+      />
     </div>
   );
 };

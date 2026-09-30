@@ -181,6 +181,30 @@ fn hide_spotlight(app: tauri::AppHandle) {
     }
 }
 
+/// Minimiza a janela que chamou o comando
+#[tauri::command]
+fn minimize_window(window: tauri::Window) {
+    let _ = window.minimize();
+}
+
+/// Alterna maximização da janela
+#[tauri::command]
+fn toggle_maximize_window(window: tauri::Window) {
+    if let Ok(is_max) = window.is_maximized() {
+        if is_max {
+            let _ = window.unmaximize();
+        } else {
+            let _ = window.maximize();
+        }
+    }
+}
+
+/// Fecha a janela (que respeita o interceptor de bandeja)
+#[tauri::command]
+fn close_window(window: tauri::Window) {
+    let _ = window.close();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -188,7 +212,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_system_metrics,
             open_main_window,
-            hide_spotlight
+            hide_spotlight,
+            minimize_window,
+            toggle_maximize_window,
+            close_window
         ])
         .setup(|app| {
             // Cria menu do System Tray (Bandeja)

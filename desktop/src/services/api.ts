@@ -198,6 +198,15 @@ export async function deleteThread(threadId: string): Promise<void> {
   if (!res.ok) throw new Error("Falha ao excluir conversa");
 }
 
+export async function renameThread(threadId: string, name: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/threads/${encodeURIComponent(threadId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("Falha ao renomear conversa");
+}
+
 export async function sendChatMessage(
   message: string,
   threadId: string | null,
