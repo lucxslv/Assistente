@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Emitter, Manager, WindowEvent,
 };
 
 #[derive(Serialize, Clone, Copy)]
@@ -37,12 +37,38 @@ struct FILETIME {
 }
 
 #[cfg(windows)]
+#[repr(C)]
+struct POINT {
+    x: i32,
+    y: i32,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct MSG {
+    hwnd: *mut std::ffi::c_void,
+    message: u32,
+    w_param: usize,
+    l_param: isize,
+    time: u32,
+    pt: POINT,
+}
+
+#[cfg(windows)]
 extern "system" {
     fn GlobalMemoryStatusEx(lp_buffer: *mut MEMORYSTATUSEX) -> i32;
     fn GetSystemTimes(
         lp_idle_time: *mut FILETIME,
         lp_kernel_time: *mut FILETIME,
         lp_user_time: *mut FILETIME,
+    ) -> i32;
+    fn RegisterHotKey(hWnd: *mut std::ffi::c_void, id: i32, fsModifiers: u32, vk: u32) -> i32;
+    fn UnregisterHotKey(hWnd: *mut std::ffi::c_void, id: i32) -> i32;
+    fn GetMessageW(
+        lpMsg: *mut MSG,
+        hWnd: *mut std::ffi::c_void,
+        wMsgFilterMin: u32,
+        wMsgFilterMax: u32,
     ) -> i32;
 }
 
@@ -156,6 +182,7 @@ pub fn run() {
                     "open" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }
@@ -174,11 +201,56 @@ pub fn run() {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }
                 })
                 .build(app)?;
+
+            // Registra o Atalho Global do Sistema Operacional (Ctrl + Alt + Espaço)
+            #[cfg(windows)]
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    unsafe {
+                        // ID único do hotkey
+                        let hotkey_id = 9001;
+                        // MOD_ALT (0x0001) | MOD_CONTROL (0x0002) | MOD_NOREPEAT (0x4000)
+                        // VK_SPACE = 0x20
+                        let mut reg = RegisterHotKey(std::ptr::null_mut(), hotkey_id, 0x0001 | 0x0002 | 0x4000, 0x20);
+                        if reg == 0 {
+                            // Fallback sem MOD_NOREPEAT
+                            reg = RegisterHotKey(std::ptr::null_mut(), hotkey_id, 0x0001 | 0x0002, 0x20);
+                        }
+
+                        if reg != 0 {
+                            let mut msg: MSG = std::mem::zeroed();
+                            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                                if msg.message == 0x0312 { // WM_HOTKEY
+                                    if let Some(window) = handle.get_webview_window("main") {
+                                        let is_visible = window.is_visible().unwrap_or(false);
+                                        let is_focused = window.is_focused().unwrap_or(false);
+
+                                        if is_visible && is_focused {
+                                            // Se já está aberta e focada, atalho alterna (oculta)
+                                            let _ = window.hide();
+                                        } else {
+                                            // Traz o Charlie para frente imediatamente sobre qualquer janela
+                                            let _ = window.show();
+                                            let _ = window.unminimize();
+                                            let _ = window.set_focus();
+                                            // Emite o evento para abrir a busca do Spotlight
+                                            let _ = window.emit("open-spotlight", ());
+                                        }
+                                    }
+                                }
+                            }
+                            UnregisterHotKey(std::ptr::null_mut(), hotkey_id);
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })

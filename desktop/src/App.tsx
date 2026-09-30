@@ -4,6 +4,7 @@ import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { Message, Settings, Thread, ToolCallInfo } from "./types";
+import { listen } from "@tauri-apps/api/event";
 import {
   checkHealth,
   connectSystemWebSocket,
@@ -49,6 +50,24 @@ export function App() {
     return () => {
       isMounted = false;
       clearInterval(interval);
+    };
+  }, []);
+
+  // Listener do evento emitido pelo atalho global do Windows (Ctrl + Alt + Espaço)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen("open-spotlight", () => {
+      setIsCommandPaletteOpen(true);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {
+        // Fallback em caso de ambiente não-Tauri
+      });
+
+    return () => {
+      unlisten?.();
     };
   }, []);
 
