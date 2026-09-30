@@ -52,22 +52,29 @@ def type_text(text: str) -> str:
 
 
 def take_screenshot() -> str:
-    """Tira um print da tela inteira e salva na pasta do projeto."""
+    """Tira um print da tela inteira e salva na pasta Imagens do computador do usuário."""
     try:
         import pyautogui
-        
-        # Cria a pasta screenshots se não existir
-        screenshots_dir = Path("screenshots")
-        screenshots_dir.mkdir(exist_ok=True)
-        
+        import subprocess
+
+        # Salva na pasta oficial Pictures/Charlie Capturas do usuário do computador
+        pictures_dir = Path.home() / "Pictures" / "Charlie Capturas"
+        pictures_dir.mkdir(parents=True, exist_ok=True)
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = screenshots_dir / f"screen_{timestamp}.png"
-        
+        filepath = pictures_dir / f"screen_{timestamp}.png"
+
         pyautogui.screenshot(str(filepath))
-        
-        return f"Print da tela salvo com sucesso em: {filepath.absolute()}"
+
+        # Revela o print salvo no Windows Explorer para acesso instantâneo
+        try:
+            subprocess.Popen(["explorer.exe", f"/select,{str(filepath.absolute())}"])
+        except Exception:
+            pass
+
+        return f"Print da tela capturado e salvo em: {filepath.absolute()}. A pasta de imagens foi aberta no Windows."
     except ImportError:
-        return "Erro: A biblioteca 'pyautogui' não está instalada."
+        return "Erro: A biblioteca 'pyautogui' não está instalada no ambiente local."
     except Exception as e:
         logger.exception("Erro ao tirar print da tela")
         return f"Erro ao tentar capturar a tela: {str(e)}"

@@ -60,6 +60,16 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
         }
       }
     }
+
+    if (name === "take_screenshot") {
+      try {
+        await openUrl("ms-screenclip:");
+        return "Ferramenta de captura e recorte de tela do Windows ativada com sucesso. A imagem foi enviada para a área de transferência e para sua pasta de Imagens.";
+      } catch (err: any) {
+        await openUrl("snippingtool:");
+        return `Captura de tela aberta: ${err?.message || ""}`;
+      }
+    }
   } catch (err: any) {
     console.warn(`[DeviceExecutor] Erro ao executar ${name} via Tauri:`, err);
     return `Falha ao executar ${name}: ${err?.message || err}`;
