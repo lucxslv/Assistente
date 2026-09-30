@@ -2,20 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Sparkles,
   Plus,
   MessageSquare,
   Music,
   Calculator,
   Lock,
   Globe,
-  ArrowRight,
+  ArrowUp,
   Volume2,
-  VolumeX,
   Camera,
-  Maximize2,
-  X,
-  Send,
   Loader2,
   ChevronDown,
   Check,
@@ -46,18 +41,28 @@ const SpotlightCodeBlock: React.FC<{ language: string; code: string }> = ({
   };
 
   return (
-    <div className="relative my-2 rounded-lg overflow-hidden border border-border/70 bg-[#090d16] text-[11px] font-mono">
-      <div className="flex items-center justify-between px-2.5 py-1 bg-[#111726] border-b border-border/50 text-[10px] text-muted-foreground select-none">
-        <span className="uppercase font-semibold text-primary/80">{language || "código"}</span>
+    <div className="relative my-2 rounded-[var(--radius-sm)] overflow-hidden border border-[var(--border)] bg-[#0A0B0E] text-[11px] font-mono">
+      <div className="flex items-center justify-between px-2.5 py-1 bg-[var(--surface-hover)] border-b border-[var(--border)] text-[10px] text-[var(--text-muted)] select-none">
+        <span className="uppercase font-semibold text-[var(--accent)]">{language || "código"}</span>
         <button
+          type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+          className="flex items-center gap-1 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
         >
-          {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-          <span>{copied ? "Copiado" : "Copiar"}</span>
+          {copied ? (
+            <>
+              <Check className="w-3 h-3 text-[var(--success)]" />
+              <span className="text-[var(--success)]">Copiado</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3 h-3" />
+              <span>Copiar</span>
+            </>
+          )}
         </button>
       </div>
-      <div className="p-2.5 overflow-x-auto text-zinc-100">
+      <div className="p-2.5 overflow-x-auto text-[#E6E8ED]">
         <pre className="!bg-transparent !p-0 !m-0">
           <code>{code}</code>
         </pre>
@@ -67,21 +72,17 @@ const SpotlightCodeBlock: React.FC<{ language: string; code: string }> = ({
 };
 
 export const SpotlightApp: React.FC = () => {
-  const [view, setView] = useState<"commands" | "chat">("commands");
-  const [query, setQuery] = useState("");
-  const [chatInput, setChatInput] = useState("");
+  const [input, setInput] = useState("");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isThreadDropdownOpen, setIsThreadDropdownOpen] = useState(false);
 
-  const commandInputRef = useRef<HTMLInputElement>(null);
-  const chatInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fecha a janela do Spotlight chamando o backend nativo
+  // Fecha a janela flutuante
   const handleClose = async () => {
     try {
       await invoke("hide_spotlight");
@@ -90,17 +91,7 @@ export const SpotlightApp: React.FC = () => {
     }
   };
 
-  // Abre a janela principal do Charlie e fecha o spotlight
-  const handleOpenMainApp = async () => {
-    try {
-      await invoke("open_main_window");
-      await invoke("hide_spotlight");
-    } catch {
-      // fallback
-    }
-  };
-
-  // Carrega threads
+  // Carrega threads disponíveis
   const loadThreads = async () => {
     try {
       const data = await fetchThreads();
@@ -117,7 +108,7 @@ export const SpotlightApp: React.FC = () => {
     loadThreads();
   }, []);
 
-  // Carrega mensagens ao mudar de conversa
+  // Carrega mensagens ao alternar de conversa
   useEffect(() => {
     if (!activeThreadId) {
       setMessages([]);
@@ -128,25 +119,29 @@ export const SpotlightApp: React.FC = () => {
       .catch((err) => console.warn("Falha ao carregar mensagens:", err));
   }, [activeThreadId]);
 
-  // Foco automático ao alternar telas
+  // Foco inicial no textarea
   useEffect(() => {
-    if (view === "commands") {
-      setTimeout(() => commandInputRef.current?.focus(), 50);
-    } else {
-      setTimeout(() => chatInputRef.current?.focus(), 50);
-    }
-  }, [view]);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
 
-  // Scroll suave nas mensagens
+  // Auto-scroll
   useEffect(() => {
-    if (view === "chat") {
+    if (messages.length > 0) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, view, isLoading]);
+  }, [messages, isLoading]);
 
-  // Enviar mensagem no mini chat
-  const handleSendMessage = async (text: string) => {
-    const trimmed = text.trim();
+  // Redimensionamento automático do textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 100)}px`;
+    }
+  }, [input]);
+
+  // Enviar mensagem
+  const handleSendMessage = async (textToSend?: string) => {
+    const trimmed = (textToSend !== undefined ? textToSend : input).trim();
     if (!trimmed || isLoading) return;
 
     let targetThreadId = activeThreadId;
@@ -181,10 +176,8 @@ export const SpotlightApp: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, tempUserMsg, tempAsstMsg]);
+    setInput("");
     setIsLoading(true);
-    setView("chat");
-    setChatInput("");
-    setQuery("");
 
     try {
       await sendChatMessageStream(
@@ -198,49 +191,45 @@ export const SpotlightApp: React.FC = () => {
               )
             );
           } else if (ev.type === "tool_start") {
-            // Executa ferramenta local se aplicável
-            if (
-              ev.data.scope === "device" ||
-              [
-                "manage_application",
-                "set_system_volume",
-                "system_power_action",
-                "take_screenshot",
-              ].includes(ev.data.name)
-            ) {
-              executeDeviceTool(ev.data.name, ev.data.args || {}).catch(() => {});
-            }
+            executeDeviceTool(ev.data.name, ev.data.args || {}).catch(() => {});
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
-                const newT: ToolCallInfo = {
+                const newTool: ToolCallInfo = {
                   name: ev.data.name,
                   args: ev.data.args,
                   status: "executing",
                 };
-                return { ...m, tools: [...(m.tools || []), newT] };
+                return { ...m, tools: [...(m.tools || []), newTool] };
               })
             );
           } else if (ev.type === "tool_end") {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
-                return {
-                  ...m,
-                  tools: (m.tools || []).map((t) =>
-                    t.name === ev.data.name ? { ...t, status: "completed" as const } : t
-                  ),
-                };
+                const updatedTools = (m.tools || []).map((t) =>
+                  t.name === ev.data.name && t.status === "executing"
+                    ? { ...t, result: ev.data.result, status: "completed" as const }
+                    : t
+                );
+                return { ...m, tools: updatedTools };
               })
             );
           } else if (ev.type === "done") {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantId
-                  ? { ...m, content: ev.data.reply || m.content, streaming: false }
+                  ? {
+                      ...m,
+                      content: ev.data.reply || m.content,
+                      streaming: false,
+                    }
                   : m
               )
             );
+            if (!activeThreadId || activeThreadId !== ev.data.thread_id) {
+              setActiveThreadId(ev.data.thread_id);
+            }
             loadThreads();
           } else if (ev.type === "error") {
             setMessages((prev) =>
@@ -248,7 +237,9 @@ export const SpotlightApp: React.FC = () => {
                 m.id === assistantId
                   ? {
                       ...m,
-                      content: humanizeErrorMessage(ev.data.error),
+                      content: m.content
+                        ? `${m.content}\n\n*(${humanizeErrorMessage(ev.data.error)})*`
+                        : humanizeErrorMessage(ev.data.error),
                       streaming: false,
                     }
                   : m
@@ -271,26 +262,11 @@ export const SpotlightApp: React.FC = () => {
     }
   };
 
-  // Criar nova conversa
-  const handleNewChat = async () => {
-    try {
-      const newT = await createThread("Nova Conversa");
-      setThreads((prev) => [newT, ...prev]);
-      setActiveThreadId(newT.id);
-      setMessages([]);
-      setIsThreadDropdownOpen(false);
-      setView("chat");
-    } catch (err) {
-      console.warn("Erro ao criar nova conversa:", err);
-    }
-  };
-
-  // Ações do Spotlight
-  const baseActions = [
+  // Ações rápidas de automação do sistema
+  const quickActions = [
     {
-      id: "tool-spotify",
+      id: "act-spotify",
       title: "Abrir Spotify",
-      desc: "Música e podcasts",
       icon: Music,
       run: () => {
         executeDeviceTool("manage_application", { app_name: "spotify", action: "open" });
@@ -298,9 +274,8 @@ export const SpotlightApp: React.FC = () => {
       },
     },
     {
-      id: "tool-chrome",
-      title: "Abrir Google Chrome",
-      desc: "Navegador de internet",
+      id: "act-chrome",
+      title: "Abrir Chrome",
       icon: Globe,
       run: () => {
         executeDeviceTool("manage_application", { app_name: "chrome", action: "open" });
@@ -308,9 +283,8 @@ export const SpotlightApp: React.FC = () => {
       },
     },
     {
-      id: "tool-calc",
-      title: "Abrir Calculadora",
-      desc: "Calculadora do Windows",
+      id: "act-calc",
+      title: "Calculadora",
       icon: Calculator,
       run: () => {
         executeDeviceTool("manage_application", { app_name: "calc", action: "open" });
@@ -318,9 +292,8 @@ export const SpotlightApp: React.FC = () => {
       },
     },
     {
-      id: "tool-screenshot",
-      title: "Capturar Tela",
-      desc: "Salva print da tela atual",
+      id: "act-print",
+      title: "PrintScreen",
       icon: Camera,
       run: () => {
         executeDeviceTool("take_screenshot", {});
@@ -328,9 +301,8 @@ export const SpotlightApp: React.FC = () => {
       },
     },
     {
-      id: "tool-vol-up",
-      title: "Aumentar Volume",
-      desc: "Define áudio em 75%",
+      id: "act-vol",
+      title: "Volume 75%",
       icon: Volume2,
       run: () => {
         executeDeviceTool("set_system_volume", { level: 75 });
@@ -338,19 +310,8 @@ export const SpotlightApp: React.FC = () => {
       },
     },
     {
-      id: "tool-vol-mute",
-      title: "Silenciar Volume",
-      desc: "Muta saída de áudio",
-      icon: VolumeX,
-      run: () => {
-        executeDeviceTool("set_system_volume", { mute: true });
-        handleClose();
-      },
-    },
-    {
-      id: "tool-lock",
-      title: "Bloquear Computador",
-      desc: "Trava a sessão do Windows",
+      id: "act-lock",
+      title: "Bloquear PC",
       icon: Lock,
       run: () => {
         executeDeviceTool("system_power_action", { action: "lock" });
@@ -359,99 +320,62 @@ export const SpotlightApp: React.FC = () => {
     },
   ];
 
-  // Ações dinâmicas das conversas salvas
-  const threadActions = threads.map((t) => ({
-    id: `thread-${t.id}`,
-    title: t.name || "Conversa sem título",
-    desc: "Alternar para esta conversa no mini chat",
-    icon: MessageSquare,
-    run: () => {
-      setActiveThreadId(t.id);
-      setView("chat");
-    },
-  }));
+  const suggestions = [
+    { label: "Analisa meu projeto", prompt: "Analise a estrutura do projeto atual." },
+    { label: "Abre o Chrome", prompt: "Abre o Google Chrome para mim." },
+    { label: "Pesquisa as notícias", prompt: "Quais as principais novidades em tecnologia de hoje?" },
+    { label: "Como está o desempenho?", prompt: "Como está o uso de CPU e memória do meu computador?" },
+  ];
 
-  // Ação de perguntar livremente
-  const askAction = query.trim()
-    ? [
-        {
-          id: "ask-question",
-          title: `Perguntar: "${query.trim()}"`,
-          desc: "Conversar com o Charlie no mini chat",
-          icon: Sparkles,
-          run: () => handleSendMessage(query.trim()),
-        },
-      ]
-    : [];
-
-  const filteredBase = baseActions.filter(
-    (a) =>
-      a.title.toLowerCase().includes(query.toLowerCase()) ||
-      a.desc.toLowerCase().includes(query.toLowerCase())
-  );
-
-  const filteredThreads = threadActions.filter((t) =>
-    t.title.toLowerCase().includes(query.toLowerCase())
-  );
-
-  const allActions = [...askAction, ...filteredBase, ...filteredThreads];
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  // Teclado na aba de comandos
-  const handleCommandKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev + 1 < allActions.length ? prev + 1 : 0));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : allActions.length - 1));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (allActions[selectedIndex]) {
-        allActions[selectedIndex].run();
-      }
-    } else if (e.key === "Escape") {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape") {
       e.preventDefault();
       handleClose();
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
+  };
+
+  const handleNewChat = () => {
+    setActiveThreadId(null);
+    setMessages([]);
+    setIsThreadDropdownOpen(false);
+    textareaRef.current?.focus();
   };
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
 
   return (
     <div className="w-screen h-screen flex items-center justify-center p-3 bg-transparent select-none">
-      <div className="w-full max-w-[660px] h-[500px] rounded-2xl bg-card/90 border border-white/10 shadow-2xl backdrop-blur-3xl flex flex-col overflow-hidden text-foreground ring-1 ring-white/10 animate-scale-in">
-        {/* Topo / Barra de Ferramentas e Navegação entre Chats */}
-        <div className="px-4 py-2.5 border-b border-border/50 bg-card/60 flex items-center justify-between gap-3">
-          {/* Seletor de Conversa Dropdown */}
-          <div className="relative">
+      {/* Container Principal Flutuante sem bordas de janela de SO */}
+      <div className="w-full max-w-[660px] max-h-[500px] bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] shadow-[0_20px_60px_rgba(0,0,0,0.85)] backdrop-blur-2xl overflow-hidden flex flex-col ring-1 ring-[var(--accent)]/20 animate-scale-in text-[var(--text-primary)]">
+        {/* Topo Minimalista: Troca de Conversa e Botão Nova Conversa */}
+        <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface)]/80 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 relative">
+            <span className="text-[var(--accent)] font-semibold text-sm">✦</span>
             <button
               type="button"
               onClick={() => setIsThreadDropdownOpen(!isThreadDropdownOpen)}
-              className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-muted/40 hover:bg-muted/70 border border-border/50 text-xs font-medium text-foreground transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
             >
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span className="truncate max-w-[150px]">
-                {activeThread?.name || "Conversa Atual"}
+              <span className="font-medium truncate max-w-[180px]">
+                {activeThread?.name || "Nova Conversa"}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
             </button>
 
-            {/* Menu Dropdown de Conversas */}
+            {/* Dropdown de Conversas */}
             {isThreadDropdownOpen && (
-              <div className="absolute left-0 top-full mt-1.5 w-64 rounded-xl bg-card/95 border border-border/70 shadow-2xl backdrop-blur-2xl z-50 p-1.5 space-y-1 animate-fade-in max-h-56 overflow-y-auto">
+              <div className="absolute left-0 top-full mt-1 w-60 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] shadow-2xl p-1 z-50 max-h-48 overflow-y-auto space-y-0.5">
                 <button
                   type="button"
                   onClick={handleNewChat}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-primary hover:bg-primary/15 transition-all text-left cursor-pointer"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[12px] font-medium text-[var(--accent)] hover:bg-[var(--accent-soft-bg)] transition-colors text-left cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Nova Conversa</span>
+                  <span>+ Nova Conversa</span>
                 </button>
-                <div className="border-t border-border/40 my-1" />
                 {threads.map((t) => (
                   <button
                     key={t.id}
@@ -459,302 +383,186 @@ export const SpotlightApp: React.FC = () => {
                     onClick={() => {
                       setActiveThreadId(t.id);
                       setIsThreadDropdownOpen(false);
-                      setView("chat");
                     }}
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left truncate transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[12px] text-left transition-colors cursor-pointer truncate ${
                       t.id === activeThreadId
-                        ? "bg-primary/20 text-primary font-medium"
-                        : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                        ? "bg-[var(--accent-soft-bg)] text-[var(--accent-hover)] font-medium"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
                     }`}
                   >
                     <MessageSquare className="w-3 h-3 shrink-0 opacity-70" />
-                    <span className="truncate flex-1">{t.name || "Conversa sem título"}</span>
+                    <span className="truncate">{t.name || "Conversa sem título"}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Abas: Comandos vs Mini Chat */}
-          <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-xl border border-border/40 text-xs font-medium">
-            <button
-              type="button"
-              onClick={() => setView("commands")}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                view === "commands"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Comandos
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("chat")}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                view === "chat"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span>Mini Chat</span>
-              {messages.length > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/30 font-mono">
-                  {messages.length}
-                </span>
-              )}
-            </button>
-          </div>
+          <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] bg-[var(--surface-hover)] border border-[var(--border)] rounded">
+            Esc para fechar
+          </kbd>
+        </div>
 
-          {/* Botões de Ação da Janela */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleOpenMainApp}
-              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-all cursor-pointer"
-              title="Abrir no aplicativo completo"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
-              title="Fechar (Esc)"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+        {/* Campo de Entrada Inspirado no Composer */}
+        <div className="p-3.5 bg-[var(--surface)]">
+          <div className="w-full bg-[var(--surface-hover)] border border-[var(--border)] rounded-[var(--radius-md)] p-3 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_2px_rgba(139,124,255,0.12)]">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Fala comigo ou digite um comando..."
+              disabled={isLoading}
+              className="w-full bg-transparent border-none text-[var(--text-primary)] text-[14px] leading-relaxed resize-none outline-none min-h-[24px] max-h-[90px] placeholder:text-[var(--text-muted)] font-sans"
+            />
+            <div className="flex justify-between items-center mt-2 pt-1 border-t border-[var(--border)]/40">
+              <span className="text-[11px] text-[var(--text-muted)]">
+                {isLoading ? "Charlie está pensando..." : "Pressione Enter para enviar"}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleSendMessage()}
+                disabled={!input.trim() || isLoading}
+                className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-30 cursor-pointer"
+                title="Enviar"
+              >
+                <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Conteúdo Dinâmico */}
-        {view === "commands" ? (
-          /* Visualização de Comandos & Atalhos */
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Campo de Busca Prominente */}
-            <div className="px-4 py-3 border-b border-border/40 flex items-center gap-2.5 bg-card/30">
-              <Sparkles className="w-4 h-4 text-primary shrink-0" />
-              <input
-                ref={commandInputRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleCommandKeyDown}
-                placeholder="Digite um comando, atalho ou faça uma pergunta ao Charlie..."
-                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-              />
-              <kbd className="px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground/80 bg-muted/60 border border-border/60 rounded">
-                Esc
-              </kbd>
-            </div>
-
-            {/* Lista de Ações e Resultados */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {allActions.length === 0 ? (
-                <div className="py-12 text-center text-xs text-muted-foreground">
-                  Nenhum comando ou conversa encontrada para "{query}"
-                </div>
-              ) : (
-                allActions.map((action, idx) => {
-                  const Icon = action.icon;
-                  const isSelected = idx === selectedIndex;
-                  return (
+        {/* Conteúdo: Mini Chat (se houver mensagens) OU Ações Rápidas & Sugestões */}
+        <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-3">
+          {messages.length > 0 ? (
+            /* Histórico do Mini Chat */
+            <div className="space-y-3 pt-1">
+              {messages.map((m, idx) => {
+                const isUser = m.type === "user_message";
+                return (
+                  <div
+                    key={m.id || idx}
+                    className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+                  >
+                    {!isUser && (
+                      <span className="text-[var(--accent)] font-semibold text-xs mt-1 shrink-0">
+                        ✦
+                      </span>
+                    )}
                     <div
-                      key={action.id}
-                      onClick={() => action.run()}
-                      onMouseEnter={() => setSelectedIndex(idx)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                          : "hover:bg-muted/40 text-foreground"
+                      className={`max-w-[85%] px-3 py-2 rounded-[var(--radius-md)] text-[12.5px] leading-relaxed select-text ${
+                        isUser
+                          ? "bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+                          : "bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)]"
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className={`p-1.5 rounded-lg shrink-0 ${
-                            isSelected
-                              ? "bg-white/20 text-white"
-                              : "bg-muted/60 text-muted-foreground"
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div className="truncate">
-                          <div className="text-xs font-medium truncate">{action.title}</div>
-                          <div
-                            className={`text-[10px] truncate ${
-                              isSelected ? "text-primary-foreground/75" : "text-muted-foreground"
-                            }`}
-                          >
-                            {action.desc}
-                          </div>
-                        </div>
-                      </div>
-
-                      <ArrowRight
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          isSelected ? "opacity-100" : "opacity-0"
-                        } transition-opacity`}
-                      />
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Visualização de Mini Chat Integrado */
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Feed de Mensagens */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted-foreground select-none">
-                  <Sparkles className="w-8 h-8 text-primary mb-2 opacity-80" />
-                  <p className="text-xs font-semibold text-foreground">Mini Chat com o Charlie</p>
-                  <p className="text-[11px] mt-1 max-w-xs">
-                    Faça uma pergunta rápida, execute automações ou comande seu computador diretamente daqui.
-                  </p>
-                </div>
-              ) : (
-                messages.map((m, idx) => {
-                  const isUser = m.type === "user_message";
-                  return (
-                    <div
-                      key={m.id || idx}
-                      className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}
-                    >
-                      {!isUser && (
-                        <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                          <Sparkles className="w-3 h-3 text-white" />
+                      {/* Badges de ferramentas */}
+                      {m.tools && m.tools.length > 0 && (
+                        <div className="space-y-1 mb-2">
+                          {m.tools.map((t, tIdx) => (
+                            <div
+                              key={tIdx}
+                              className="text-[10.5px] font-mono text-[var(--accent)] flex items-center gap-1.5"
+                            >
+                              <Terminal className="w-3 h-3" />
+                              <span>{t.name}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
-                      <div
-                        className={`max-w-[85%] px-3.5 py-2.5 rounded-xl text-xs leading-relaxed ${
-                          isUser
-                            ? "bg-primary text-primary-foreground rounded-tr-xs"
-                            : "bg-card/80 border border-border/60 text-foreground rounded-tl-xs backdrop-blur-md"
-                        }`}
-                      >
-                        {isUser ? (
-                          <div className="whitespace-pre-wrap select-text">{m.content}</div>
-                        ) : (
-                          <div className="space-y-1.5 select-text">
-                            {/* Badges de Ferramentas */}
-                            {m.tools && m.tools.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-1">
-                                {m.tools.map((t, tIdx) => (
-                                  <span
-                                    key={tIdx}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-mono bg-primary/10 border border-primary/20 text-primary"
+
+                      {isUser ? (
+                        m.content
+                      ) : (
+                        <div className="prose prose-invert prose-xs max-w-none text-[var(--text-primary)]">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code({ node, inline, className, children, ...props }: any) {
+                                const match = /language-(\w+)/.exec(className || "");
+                                const codeString = String(children).replace(/\n$/, "");
+                                if (!inline && (match || codeString.includes("\n"))) {
+                                  return (
+                                    <SpotlightCodeBlock
+                                      language={match ? match[1] : "code"}
+                                      code={codeString}
+                                    />
+                                  );
+                                }
+                                return (
+                                  <code
+                                    className="px-1 py-0.2 rounded bg-[var(--surface-elevated)] text-[var(--accent)] font-mono text-[11px]"
+                                    {...props}
                                   >
-                                    <Terminal className="w-2.5 h-2.5" />
-                                    <span>{t.name}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Markdown */}
-                            <div className="prose prose-invert prose-xs max-w-none">
-                              {m.content ? (
-                                <ReactMarkdown
-                                  remarkPlugins={[remarkGfm]}
-                                  components={{
-                                    code({ node, inline, className, children, ...props }: any) {
-                                      const match = /language-(\w+)/.exec(className || "");
-                                      const codeString = String(children).replace(/\n$/, "");
-                                      if (!inline && (match || codeString.includes("\n"))) {
-                                        return (
-                                          <SpotlightCodeBlock
-                                            language={match ? match[1] : "código"}
-                                            code={codeString}
-                                          />
-                                        );
-                                      }
-                                      return (
-                                        <code
-                                          className="px-1 py-0.5 rounded bg-muted/60 text-amber-300 font-mono text-[10.5px]"
-                                          {...props}
-                                        >
-                                          {children}
-                                        </code>
-                                      );
-                                    },
-                                  }}
-                                >
-                                  {m.content}
-                                </ReactMarkdown>
-                              ) : m.streaming ? (
-                                <span className="flex items-center gap-1.5 text-muted-foreground italic">
-                                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                  Pensando...
-                                </span>
-                              ) : null}
-
-                              {m.streaming && m.content && (
-                                <span className="inline-block w-1.5 h-3 ml-1 bg-primary animate-pulse align-middle" />
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                                    {children}
+                                  </code>
+                                );
+                              },
+                            }}
+                          >
+                            {m.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
-                  );
-                })
+                  </div>
+                );
+              })}
+              {isLoading && (
+                <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] py-1">
+                  <Loader2 className="w-3 h-3 animate-spin text-[var(--accent)]" />
+                  <span>Charlie está digitando...</span>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
+          ) : (
+            /* Sugestões e Ações Rápidas quando vazio */
+            <div className="space-y-3 pt-1">
+              <div>
+                <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-2 px-1">
+                  Ações Rápidas do Computador
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {quickActions.map((act) => {
+                    const Icon = act.icon;
+                    return (
+                      <button
+                        key={act.id}
+                        type="button"
+                        onClick={act.run}
+                        className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] hover:bg-[var(--surface-elevated)] border border-[var(--border)] text-left transition-colors cursor-pointer group"
+                      >
+                        <Icon className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors shrink-0" />
+                        <span className="text-[12px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] truncate">
+                          {act.title}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-            {/* Caixa de Entrada do Mini Chat */}
-            <div className="p-2.5 border-t border-border/40 bg-card/40">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendMessage(chatInput);
-                }}
-                className="relative flex items-center"
-              >
-                <input
-                  ref={chatInputRef}
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      handleClose();
-                    }
-                  }}
-                  disabled={isLoading}
-                  placeholder="Envie uma mensagem para o Charlie... (Enter para enviar)"
-                  className="w-full bg-input/40 border border-border/70 rounded-xl px-3 py-2 pr-9 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/60"
-                />
-                <button
-                  type="submit"
-                  disabled={!chatInput.trim() || isLoading}
-                  className="absolute right-1.5 p-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-30 transition-all cursor-pointer"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Send className="w-3 h-3" />
-                  )}
-                </button>
-              </form>
+              <div>
+                <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-2 px-1">
+                  Sugestões de Conversa
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.map((s, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSendMessage(s.prompt)}
+                      className="px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] hover:bg-[var(--surface-elevated)] border border-[var(--border)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Rodapé Fixo */}
-        <div className="px-4 py-1.5 bg-card/70 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground select-none">
-          <div className="flex items-center gap-2">
-            <span>
-              Atalho: <kbd className="px-1 py-0.2 bg-muted/60 rounded font-mono">Ctrl+Alt+Espaço</kbd>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span>Pressione <kbd className="px-1 py-0.2 bg-muted/60 rounded font-mono">Esc</kbd> para fechar</span>
-          </div>
+          )}
         </div>
       </div>
     </div>
