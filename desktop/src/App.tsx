@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   checkHealth,
   connectSystemWebSocket,
+  createThread,
   deleteThread,
   renameThread,
   fetchSettings,
@@ -89,18 +90,23 @@ export function App() {
     };
   }, [currentUser]);
 
+  const hasInitializedRef = useRef(false);
+
   // Carrega lista de conversas
   const loadThreads = useCallback(async () => {
     try {
       const data = await fetchThreads();
       setThreads(data);
-      if (data.length > 0 && !activeThreadId) {
-        setActiveThreadId(data[0].id);
+      if (!hasInitializedRef.current) {
+        hasInitializedRef.current = true;
+        if (data.length > 0) {
+          setActiveThreadId((prev) => prev ?? data[0].id);
+        }
       }
     } catch (err) {
       console.error("Erro ao carregar conversas:", err);
     }
-  }, [activeThreadId]);
+  }, []);
 
   // Carrega status da API e telemetria do sistema
   const loadStatus = useCallback(async () => {
@@ -157,7 +163,7 @@ export function App() {
       clearInterval(interval);
       unsubscribeWs();
     };
-  }, [currentUser, loadStatus, loadThreads, loadSettingsData]);
+  }, [currentUser]);
 
   // Carrega mensagens ao trocar de conversa
   useEffect(() => {
@@ -181,18 +187,41 @@ export function App() {
   }, [activeThreadId]);
 
   // Ações fundamentais
-  const handleNewThread = useCallback(() => {
-    setActiveThreadId(null);
-    setMessages([]);
-  }, []);
+  const handleNewThread = useCallback(async () => {
+    // Se a conversa atual já está vazia e sem mensagens, mantemos o foco nela
+    if (messages.length === 0 && activeThreadId) {
+      const active = threads.find((t) => t.id === activeThreadId);
+      if (active?.name === "Nova conversa" || active?.name === "Novo Chat") {
+        return;
+      }
+    }
+
+    try {
+      setIsLoading(true);
+      const newThread = await createThread("Nova conversa");
+      setThreads((prev) => [newThread, ...prev.filter((t) => t.id !== newThread.id)]);
+      setActiveThreadId(newThread.id);
+      setMessages([]);
+      showToast("Nova conversa iniciada");
+    } catch (err) {
+      console.error("Erro ao criar nova conversa no servidor:", err);
+      setActiveThreadId(null);
+      setMessages([]);
+      showToast("Nova conversa iniciada");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [messages.length, activeThreadId, threads, showToast]);
 
   const handleAuthSuccess = (user: UserProfile) => {
+    hasInitializedRef.current = false;
     setCurrentUser(user);
     showToast(`Bem-vindo, ${user.name}!`);
     loadThreads();
   };
 
   const handleLogout = () => {
+    hasInitializedRef.current = false;
     clearAuthSession();
     setCurrentUser(null);
     setIsSettingsOpen(false);

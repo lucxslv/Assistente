@@ -89,7 +89,7 @@ async def _prepare_thread_and_store_user_message(
                         UPDATE "Thread" SET "userId" = $1, "userIdentifier" = $2 WHERE id = $3
                     """, u_uuid, u_ident, t_uuid)
 
-                if existing["name"] in ("Novo Chat", None, ""):
+                if existing["name"] in ("Novo Chat", "Nova conversa", "Conversa sem título", None, ""):
                     await conn.execute("""
                         UPDATE "Thread" SET name = $1, "updatedAt" = $2 WHERE id = $3
                     """, title, now, t_uuid)
