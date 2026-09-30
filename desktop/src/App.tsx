@@ -8,8 +8,8 @@ import { listen } from "@tauri-apps/api/event";
 import {
   checkHealth,
   connectSystemWebSocket,
-  createThread,
   deleteThread,
+  renameThread,
   fetchSettings,
   fetchSystemStatus,
   fetchThreads,
@@ -174,14 +174,17 @@ export function App() {
   }, [isSettingsOpen, isCommandPaletteOpen]);
 
   // Ações
-  const handleNewThread = async () => {
+  const handleNewThread = () => {
+    setActiveThreadId(null);
+    setMessages([]);
+  };
+
+  const handleRenameThread = async (id: string, newName: string) => {
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)));
     try {
-      const newT = await createThread("Novo Chat");
-      setThreads((prev) => [newT, ...prev]);
-      setActiveThreadId(newT.id);
-      setMessages([]);
+      await renameThread(id, newName);
     } catch (err) {
-      console.error("Erro ao criar nova conversa:", err);
+      console.error("Erro ao renomear conversa:", err);
     }
   };
 
@@ -193,6 +196,7 @@ export function App() {
       if (activeThreadId === id) {
         const remaining = threads.filter((t) => t.id !== id);
         setActiveThreadId(remaining.length > 0 ? remaining[0].id : null);
+        if (remaining.length === 0) setMessages([]);
       }
     } catch (err) {
       console.error("Erro ao excluir conversa:", err);
@@ -334,6 +338,7 @@ export function App() {
         onSelectThread={(id) => setActiveThreadId(id)}
         onNewThread={handleNewThread}
         onDeleteThread={handleDeleteThread}
+        onRenameThread={handleRenameThread}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isConnected={isConnected}
@@ -348,6 +353,7 @@ export function App() {
           isLoading={isLoading}
           onSendMessage={handleSendMessage}
           currentThreadName={activeThread?.name}
+          userName="Lucas"
         />
       </main>
 

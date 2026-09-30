@@ -19,7 +19,7 @@
         "minWidth": 850,
         "minHeight": 580,
         "center": true,
-        "decorations": true
+        "decorations": false
       },
       {
         "label": "spotlight",

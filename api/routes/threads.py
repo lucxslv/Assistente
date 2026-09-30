@@ -77,3 +77,31 @@ async def delete_thread(thread_id: str):
         """, t_uuid)
 
     return {"status": "deleted", "id": thread_id}
+
+
+class ThreadUpdate(BaseModel):
+    name: str
+
+
+@router.patch("/{thread_id}")
+@router.put("/{thread_id}")
+async def update_thread(thread_id: str, data: ThreadUpdate):
+    """Atualiza o nome de uma conversa."""
+    pool = await get_or_init_db_pool()
+    if not pool:
+        return {"id": thread_id, "name": data.name}
+
+    try:
+        t_uuid = uuid.UUID(thread_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de conversa inválido.")
+
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE "Thread"
+            SET name = $1, "updatedAt" = CURRENT_TIMESTAMP
+            WHERE id = $2
+        """, data.name, t_uuid)
+
+    return {"status": "updated", "id": thread_id, "name": data.name}
+
