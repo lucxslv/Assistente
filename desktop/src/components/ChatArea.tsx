@@ -487,7 +487,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </button>
         </form>
         <div className="text-[10px] text-muted-foreground/60 text-center mt-2 flex items-center justify-center gap-2 select-none">
-          <span>Pressione <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">K</kbd> para Paleta de Comandos</span>
+          <span>
+            Atalho rápido: <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Alt</kbd> + <kbd className="px-1 py-0.5 bg-muted/40 rounded border border-border/50 text-[9px] font-mono">Espaço</kbd> para Charlie Spotlight
+          </span>
         </div>
       </div>
     </div>
