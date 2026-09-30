@@ -60,7 +60,12 @@ async def create_thread(data: ThreadCreate, user: dict = Depends(get_current_use
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
             """, uuid.UUID(thread_id), data.name, now, now, u_uuid, email, json.dumps({}))
 
-    return {"id": thread_id, "name": data.name}
+    return {
+        "id": thread_id,
+        "name": data.name,
+        "createdAt": now.isoformat(),
+        "updatedAt": now.isoformat(),
+    }
 
 
 @router.delete("/{thread_id}")
