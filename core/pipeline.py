@@ -78,9 +78,21 @@ class AssistantPipeline:
             return None
 
     async def run_pipeline_stream(
-        self, user_text: str, thread_id: str | None = None
+        self,
+        user_text: str,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        user_name: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
+        try:
+            from api.routes.auth import current_user_id_var, current_user_name_var
+            uid = user_id or current_user_id_var.get()
+            uname = user_name or current_user_name_var.get()
+        except Exception:
+            uid = user_id or "default"
+            uname = user_name
+
         yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias..."})
 
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
@@ -89,10 +101,10 @@ class AssistantPipeline:
 
         # Etapa 4: Contexto Inteligente & Presença
         asyncio.create_task(self.context_manager.refresh_weather_if_needed())
-        context_str = self.context_manager.build_context(active_thread_id=thread_id)
+        context_str = self.context_manager.build_context(active_thread_id=thread_id, user_name=uname)
 
-        # Etapa 5: Recuperador de Memória Semântica (RAG)
-        memory_str = self.retriever.get_summary_context(query=user_text)
+        # Etapa 5: Recuperador de Memória Semântica (RAG) estritamente isolado pelo user_id
+        memory_str = self.retriever.get_summary_context(query=user_text, user_id=uid)
 
         # Etapa 6: Selecionador de Ferramentas e Configuração do Prompt
         system_prompt = build_system_prompt(
@@ -181,10 +193,22 @@ class AssistantPipeline:
 
         yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id})
 
-    async def run_pipeline(self, user_text: str, skip_tts: bool = False) -> str:
+    async def run_pipeline(
+        self,
+        user_text: str,
+        skip_tts: bool = False,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> str:
         """Executa o pipeline completo e retorna a resposta montada."""
         full_text = ""
-        async for event in self.run_pipeline_stream(user_text):
+        async for event in self.run_pipeline_stream(
+            user_text,
+            thread_id=thread_id,
+            user_id=user_id,
+            user_name=user_name,
+        ):
             if event.type == "done":
                 full_text = event.data.get("reply", "")
 
