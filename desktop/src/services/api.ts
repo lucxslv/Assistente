@@ -46,31 +46,66 @@ export function humanizeErrorMessage(error: any): string {
   return "Não foi possível completar a ação no momento. Verifique sua conexão e tente novamente.";
 }
 
-let detectedLocalApi: string | null = null;
+const LOCAL_API = "http://127.0.0.1:8005/api";
+const CLOUD_API = "https://assistente-xi.vercel.app/api";
 
-// Checa de forma não-bloqueante se o backend local (porta 8005) está rodando na máquina
+// Limpa qualquer resquício legado do localStorage que forçava a nuvem e bloqueava o disco local
 if (typeof window !== "undefined") {
-  fetch("http://127.0.0.1:8005/api/health", { signal: AbortSignal.timeout(600) })
-    .then((r) => {
-      if (r.ok) {
-        detectedLocalApi = "http://127.0.0.1:8005/api";
-      }
-    })
-    .catch(() => {
-      // Backend local inativo; continua em modo nuvem
+  try {
+    const saved = localStorage.getItem("charlie_api_url");
+    if (saved && (saved.includes("vercel.app") || saved.includes("assistente-xi"))) {
+      localStorage.removeItem("charlie_api_url");
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// Inicializa priorizando LOCAL_API no ambiente Desktop
+let activeApiBase: string = LOCAL_API;
+
+/**
+ * Checa de forma ativa se o backend local (porta 8005) está respondendo.
+ * Se estiver ativo, garante uso do motor local com acesso total ao disco.
+ * Se estiver inativo, faz fallback transparente para a nuvem Vercel.
+ */
+export async function detectApiBase(): Promise<string> {
+  const custom = typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null;
+  if (custom && custom.trim() && !custom.includes("vercel.app") && !custom.includes("assistente-xi")) {
+    const clean = custom.trim().replace(/\/+$/, "");
+    activeApiBase = clean.endsWith("/api") ? clean : `${clean}/api`;
+    return activeApiBase;
+  }
+
+  try {
+    const res = await fetch("http://127.0.0.1:8005/api/health", {
+      signal: AbortSignal.timeout(1500),
     });
+    if (res.ok) {
+      activeApiBase = LOCAL_API;
+      return LOCAL_API;
+    }
+  } catch {
+    // Backend local inativo
+  }
+
+  activeApiBase = CLOUD_API;
+  return CLOUD_API;
+}
+
+// Inicia detecção imediatamente e monitora a cada 4 segundos
+if (typeof window !== "undefined") {
+  detectApiBase();
+  setInterval(detectApiBase, 4000);
 }
 
 export function getApiBase(): string {
-  const custom = localStorage.getItem("charlie_api_url");
-  if (custom && custom.trim()) {
+  const custom = typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null;
+  if (custom && custom.trim() && !custom.includes("vercel.app") && !custom.includes("assistente-xi")) {
     const clean = custom.trim().replace(/\/+$/, "");
     return clean.endsWith("/api") ? clean : `${clean}/api`;
   }
-  if (detectedLocalApi) {
-    return detectedLocalApi;
-  }
-  return (import.meta as any).env?.VITE_API_URL || "https://assistente-xi.vercel.app/api";
+  return activeApiBase;
 }
 
 export function getWsBase(): string {
@@ -168,13 +203,29 @@ export async function sendChatMessage(
   threadId: string | null,
   skipTts: boolean = true
 ): Promise<{ reply: string; thread_id: string; status: string }> {
-  const res = await fetch(`${getApiBase()}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
-  });
-  if (!res.ok) throw new Error("Falha ao enviar mensagem");
-  return res.json();
+  let base = getApiBase();
+  try {
+    const res = await fetch(`${base}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+    });
+    if (!res.ok) throw new Error("Falha ao enviar mensagem");
+    return res.json();
+  } catch (err) {
+    if (base === LOCAL_API) {
+      console.warn("Motor local inacessível, tentando nuvem Vercel...");
+      activeApiBase = CLOUD_API;
+      const res = await fetch(`${CLOUD_API}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+      });
+      if (!res.ok) throw new Error("Falha ao enviar mensagem");
+      return res.json();
+    }
+    throw err;
+  }
 }
 
 /**
@@ -186,11 +237,28 @@ export async function sendChatMessageStream(
   onEvent: (event: StreamEvent) => void,
   skipTts: boolean = true
 ): Promise<void> {
-  const res = await fetch(`${getApiBase()}/chat/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
-  });
+  let base = getApiBase();
+  let res: Response;
+  try {
+    res = await fetch(`${base}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+    });
+  } catch (err) {
+    if (base === LOCAL_API) {
+      console.warn("Motor local inacessível para streaming, tentando nuvem Vercel...");
+      activeApiBase = CLOUD_API;
+      base = CLOUD_API;
+      res = await fetch(`${base}/chat/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+      });
+    } else {
+      throw err;
+    }
+  }
 
   if (!res.ok || !res.body) {
     throw new Error(`Falha no streaming: ${res.statusText}`);

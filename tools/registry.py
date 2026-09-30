@@ -96,7 +96,7 @@ class ToolRegistry:
                         "inicie o assistente localmente executando o arquivo 'run_desktop.bat' no seu computador."
                     )
 
-            if prefer_remote:
+            if is_cloud and prefer_remote:
                 try:
                     from brain.broker.device_broker import device_broker
                     if device_broker.has_active_device():

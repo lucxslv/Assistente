@@ -8,32 +8,87 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_friendly_path(path: str) -> Path:
-    """Resolve caminhos amigáveis e atalhos comuns do sistema operacional."""
+    """Resolve caminhos amigáveis, OneDrive e atalhos comuns do sistema operacional."""
     if not path or not path.strip() or path.strip() == ".":
         return Path.cwd()
 
     p = path.strip().strip("'\"")
+    # Limpa prefixos naturais que o modelo pode enviar (ex: 'pasta do Bot-Sergoias', 'pasta Bot-Sergoias')
+    clean_p = p
+    for prefix in (
+        "pasta do ",
+        "pasta da ",
+        "pasta de ",
+        "pasta ",
+        "diretório do ",
+        "diretório da ",
+        "diretório ",
+        "diretorio do ",
+        "diretorio da ",
+        "diretorio ",
+        "folder ",
+    ):
+        if clean_p.lower().startswith(prefix):
+            clean_p = clean_p[len(prefix) :].strip().strip("'\"")
+            break
+
     home = Path.home()
-    lower = p.lower()
+    onedrive = home / "OneDrive"
+    lower = clean_p.lower()
+
+    # Mapeamento de pastas especiais do usuário (priorizando OneDrive se ativo no Windows)
+    docs_dir = (
+        onedrive / "Documentos"
+        if (onedrive / "Documentos").exists()
+        else (onedrive / "Documents" if (onedrive / "Documents").exists() else home / "Documents")
+    )
+    desktop_dir = (
+        onedrive / "Desktop"
+        if (onedrive / "Desktop").exists()
+        else (onedrive / "Área de Trabalho" if (onedrive / "Área de Trabalho").exists() else home / "Desktop")
+    )
+    pics_dir = (
+        onedrive / "Imagens"
+        if (onedrive / "Imagens").exists()
+        else (onedrive / "Pictures" if (onedrive / "Pictures").exists() else home / "Pictures")
+    )
+    downloads_dir = home / "Downloads"
 
     if lower in ("downloads", "meus downloads", "~/downloads"):
-        return home / "Downloads"
+        return downloads_dir
     elif lower in ("desktop", "área de trabalho", "area de trabalho", "~/desktop"):
-        return home / "Desktop"
+        return desktop_dir
     elif lower in ("documentos", "meus documentos", "documents", "~/documents"):
-        return home / "Documents"
+        return docs_dir
     elif lower in ("imagens", "fotos", "pictures", "~/pictures"):
-        return home / "Pictures"
+        return pics_dir
     elif lower in ("músicas", "musicas", "music", "~/music"):
         return home / "Music"
     elif lower in ("vídeos", "videos", "~/videos"):
         return home / "Videos"
     elif lower in ("home", "usuário", "usuario", "~"):
         return home
-    elif p.startswith("~"):
-        return Path(os.path.expanduser(p)).resolve()
+    elif clean_p.startswith("~"):
+        return Path(os.path.expanduser(clean_p)).resolve()
 
-    return Path(p).resolve()
+    # 1. Tenta o caminho direto
+    direct = Path(clean_p).resolve()
+    if direct.exists():
+        return direct
+
+    # 2. Se não existe diretamente, busca em diretórios comuns de projetos e pastas de usuário
+    candidates = [
+        Path.cwd().parent / clean_p,
+        docs_dir / clean_p,
+        desktop_dir / clean_p,
+        downloads_dir / clean_p,
+        home / clean_p,
+    ]
+    for c in candidates:
+        if c.exists():
+            return c.resolve()
+
+    return direct
 
 
 def list_directory(path: str = ".") -> str:
