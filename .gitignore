@@ -25,3 +25,7 @@ wheels/
 *.wav
 *.tmp
 .pytest_cache/
+
+# Desktop Installer & Native Target
+desktop/installer/
+desktop/src-tauri/target/
