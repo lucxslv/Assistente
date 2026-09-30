@@ -486,9 +486,19 @@ class ToolRegistry:
         )
 
     def _wrap_memorize_fact(self, fact: str) -> str:
-        db.add_fact(fact)
+        try:
+            from api.routes.auth import current_user_id_var
+            uid = current_user_id_var.get()
+        except Exception:
+            uid = "default"
+        db.add_fact(fact, user_id=uid)
         return f"Fato memorizado: {fact}"
 
     def _wrap_memorize_pref(self, key: str, value: str) -> str:
-        db.set_preference(key, value)
+        try:
+            from api.routes.auth import current_user_id_var
+            uid = current_user_id_var.get()
+        except Exception:
+            uid = "default"
+        db.set_preference(key, value, user_id=uid)
         return f"Preferência salva: {key} = {value}"

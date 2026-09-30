@@ -80,7 +80,7 @@ class ContextManager:
 
         return self._cached_weather
 
-    def build_context(self, active_thread_id: Optional[str] = None) -> str:
+    def build_context(self, active_thread_id: Optional[str] = None, user_name: Optional[str] = None) -> str:
         """Constrói uma string rica de contexto em tempo real para injeção no system prompt."""
         formatted_date, periodo = self._get_formatted_datetime()
         os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
@@ -97,15 +97,18 @@ class ContextManager:
             f"   - Plataforma: Charlie Cloud Brain v2.0",
         ]
 
+        if user_name:
+            sections.append(f"3. Usuário Conectado:\n   - Nome / Tratamento: {user_name}")
+
         # Clima se disponível em cache
         if self._cached_weather:
-            sections.append(f"3. Clima no Ambiente:\n   - {self._cached_weather}")
+            sections.append(f"4. Clima no Ambiente:\n   - {self._cached_weather}")
 
         # Presença de Dispositivos Conectados
         presence_summary = presence_manager.summary()
-        sections.append(f"4. Dispositivos e Clientes Conectados:\n{presence_summary}")
+        sections.append(f"5. Dispositivos e Clientes Conectados:\n{presence_summary}")
 
         if active_thread_id:
-            sections.append(f"5. Conversa Atual:\n   - Thread ID Ativa: {active_thread_id}")
+            sections.append(f"6. Conversa Atual:\n   - Thread ID Ativa: {active_thread_id}")
 
         return "\n\n".join(sections)
