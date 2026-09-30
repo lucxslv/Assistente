@@ -5,7 +5,7 @@ import {
   Check,
   X,
   Search,
-  Settings as SettingsIcon,
+  MoreHorizontal,
   Keyboard,
   User,
 } from "lucide-react";
@@ -156,9 +156,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-2 py-1 mb-4 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2.5 mb-1.5">
-            <span className="text-[18px] text-[var(--accent)] drop-shadow-[0_0_25px_var(--accent-glow)] select-none">
-              ✦
-            </span>
+            <img
+              src="/charlie-logo.png"
+              alt="Charlie"
+              className="w-5 h-5 object-contain drop-shadow-[0_0_10px_rgba(139,124,255,0.4)]"
+            />
             <span className="text-[16px] font-semibold tracking-[-0.3px] text-[var(--text-primary)]">
               Charlie
             </span>
@@ -175,26 +177,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          {onOpenShortcuts && (
-            <button
-              type="button"
-              onClick={onOpenShortcuts}
-              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-[var(--radius-sm)] transition-colors cursor-pointer"
-              title="Central de Atalhos (Ctrl+/)"
-            >
-              <Keyboard className="w-3.5 h-3.5" />
-            </button>
-          )}
+        {onOpenShortcuts && (
           <button
             type="button"
-            onClick={onOpenSettings}
+            onClick={onOpenShortcuts}
             className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-[var(--radius-sm)] transition-colors cursor-pointer"
-            title="Preferências (Ctrl+,)"
+            title="Central de Atalhos (Ctrl+/)"
           >
-            <SettingsIcon className="w-3.5 h-3.5" />
+            <Keyboard className="w-3.5 h-3.5" />
           </button>
-        </div>
+        )}
       </div>
 
       <div className="h-[1px] bg-[var(--border)] my-3" />
@@ -359,38 +351,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* 4. Perfil do Usuário */}
+      {/* 4. Perfil do Usuário com Indicador (···) e Borda Lilás (#8B7CFF) */}
       <div className="mt-auto pt-3 border-t border-[var(--border)] mb-3">
         {user ? (
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex items-center gap-2.5 w-full p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--surface-hover)] transition-colors text-left cursor-pointer group"
-            title="Minha Conta e Preferências"
+            className="flex items-center gap-2.5 w-full p-2 rounded-[var(--radius-md)] bg-[var(--surface-elevated)]/50 hover:bg-[var(--surface-hover)] border border-[var(--border)]/70 hover:border-[var(--accent)]/50 transition-all text-left cursor-pointer group shadow-sm"
+            title="Abrir Configurações e Perfil (Ctrl+,)"
           >
-            <div className="w-7 h-7 rounded-full bg-[var(--accent)]/20 border border-[var(--accent)]/40 text-[var(--accent)] flex items-center justify-center text-[12px] font-semibold shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[var(--accent-soft-bg)] border-2 border-[var(--accent)] text-[var(--accent)] flex items-center justify-center text-[13px] font-bold shrink-0 shadow-[0_0_12px_rgba(139,124,255,0.25)]">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-medium text-[var(--text-primary)] truncate">
+              <div className="text-[12.5px] font-semibold text-[var(--text-primary)] truncate group-hover:text-[var(--accent-hover)] transition-colors">
                 {user.name}
               </div>
-              <div className="text-[10px] text-[var(--text-muted)] truncate">
-                {user.email}
+              <div className="flex items-center gap-1.5 text-[10.5px] text-[var(--text-muted)] truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] shrink-0" />
+                <span className="truncate">Plano Pessoal • Conectado</span>
               </div>
+            </div>
+            <div className="p-1 rounded text-[var(--text-muted)] group-hover:text-[var(--text-primary)] group-hover:bg-[var(--surface-hover)] transition-colors">
+              <MoreHorizontal className="w-4 h-4" />
             </div>
           </button>
         ) : (
           <button
             type="button"
             onClick={onOpenAuth}
-            className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] hover:bg-[var(--accent-soft-bg)]/80 transition-colors text-[12px] font-medium cursor-pointer"
+            className="flex items-center justify-between w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-all text-[12px] font-medium cursor-pointer shadow-sm group"
+            title="Entrar na sua conta ou criar cadastro"
           >
-            <span className="flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5" />
-              <span>Entrar na Conta</span>
+            <span className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-[var(--accent)]/20 text-[var(--accent)] group-hover:bg-white/20 group-hover:text-white flex items-center justify-center">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span>Entrar / Criar Conta</span>
             </span>
-            <span className="text-[11px]">→</span>
+            <span className="text-[13px] font-bold group-hover:translate-x-0.5 transition-transform">→</span>
           </button>
         )}
       </div>

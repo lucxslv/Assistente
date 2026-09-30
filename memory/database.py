@@ -150,6 +150,17 @@ class MemoryDatabase:
             logger.error("Erro ao buscar preferências no Supabase: %s", e)
             return {}
 
+    def clear_all_memories(self, user_id: str = "default") -> None:
+        """Limpa todos os fatos e preferências do usuário."""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute('DELETE FROM "UserMemory" WHERE user_id = %s', (user_id,))
+                    cur.execute('DELETE FROM "UserPreference" WHERE user_id = %s', (user_id,))
+                    logger.info("Memórias limpas com sucesso no Supabase para user_id: %s", user_id)
+        except Exception as e:
+            logger.error("Erro ao limpar memórias no Supabase: %s", e)
+
 
 # Instância global compartilhada
 db = MemoryDatabase()

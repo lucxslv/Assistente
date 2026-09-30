@@ -1,9 +1,11 @@
 """Rotas de consulta e atualização de configurações."""
 
 from typing import Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from config import config
+from api.routes.auth import get_current_user_optional
+from memory.database import db
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
@@ -40,4 +42,29 @@ async def update_settings(data: SettingsUpdate):
         "status": "success",
         "updated": data.model_dump(exclude_unset=True),
         "message": "Configurações atualizadas com sucesso.",
+    }
+
+
+@router.get("/memory")
+async def get_user_memory(user: Optional[dict] = Depends(get_current_user_optional)):
+    """Retorna a memória episódica (fatos e preferências) do usuário."""
+    user_id = user["id"] if user else "default"
+    facts = db.get_all_facts(user_id=user_id)
+    prefs = db.get_all_preferences(user_id=user_id)
+    return {
+        "user_id": user_id,
+        "facts": facts,
+        "preferences": prefs,
+        "count": len(facts),
+    }
+
+
+@router.delete("/memory")
+async def clear_user_memory(user: Optional[dict] = Depends(get_current_user_optional)):
+    """Limpa todas as memórias episódicas e preferências do usuário."""
+    user_id = user["id"] if user else "default"
+    db.clear_all_memories(user_id=user_id)
+    return {
+        "status": "success",
+        "message": "Memórias episódicas apagadas com sucesso.",
     }

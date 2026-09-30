@@ -37,8 +37,8 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => !getStoredUser());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -458,6 +458,21 @@ export function App() {
     }
   };
 
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      const msgIdx = messages.findIndex((m) => m.id === messageId);
+      if (msgIdx >= 0) {
+        for (let i = msgIdx - 1; i >= 0; i--) {
+          if (messages[i].type === "user_message" && messages[i].content) {
+            handleSendMessage(messages[i].content, false);
+            return;
+          }
+        }
+      }
+    },
+    [messages]
+  );
+
   const activeThread = threads.find((t) => t.id === activeThreadId);
 
   return (
@@ -486,6 +501,7 @@ export function App() {
           messages={messages}
           isLoading={isLoading}
           onSendMessage={handleSendMessage}
+          onRegenerate={handleRegenerate}
           currentThreadName={activeThread?.name}
           userName={currentUser?.name || "Lucas"}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
