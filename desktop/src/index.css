@@ -53,3 +53,12 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.4);
 }
+
+/* Modo Transparente para Charlie Spotlight */
+html.spotlight-window,
+body.spotlight-window,
+#root.spotlight-window {
+  background-color: transparent !important;
+  background: transparent !important;
+  overflow: hidden !important;
+}

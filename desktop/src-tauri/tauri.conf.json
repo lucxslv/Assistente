@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Charlie - Assistente Inteligente",
         "width": 1080,
         "height": 740,
@@ -19,6 +20,19 @@
         "minHeight": 580,
         "center": true,
         "decorations": true
+      },
+      {
+        "label": "spotlight",
+        "title": "Charlie Spotlight",
+        "width": 680,
+        "height": 520,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {

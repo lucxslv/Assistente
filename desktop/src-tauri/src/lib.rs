@@ -163,14 +163,36 @@ fn get_system_metrics() -> SystemMetrics {
     }
 }
 
+/// Abre e traz a janela principal completa para a frente
+#[tauri::command]
+fn open_main_window(app: tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.show();
+        let _ = main.unminimize();
+        let _ = main.set_focus();
+    }
+}
+
+/// Oculta a mini paleta Spotlight
+#[tauri::command]
+fn hide_spotlight(app: tauri::AppHandle) {
+    if let Some(spotlight) = app.get_webview_window("spotlight") {
+        let _ = spotlight.hide();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_system_metrics])
+        .invoke_handler(tauri::generate_handler![
+            get_system_metrics,
+            open_main_window,
+            hide_spotlight
+        ])
         .setup(|app| {
             // Cria menu do System Tray (Bandeja)
-            let open_item = MenuItem::with_id(app, "open", "Abrir Charlie", true, None::<&str>)?;
+            let open_item = MenuItem::with_id(app, "open", "Abrir Charlie Completo", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &quit_item])?;
 
@@ -209,18 +231,17 @@ pub fn run() {
                 .build(app)?;
 
             // Registra o Atalho Global do Sistema Operacional (Ctrl + Alt + Espaço)
+            // Abre EXCLUSIVAMENTE a mini paleta flutuante (Charlie Spotlight)
             #[cfg(windows)]
             {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
                     unsafe {
-                        // ID único do hotkey
                         let hotkey_id = 9001;
                         // MOD_ALT (0x0001) | MOD_CONTROL (0x0002) | MOD_NOREPEAT (0x4000)
                         // VK_SPACE = 0x20
                         let mut reg = RegisterHotKey(std::ptr::null_mut(), hotkey_id, 0x0001 | 0x0002 | 0x4000, 0x20);
                         if reg == 0 {
-                            // Fallback sem MOD_NOREPEAT
                             reg = RegisterHotKey(std::ptr::null_mut(), hotkey_id, 0x0001 | 0x0002, 0x20);
                         }
 
@@ -228,20 +249,20 @@ pub fn run() {
                             let mut msg: MSG = std::mem::zeroed();
                             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                                 if msg.message == 0x0312 { // WM_HOTKEY
-                                    if let Some(window) = handle.get_webview_window("main") {
-                                        let is_visible = window.is_visible().unwrap_or(false);
-                                        let is_focused = window.is_focused().unwrap_or(false);
+                                    if let Some(spotlight) = handle.get_webview_window("spotlight") {
+                                        let is_visible = spotlight.is_visible().unwrap_or(false);
+                                        let is_focused = spotlight.is_focused().unwrap_or(false);
 
                                         if is_visible && is_focused {
-                                            // Se já está aberta e focada, atalho alterna (oculta)
-                                            let _ = window.hide();
+                                            // Se já está aberta e em foco, alterna e oculta
+                                            let _ = spotlight.hide();
                                         } else {
-                                            // Traz o Charlie para frente imediatamente sobre qualquer janela
-                                            let _ = window.show();
-                                            let _ = window.unminimize();
-                                            let _ = window.set_focus();
-                                            // Emite o evento para abrir a busca do Spotlight
-                                            let _ = window.emit("open-spotlight", ());
+                                            // Mostra apenas a mini paleta flutuante centralizada
+                                            let _ = spotlight.center();
+                                            let _ = spotlight.show();
+                                            let _ = spotlight.unminimize();
+                                            let _ = spotlight.set_focus();
+                                            let _ = spotlight.emit("open-spotlight", ());
                                         }
                                     }
                                 }
@@ -255,10 +276,17 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Quando clicar no X da janela, apenas minimiza para a bandeja
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            if window.label() == "spotlight" {
+                // Ao perder foco (blur), fecha a mini paleta instantaneamente
+                if let WindowEvent::Focused(false) = event {
+                    let _ = window.hide();
+                }
+            } else if window.label() == "main" {
+                // Ao fechar a janela principal, minimiza para a bandeja
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .run(tauri::generate_context!())
