@@ -6,6 +6,7 @@ import {
   X,
   Search,
   Settings as SettingsIcon,
+  Keyboard,
 } from "lucide-react";
 import { Thread } from "../types";
 import { SystemStatus, LocalSystemMetrics } from "../services/api";
@@ -18,7 +19,8 @@ interface SidebarProps {
   onDeleteThread: (id: string, e: React.MouseEvent) => void;
   onRenameThread?: (id: string, newName: string) => void;
   onOpenSettings: () => void;
-  onOpenCommandPalette: () => void;
+  onOpenShortcuts?: () => void;
+  onOpenCommandPalette?: () => void;
   isConnected: boolean;
   systemStatus: SystemStatus | null;
   localMetrics?: LocalSystemMetrics;
@@ -37,6 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteThread,
   onRenameThread,
   onOpenSettings,
+  onOpenShortcuts,
+  onOpenCommandPalette,
   isConnected,
   systemStatus,
   localMetrics,
@@ -166,14 +170,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-[var(--radius-sm)] transition-colors cursor-pointer"
-          title="Preferências (Ctrl+,)"
-        >
-          <SettingsIcon className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          {onOpenShortcuts && (
+            <button
+              type="button"
+              onClick={onOpenShortcuts}
+              className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-[var(--radius-sm)] transition-colors cursor-pointer"
+              title="Central de Atalhos (Ctrl+/)"
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-[var(--radius-sm)] transition-colors cursor-pointer"
+            title="Preferências (Ctrl+,)"
+          >
+            <SettingsIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="h-[1px] bg-[var(--border)] my-3" />
@@ -221,9 +237,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={() => setIsSearching(true)}
-            className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[13px] w-full text-left cursor-pointer"
+            className="flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[13px] w-full text-left cursor-pointer"
           >
-            <span>⌕</span> Pesquisar
+            <span className="flex items-center gap-2">
+              <span>⌕</span> Pesquisar
+            </span>
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
+              Ctrl+F
+            </kbd>
+          </button>
+        )}
+
+        {onOpenCommandPalette && (
+          <button
+            type="button"
+            onClick={onOpenCommandPalette}
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors text-[12px] w-full text-left cursor-pointer"
+            title="Paleta de Comandos Rápidos (Ctrl+K)"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-[11px]">⌘</span> Paleta rápida
+            </span>
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
+              Ctrl+K
+            </kbd>
           </button>
         )}
       </div>

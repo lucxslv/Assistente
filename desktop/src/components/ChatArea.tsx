@@ -15,6 +15,7 @@ import {
   Terminal,
   Volume2,
   VolumeX,
+  Keyboard,
 } from "lucide-react";
 import { Message, ToolCallInfo } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -25,6 +26,7 @@ interface ChatAreaProps {
   onSendMessage: (text: string, skipTts: boolean) => void;
   currentThreadName?: string;
   userName?: string;
+  onOpenShortcuts?: () => void;
 }
 
 // Componente para blocos de código com destaque e botão de cópia
@@ -119,6 +121,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onSendMessage,
   currentThreadName,
   userName = "Lucas",
+  onOpenShortcuts,
 }) => {
   const [input, setInput] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
@@ -236,6 +239,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
         {/* Controles de Janela Sutis */}
         <div className="flex items-center gap-1">
+          {onOpenShortcuts && (
+            <button
+              type="button"
+              onClick={onOpenShortcuts}
+              className="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer mr-1"
+              title="Central de Atalhos (Ctrl+/)"
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setVoiceActive(!voiceActive)}

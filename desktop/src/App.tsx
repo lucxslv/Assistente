@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
 import { CommandPalette } from "./components/CommandPalette";
+import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Message, Settings, Thread, ToolCallInfo } from "./types";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -30,9 +31,18 @@ export function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [localMetrics, setLocalMetrics] = useState<LocalSystemMetrics | undefined>();
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((current) => (current === msg ? null : current));
+    }, 2800);
+  }, []);
 
   // Telemetria do hardware local do computador (Tauri / Win32)
   useEffect(() => {
@@ -147,9 +157,61 @@ export function App() {
     };
   }, [activeThreadId]);
 
-  // Atalhos de Teclado Globais do App (Spotlight e navegação)
+  // Ações fundamentais
+  const handleNewThread = useCallback(() => {
+    setActiveThreadId(null);
+    setMessages([]);
+  }, []);
+
+  // Atalhos de Teclado Globais do App
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc: Fechar janelas modais ativas
+      if (e.key === "Escape") {
+        if (isShortcutsOpen) {
+          e.preventDefault();
+          setIsShortcutsOpen(false);
+          return;
+        }
+        if (isCommandPaletteOpen) {
+          e.preventDefault();
+          setIsCommandPaletteOpen(false);
+          return;
+        }
+        if (isSettingsOpen) {
+          e.preventDefault();
+          setIsSettingsOpen(false);
+          return;
+        }
+        return;
+      }
+
+      // Ctrl + / ou ?: Abrir Central de Atalhos
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === "/" || e.key === "?" || e.code === "Slash")
+      ) {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl + N: Nova Conversa
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        handleNewThread();
+        showToast("Nova conversa iniciada");
+        return;
+      }
+
+      // Ctrl + ,: Preferências
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        setIsSettingsOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl + K ou Ctrl + Alt + Espaço: Paleta de Comandos
       const isSpotlight =
         ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") ||
         (e.ctrlKey && e.altKey && (e.code === "Space" || e.key === " "));
@@ -157,27 +219,60 @@ export function App() {
       if (isSpotlight) {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
-      } else if (e.ctrlKey && e.key.toLowerCase() === "n") {
+        return;
+      }
+
+      // Ctrl + L: Limpar mensagens da tela
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "l") {
         e.preventDefault();
-        handleNewThread();
-      } else if (e.ctrlKey && e.key === ",") {
+        setMessages([]);
+        showToast("Histórico da tela limpo");
+        return;
+      }
+
+      // Ctrl + Shift + C: Copiar última resposta do Charlie
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "c") {
+        const lastAssistant = [...messages]
+          .reverse()
+          .find((m) => m.type !== "user_message" && m.name !== "Usuário" && m.content);
+        if (lastAssistant?.content) {
+          e.preventDefault();
+          navigator.clipboard.writeText(lastAssistant.content);
+          showToast("Resposta copiada para a área de transferência!");
+        }
+        return;
+      }
+
+      // Ctrl + Shift + S: Captura de tela rápida
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        setIsSettingsOpen((prev) => !prev);
-      } else if (e.key === "Escape") {
-        if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
-        if (isSettingsOpen) setIsSettingsOpen(false);
+        showToast("Abrindo ferramenta de captura...");
+        executeDeviceTool("manage_application", {
+          app_name: "snippingtool",
+          action: "open",
+        }).catch(() => {});
+        return;
+      }
+
+      // Ctrl + Shift + L: Bloquear estação de trabalho
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        showToast("Bloqueando sessão do computador...");
+        executeDeviceTool("system_power_action", { action: "lock" }).catch(() => {});
+        return;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSettingsOpen, isCommandPaletteOpen]);
-
-  // Ações
-  const handleNewThread = () => {
-    setActiveThreadId(null);
-    setMessages([]);
-  };
+  }, [
+    isSettingsOpen,
+    isCommandPaletteOpen,
+    isShortcutsOpen,
+    messages,
+    handleNewThread,
+    showToast,
+  ]);
 
   const handleRenameThread = async (id: string, newName: string) => {
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)));
@@ -340,6 +435,7 @@ export function App() {
         onDeleteThread={handleDeleteThread}
         onRenameThread={handleRenameThread}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isConnected={isConnected}
         systemStatus={systemStatus}
@@ -354,6 +450,7 @@ export function App() {
           onSendMessage={handleSendMessage}
           currentThreadName={activeThread?.name}
           userName="Lucas"
+          onOpenShortcuts={() => setIsShortcutsOpen(true)}
         />
       </main>
 
@@ -362,6 +459,12 @@ export function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
+      />
+
+      {/* Central de Atalhos (Ctrl + /) */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
 
       {/* Paleta de Comandos Rápidos (Ctrl+K) */}
@@ -386,6 +489,14 @@ export function App() {
           setIsCommandPaletteOpen(false);
         }}
       />
+
+      {/* Banner de Feedback Rápido (Toast) */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] shadow-[0_12px_36px_rgba(0,0,0,0.6)] text-[12.5px] font-medium text-[var(--text-primary)] animate-fade-in pointer-events-none select-none">
+          <span className="text-[var(--accent)] text-[14px]">✦</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }
