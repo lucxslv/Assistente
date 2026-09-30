@@ -46,11 +46,29 @@ export function humanizeErrorMessage(error: any): string {
   return "Não foi possível completar a ação no momento. Verifique sua conexão e tente novamente.";
 }
 
+let detectedLocalApi: string | null = null;
+
+// Checa de forma não-bloqueante se o backend local (porta 8005) está rodando na máquina
+if (typeof window !== "undefined") {
+  fetch("http://127.0.0.1:8005/api/health", { signal: AbortSignal.timeout(600) })
+    .then((r) => {
+      if (r.ok) {
+        detectedLocalApi = "http://127.0.0.1:8005/api";
+      }
+    })
+    .catch(() => {
+      // Backend local inativo; continua em modo nuvem
+    });
+}
+
 export function getApiBase(): string {
   const custom = localStorage.getItem("charlie_api_url");
   if (custom && custom.trim()) {
     const clean = custom.trim().replace(/\/+$/, "");
     return clean.endsWith("/api") ? clean : `${clean}/api`;
+  }
+  if (detectedLocalApi) {
+    return detectedLocalApi;
   }
   return (import.meta as any).env?.VITE_API_URL || "https://assistente-xi.vercel.app/api";
 }

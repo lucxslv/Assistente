@@ -88,6 +88,13 @@ class ToolRegistry:
                     return f"Ação de automação '{name}' enviada para o computador do usuário via app Desktop."
                 elif name in ("play_music", "pause_music", "resume_music", "stop_music"):
                     return f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
+                elif name in ("list_directory", "read_file", "write_file", "replace_in_file"):
+                    return (
+                        "Aviso: O cérebro do Charlie está conectado ao servidor em nuvem (Vercel) e não possui "
+                        "acesso direto ao disco rígido do seu computador local por isolamento de rede da nuvem. "
+                        "Para que eu possa listar, ler e manipular seus arquivos e pastas locais (como Downloads, Documentos ou C:\\), "
+                        "inicie o assistente localmente executando o arquivo 'run_desktop.bat' no seu computador."
+                    )
 
             if prefer_remote:
                 try:
