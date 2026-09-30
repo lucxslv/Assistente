@@ -157,7 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="flex items-center gap-2.5 mb-1.5">
             <img
-              src="/charlie-logo.png"
+              src="/charlie-logo.svg"
               alt="Charlie"
               className="w-5 h-5 object-contain drop-shadow-[0_0_10px_rgba(139,124,255,0.4)]"
             />

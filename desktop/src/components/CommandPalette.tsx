@@ -231,7 +231,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         {/* Barra de Busca Minimalista Estilo Raycast / Spotlight */}
         <div className="flex items-center px-4 py-3.5 border-b border-border/50 gap-3 bg-card/40">
           <div className="w-7 h-7 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-sm">
-            <img src="/charlie-logo.png" alt="Charlie" className="w-full h-full object-contain" />
+            <img src="/charlie-logo.svg" alt="Charlie" className="w-full h-full object-contain" />
           </div>
           <input
             ref={inputRef}

@@ -4,7 +4,7 @@ import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
-import { AuthModal } from "./components/AuthModal";
+import { AuthGatekeeper } from "./components/AuthGatekeeper";
 import { Message, Settings, Thread, ToolCallInfo } from "./types";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -38,7 +38,6 @@ export function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => !getStoredUser());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -74,7 +73,9 @@ export function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen("open-spotlight", () => {
-      setIsCommandPaletteOpen(true);
+      if (currentUser) {
+        setIsCommandPaletteOpen(true);
+      }
     })
       .then((fn) => {
         unlisten = fn;
@@ -86,7 +87,7 @@ export function App() {
     return () => {
       unlisten?.();
     };
-  }, []);
+  }, [currentUser]);
 
   // Carrega lista de conversas
   const loadThreads = useCallback(async () => {
@@ -128,13 +129,19 @@ export function App() {
   useEffect(() => {
     fetchCurrentUser()
       .then((u) => {
-        if (u) setCurrentUser(u);
+        if (u) {
+          setCurrentUser(u);
+        } else {
+          setCurrentUser(null);
+        }
       })
       .catch(() => {});
   }, []);
 
   // Polling e WebSocket de telemetria em tempo real
   useEffect(() => {
+    if (!currentUser) return;
+
     loadStatus();
     loadThreads();
     loadSettingsData();
@@ -150,7 +157,7 @@ export function App() {
       clearInterval(interval);
       unsubscribeWs();
     };
-  }, [loadStatus, loadThreads, loadSettingsData]);
+  }, [currentUser, loadStatus, loadThreads, loadSettingsData]);
 
   // Carrega mensagens ao trocar de conversa
   useEffect(() => {
@@ -188,21 +195,22 @@ export function App() {
   const handleLogout = () => {
     clearAuthSession();
     setCurrentUser(null);
-    showToast("Sessão encerrada com sucesso");
-    loadThreads();
+    setIsSettingsOpen(false);
+    setIsCommandPaletteOpen(false);
+    setIsShortcutsOpen(false);
+    setThreads([]);
     setMessages([]);
+    setActiveThreadId(null);
+    showToast("Sessão encerrada com sucesso");
   };
 
   // Atalhos de Teclado Globais do App
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!currentUser) return;
+
       // Esc: Fechar janelas modais ativas
       if (e.key === "Escape") {
-        if (isAuthModalOpen) {
-          e.preventDefault();
-          setIsAuthModalOpen(false);
-          return;
-        }
         if (isShortcutsOpen) {
           e.preventDefault();
           setIsShortcutsOpen(false);
@@ -301,10 +309,10 @@ export function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    currentUser,
     isSettingsOpen,
     isCommandPaletteOpen,
     isShortcutsOpen,
-    isAuthModalOpen,
     messages,
     handleNewThread,
     showToast,
@@ -473,6 +481,22 @@ export function App() {
     [messages]
   );
 
+  if (!currentUser) {
+    return (
+      <div className="flex h-screen w-screen bg-[#0E0F12] text-[#F2F3F5] font-sans select-none overflow-hidden">
+        <AuthGatekeeper onSuccess={handleAuthSuccess} />
+
+        {/* Banner de Feedback Rápido (Toast) */}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] shadow-[0_12px_36px_rgba(0,0,0,0.6)] text-[12.5px] font-medium text-[var(--text-primary)] animate-fade-in pointer-events-none select-none">
+            <span className="text-[var(--accent)] text-[14px]">✦</span>
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const activeThread = threads.find((t) => t.id === activeThreadId);
 
   return (
@@ -489,7 +513,7 @@ export function App() {
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         user={currentUser}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenAuth={() => setIsSettingsOpen(true)}
         isConnected={isConnected}
         systemStatus={systemStatus}
         localMetrics={localMetrics}
@@ -508,13 +532,6 @@ export function App() {
         />
       </main>
 
-      {/* Modal de Autenticação (Login / Cadastro) */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={handleAuthSuccess}
-      />
-
       {/* Modal de Configurações */}
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -522,7 +539,6 @@ export function App() {
         settings={settings}
         user={currentUser}
         onLogout={handleLogout}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
       {/* Central de Atalhos (Ctrl + /) */}

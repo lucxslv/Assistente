@@ -351,7 +351,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       >
         <div data-tauri-drag-region className="flex items-center gap-2.5 text-[13px] text-[var(--text-muted)] cursor-default">
           <img
-            src="/charlie-logo.png"
+            src="/charlie-logo.svg"
             alt="Charlie"
             className="w-4 h-4 object-contain opacity-90 drop-shadow-[0_0_6px_rgba(139,124,255,0.4)]"
           />
@@ -420,7 +420,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <section className="flex-1 flex flex-col justify-center items-center p-10 max-w-[700px] mx-auto w-full select-none animate-fade-in">
           <div className="w-16 h-16 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center mb-6 shadow-[0_0_35px_rgba(139,124,255,0.25)]">
             <img
-              src="/charlie-logo.png"
+              src="/charlie-logo.svg"
               alt="Charlie"
               className="w-10 h-10 object-contain drop-shadow-[0_0_12px_rgba(139,124,255,0.6)]"
             />
@@ -543,7 +543,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {!isUser && (
                       <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[#0A0B0E] border border-[var(--border)] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1 shadow-sm">
                         <img
-                          src="/charlie-logo.png"
+                          src="/charlie-logo.svg"
                           alt="Charlie"
                           className="w-full h-full object-contain"
                         />
@@ -714,7 +714,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <div className="flex gap-3.5 justify-start animate-fade-in">
                   <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[#0A0B0E] border border-[var(--border)] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1 shadow-sm">
                     <img
-                      src="/charlie-logo.png"
+                      src="/charlie-logo.svg"
                       alt="Charlie"
                       className="w-full h-full object-contain"
                     />
