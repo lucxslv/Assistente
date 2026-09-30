@@ -1,4 +1,50 @@
 import { Message, Settings, Thread, StreamEvent } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+
+export interface LocalSystemMetrics {
+  cpu_percent: number;
+  memory_used_gb: number;
+  memory_total_gb: number;
+  memory_percent: number;
+}
+
+/**
+ * Lê diretamente as métricas de hardware da máquina local do usuário via Tauri (Win32).
+ */
+export async function fetchLocalHardwareMetrics(): Promise<LocalSystemMetrics> {
+  try {
+    const metrics = await invoke<LocalSystemMetrics>("get_system_metrics");
+    if (metrics && typeof metrics.cpu_percent === "number") {
+      return metrics;
+    }
+  } catch {
+    // Modo web/browser ou fallback
+  }
+
+  return {
+    cpu_percent: 0,
+    memory_used_gb: 0,
+    memory_total_gb: 16,
+    memory_percent: 0,
+  };
+}
+
+/**
+ * Converte mensagens de erro de rede/HTTP em mensagens humanas e amigáveis para o usuário.
+ */
+export function humanizeErrorMessage(error: any): string {
+  if (!navigator.onLine) {
+    return "Sem conexão com a internet. Verifique sua rede para continuar conversando.";
+  }
+  const str = String(error?.message || error || "");
+  if (str.includes("Failed to fetch") || str.includes("NetworkError") || str.includes("Offline")) {
+    return "Sem conexão com a internet ou servidor temporariamente indisponível. Verifique sua conexão para continuar.";
+  }
+  if (str.includes("500") || str.includes("503") || str.includes("FUNCTION_INVOCATION_FAILED")) {
+    return "O assistente está passando por uma breve oscilação. Por favor, tente novamente em instantes.";
+  }
+  return "Não foi possível completar a ação no momento. Verifique sua conexão e tente novamente.";
+}
 
 export function getApiBase(): string {
   const custom = localStorage.getItem("charlie_api_url");
@@ -6,7 +52,7 @@ export function getApiBase(): string {
     const clean = custom.trim().replace(/\/+$/, "");
     return clean.endsWith("/api") ? clean : `${clean}/api`;
   }
-  return (import.meta as any).env?.VITE_API_URL || "http://127.0.0.1:8005/api";
+  return (import.meta as any).env?.VITE_API_URL || "https://assistente-xi.vercel.app/api";
 }
 
 export function getWsBase(): string {

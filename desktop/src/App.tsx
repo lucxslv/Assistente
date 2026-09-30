@@ -15,6 +15,9 @@ import {
   fetchThreadSteps,
   sendChatMessageStream,
   SystemStatus,
+  fetchLocalHardwareMetrics,
+  humanizeErrorMessage,
+  LocalSystemMetrics,
 } from "./services/api";
 import { executeDeviceTool } from "./services/deviceExecutor";
 
@@ -28,6 +31,26 @@ export function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [localMetrics, setLocalMetrics] = useState<LocalSystemMetrics | undefined>();
+
+  // Telemetria do hardware local do computador (Tauri / Win32)
+  useEffect(() => {
+    let isMounted = true;
+    const updateMetrics = async () => {
+      try {
+        const data = await fetchLocalHardwareMetrics();
+        if (isMounted) setLocalMetrics(data);
+      } catch {
+        // ignora fallback
+      }
+    };
+    updateMetrics();
+    const interval = setInterval(updateMetrics, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Carrega lista de conversas
   const loadThreads = useCallback(async () => {
@@ -105,10 +128,14 @@ export function App() {
     };
   }, [activeThreadId]);
 
-  // Atalhos de Teclado Globais do App
+  // Atalhos de Teclado Globais do App (Spotlight e navegação)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      const isSpotlight =
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") ||
+        (e.ctrlKey && e.altKey && (e.code === "Space" || e.key === " "));
+
+      if (isSpotlight) {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
       } else if (e.ctrlKey && e.key.toLowerCase() === "n") {
@@ -248,8 +275,8 @@ export function App() {
                   ? {
                       ...m,
                       content: m.content
-                        ? `${m.content}\n\n*(Erro: ${ev.data.error})*`
-                        : `Desculpe, ocorreu um erro: ${ev.data.error}`,
+                        ? `${m.content}\n\n*(${humanizeErrorMessage(ev.data.error)})*`
+                        : humanizeErrorMessage(ev.data.error),
                       streaming: false,
                     }
                   : m
@@ -260,13 +287,13 @@ export function App() {
         skipTts
       );
     } catch (err) {
-      console.error("Erro ao enviar mensagem via streaming:", err);
+      console.warn("Falha no envio de mensagem:", err);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId
             ? {
                 ...m,
-                content: m.content || "Desculpe, ocorreu uma falha na comunicação com o backend.",
+                content: m.content || humanizeErrorMessage(err),
                 streaming: false,
               }
             : m
@@ -292,6 +319,7 @@ export function App() {
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isConnected={isConnected}
         systemStatus={systemStatus}
+        localMetrics={localMetrics}
       />
 
       {/* Área Central de Conversa */}
