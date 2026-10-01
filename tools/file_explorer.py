@@ -7,10 +7,66 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+# Arquivos e extensões sensíveis protegidos contra leitura ou alteração
+SENSITIVE_PATTERNS = {
+    ".env", ".git", ".github", ".gitignore", ".vercelignore",
+    ".aws", ".ssh", "id_rsa", "id_ed25519", "credentials", "secrets",
+    "token", "supabase", "config.py", "service_account",
+}
+
+INTERNAL_PROJECT_DIRS = {
+    "api", "brain", "core", "memory", "tools", "providers", ".venv", "node_modules", "src-tauri"
+}
+
+
+def is_blocked_path(p: Path) -> tuple[bool, str]:
+    """Valida se o caminho tenta acessar credenciais, arquivos do servidor ou código-fonte interno."""
+    name_lower = p.name.lower()
+    for s in SENSITIVE_PATTERNS:
+        if s in name_lower:
+            return True, "Acesso negado: arquivos de configuração interna, credenciais ou segredos são estritamente protegidos."
+
+    repo_root = Path.cwd().resolve()
+    try:
+        resolved = p.resolve()
+        if resolved == repo_root or repo_root in resolved.parents:
+            rel_parts = [part.lower() for part in resolved.relative_to(repo_root).parts]
+            if not rel_parts:
+                return True, "Acesso negado: a raiz do sistema interno é protegida. Especifique uma pasta de usuário (como 'Downloads' ou 'Documentos')."
+            for part in rel_parts:
+                if part in INTERNAL_PROJECT_DIRS or part.startswith(".env") or part.endswith(".py"):
+                    return True, "Acesso negado: arquivos de sistema e código-fonte interno da plataforma são protegidos por segurança."
+    except Exception:
+        pass
+
+    return False, ""
+
+
 def resolve_friendly_path(path: str) -> Path:
     """Resolve caminhos amigáveis, OneDrive e atalhos comuns do sistema operacional."""
+    home = Path.home()
+    onedrive = home / "OneDrive"
+
+    # Mapeamento de pastas especiais do usuário (priorizando OneDrive se ativo no Windows)
+    docs_dir = (
+        onedrive / "Documentos"
+        if (onedrive / "Documentos").exists()
+        else (onedrive / "Documents" if (onedrive / "Documents").exists() else home / "Documents")
+    )
+    desktop_dir = (
+        onedrive / "Desktop"
+        if (onedrive / "Desktop").exists()
+        else (onedrive / "Área de Trabalho" if (onedrive / "Área de Trabalho").exists() else home / "Desktop")
+    )
+    pics_dir = (
+        onedrive / "Imagens"
+        if (onedrive / "Imagens").exists()
+        else (onedrive / "Pictures" if (onedrive / "Pictures").exists() else home / "Pictures")
+    )
+    downloads_dir = home / "Downloads"
+
     if not path or not path.strip() or path.strip() == ".":
-        return Path.cwd()
+        return docs_dir
 
     p = path.strip().strip("'\"")
     # Limpa prefixos naturais que o modelo pode enviar (ex: 'pasta do Bot-Sergoias', 'pasta Bot-Sergoias')
@@ -32,27 +88,7 @@ def resolve_friendly_path(path: str) -> Path:
             clean_p = clean_p[len(prefix) :].strip().strip("'\"")
             break
 
-    home = Path.home()
-    onedrive = home / "OneDrive"
     lower = clean_p.lower()
-
-    # Mapeamento de pastas especiais do usuário (priorizando OneDrive se ativo no Windows)
-    docs_dir = (
-        onedrive / "Documentos"
-        if (onedrive / "Documentos").exists()
-        else (onedrive / "Documents" if (onedrive / "Documents").exists() else home / "Documents")
-    )
-    desktop_dir = (
-        onedrive / "Desktop"
-        if (onedrive / "Desktop").exists()
-        else (onedrive / "Área de Trabalho" if (onedrive / "Área de Trabalho").exists() else home / "Desktop")
-    )
-    pics_dir = (
-        onedrive / "Imagens"
-        if (onedrive / "Imagens").exists()
-        else (onedrive / "Pictures" if (onedrive / "Pictures").exists() else home / "Pictures")
-    )
-    downloads_dir = home / "Downloads"
 
     if lower in ("downloads", "meus downloads", "~/downloads"):
         return downloads_dir
@@ -78,7 +114,6 @@ def resolve_friendly_path(path: str) -> Path:
 
     # 2. Se não existe diretamente, busca em diretórios comuns de projetos e pastas de usuário
     candidates = [
-        Path.cwd().parent / clean_p,
         docs_dir / clean_p,
         desktop_dir / clean_p,
         downloads_dir / clean_p,
@@ -91,14 +126,18 @@ def resolve_friendly_path(path: str) -> Path:
     return direct
 
 
-def list_directory(path: str = ".") -> str:
+def list_directory(path: str = "Documentos") -> str:
     """
     Lista os arquivos e subdiretórios de um diretório específico.
     """
     try:
         target = resolve_friendly_path(path)
+        blocked, reason = is_blocked_path(target)
+        if blocked:
+            return reason
+
         if not target.exists() or not target.is_dir():
-            return f"Erro: O diretório '{path}' (resolvido como '{target}') não existe ou não é uma pasta válida."
+            return f"Erro: O diretório '{path}' não existe ou não é uma pasta válida."
 
         items = []
         for p in target.iterdir():
@@ -128,8 +167,12 @@ def read_file(path: str, start_line: int = 1, end_line: int = None) -> str:
     """
     try:
         target = resolve_friendly_path(path)
+        blocked, reason = is_blocked_path(target)
+        if blocked:
+            return reason
+
         if not target.exists() or not target.is_file():
-            return f"Erro: O arquivo '{path}' (resolvido como '{target}') não existe ou não é um arquivo válido."
+            return f"Erro: O arquivo '{path}' não existe ou não é um arquivo válido."
 
         # Limite de segurança: não ler arquivos binários
         try:
@@ -162,6 +205,10 @@ def write_file(path: str, content: str) -> str:
     """
     try:
         target = resolve_friendly_path(path)
+        blocked, reason = is_blocked_path(target)
+        if blocked:
+            return reason
+
         with open(target, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Sucesso: Arquivo '{target.name}' foi escrito com sucesso em '{target.parent}'."
@@ -176,6 +223,10 @@ def replace_in_file(path: str, target_text: str, replacement_text: str) -> str:
     """
     try:
         target = resolve_friendly_path(path)
+        blocked, reason = is_blocked_path(target)
+        if blocked:
+            return reason
+
         if not target.exists() or not target.is_file():
             return f"Erro: O arquivo '{path}' não existe."
 

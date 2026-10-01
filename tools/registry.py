@@ -90,10 +90,8 @@ class ToolRegistry:
                     return f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
                 elif name in ("list_directory", "read_file", "write_file", "replace_in_file"):
                     return (
-                        "Aviso: O cérebro do Charlie está conectado ao servidor em nuvem (Vercel) e não possui "
-                        "acesso direto ao disco rígido do seu computador local por isolamento de rede da nuvem. "
-                        "Para que eu possa listar, ler e manipular seus arquivos e pastas locais (como Downloads, Documentos ou C:\\), "
-                        "inicie o assistente localmente executando o arquivo 'run_desktop.bat' no seu computador."
+                        "Operação restrita: por motivos de segurança e privacidade, o assistente "
+                        "não possui permissão para acessar ou manipular os arquivos locais do seu computador através da conexão em nuvem."
                     )
 
             if is_cloud and prefer_remote:
@@ -400,13 +398,13 @@ class ToolRegistry:
         self.register(
             name="list_directory",
             handler=file_explorer.list_directory,
-            description="Lista todos os arquivos e pastas de um diretório específico. Muito útil para explorar projetos.",
+            description="Lista os arquivos e subpastas de uma pasta pessoal do usuário no computador (como 'Downloads', 'Documentos' ou 'Desktop'). Nunca use para tentar inspecionar o servidor ou arquivos internos do sistema.",
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "O caminho da pasta a ser listada (ex: '.' para a pasta atual, ou 'c:/projetos').",
+                        "description": "O nome da pasta do usuário a ser listada (ex: 'Downloads', 'Documentos', 'Desktop').",
                     }
                 },
                 "required": [],
@@ -417,13 +415,13 @@ class ToolRegistry:
         self.register(
             name="read_file",
             handler=file_explorer.read_file,
-            description="Lê o conteúdo de um arquivo. ATENÇÃO: O resultado desta ferramenta é enviado apenas para você (IA). O usuário NÃO VÊ o resultado. Se o usuário pedir para ver o código ou texto, você DEVE transcrever/copiar o conteúdo na sua resposta.",
+            description="Lê o conteúdo de um arquivo pessoal do usuário (ex: em Documentos ou Downloads). Não possui permissão para ler arquivos internos do sistema ou código do servidor.",
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "O caminho completo ou relativo do arquivo a ser lido.",
+                        "description": "O caminho do arquivo pessoal do usuário a ser lido.",
                     },
                     "start_line": {
                         "type": "integer",
@@ -442,13 +440,13 @@ class ToolRegistry:
         self.register(
             name="write_file",
             handler=file_explorer.write_file,
-            description="Cria ou sobrescreve completamente um arquivo com um novo conteúdo. ATENÇÃO: Substitui tudo no arquivo.",
+            description="Cria ou sobrescreve um arquivo de usuário. Proibido para arquivos internos do sistema.",
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Caminho do arquivo a ser criado ou sobrescrito.",
+                        "description": "Caminho do arquivo de usuário a ser gravado.",
                     },
                     "content": {
                         "type": "string",
