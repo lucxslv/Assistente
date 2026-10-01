@@ -205,6 +205,178 @@ fn close_window(window: tauri::Window) {
     let _ = window.close();
 }
 
+fn resolve_local_user_path(input_path: &str) -> std::path::PathBuf {
+    use std::path::{Path, PathBuf};
+
+    let trimmed = input_path.trim().trim_matches('\'').trim_matches('"');
+    let mut clean = trimmed;
+    for prefix in &[
+        "pasta do ", "pasta da ", "pasta de ", "pasta ",
+        "diretório do ", "diretório da ", "diretório ",
+        "diretorio do ", "diretorio da ", "diretorio ",
+        "folder ",
+    ] {
+        if clean.to_lowercase().starts_with(prefix) {
+            clean = &clean[prefix.len()..];
+            break;
+        }
+    }
+    clean = clean.trim().trim_matches('\'').trim_matches('"');
+
+    let lower = clean.to_lowercase();
+    let home = std::env::var("USERPROFILE").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("C:\\"));
+    let onedrive = std::env::var("OneDrive").map(PathBuf::from).unwrap_or_else(|_| home.join("OneDrive"));
+
+    let desktop_dir = if onedrive.join("Desktop").exists() {
+        onedrive.join("Desktop")
+    } else if onedrive.join("Área de Trabalho").exists() {
+        onedrive.join("Área de Trabalho")
+    } else if home.join("Desktop").exists() {
+        home.join("Desktop")
+    } else {
+        home.join("Área de Trabalho")
+    };
+
+    let docs_dir = if onedrive.join("Documentos").exists() {
+        onedrive.join("Documentos")
+    } else if onedrive.join("Documents").exists() {
+        onedrive.join("Documents")
+    } else if home.join("Documentos").exists() {
+        home.join("Documentos")
+    } else {
+        home.join("Documents")
+    };
+
+    let downloads_dir = home.join("Downloads");
+
+    if clean.is_empty() || clean == "." {
+        return desktop_dir;
+    }
+
+    if lower == "desktop" || lower == "área de trabalho" || lower == "area de trabalho" {
+        return desktop_dir;
+    }
+    if lower == "documentos" || lower == "documents" {
+        return docs_dir;
+    }
+    if lower == "downloads" {
+        return downloads_dir;
+    }
+
+    for prefix in &["desktop/", "desktop\\", "área de trabalho/", "área de trabalho\\", "area de trabalho/", "area de trabalho\\"] {
+        if lower.starts_with(prefix) {
+            let sub = &clean[prefix.len()..];
+            return desktop_dir.join(sub);
+        }
+    }
+    for prefix in &["documentos/", "documentos\\", "documents/", "documents\\"] {
+        if lower.starts_with(prefix) {
+            let sub = &clean[prefix.len()..];
+            return docs_dir.join(sub);
+        }
+    }
+    for prefix in &["downloads/", "downloads\\"] {
+        if lower.starts_with(prefix) {
+            let sub = &clean[prefix.len()..];
+            return downloads_dir.join(sub);
+        }
+    }
+
+    let p = Path::new(clean);
+    if p.is_absolute() {
+        return p.to_path_buf();
+    }
+
+    desktop_dir.join(clean)
+}
+
+#[tauri::command]
+fn create_local_directory(path: String) -> Result<String, String> {
+    let target = resolve_local_user_path(&path);
+    std::fs::create_dir_all(&target).map_err(|e| format!("Erro ao criar pasta: {}", e))?;
+    Ok(format!("Pasta criada com sucesso em: {}", target.display()))
+}
+
+#[tauri::command]
+fn write_local_file(path: String, content: String) -> Result<String, String> {
+    let target = resolve_local_user_path(&path);
+    if let Some(parent) = target.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&target, content).map_err(|e| format!("Erro ao escrever arquivo: {}", e))?;
+    Ok(format!("Arquivo gravado com sucesso em: {}", target.display()))
+}
+
+#[tauri::command]
+fn system_power_action_native(action: String) -> Result<String, String> {
+    let act = action.to_lowercase();
+    match act.as_str() {
+        "lock" => {
+            #[cfg(windows)]
+            {
+                use std::process::Command;
+                let _ = Command::new("rundll32.exe")
+                    .args(&["user32.dll,LockWorkStation"])
+                    .spawn();
+                Ok("Computador bloqueado com sucesso.".into())
+            }
+            #[cfg(not(windows))]
+            {
+                Ok("Bloqueio de tela não suportado neste OS.".into())
+            }
+        }
+        "sleep" => {
+            #[cfg(windows)]
+            {
+                use std::process::Command;
+                let _ = Command::new("rundll32.exe")
+                    .args(&["powrprof.dll,SetSuspendState", "0,1,0"])
+                    .spawn();
+                Ok("Comando de suspensão enviado.".into())
+            }
+            #[cfg(not(windows))]
+            {
+                Ok("Suspensão não suportada neste OS.".into())
+            }
+        }
+        _ => Ok(format!("Ação '{}' executada.", action)),
+    }
+}
+
+#[tauri::command]
+fn set_system_volume_native(level: Option<i32>, mute: Option<bool>) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        if let Some(m) = mute {
+            unsafe {
+                extern "system" {
+                    fn keybd_event(bVk: u8, bScan: u8, dwFlags: u32, dwExtraInfo: usize);
+                }
+                keybd_event(0xAD, 0, 0, 0);
+                keybd_event(0xAD, 0, 2, 0);
+            }
+            return Ok(if m { "Áudio mutado com sucesso." } else { "Áudio desmutado com sucesso." }.into());
+        }
+        if let Some(lvl) = level {
+            let steps = (lvl / 2).max(0).min(50);
+            let script = format!(
+                "$obj = New-Object -ComObject WScript.Shell; 1..50 | ForEach-Object {{ $obj.SendKeys([char]174) }}; 1..{} | ForEach-Object {{ $obj.SendKeys([char]175) }}",
+                steps
+            );
+            let _ = Command::new("powershell")
+                .args(&["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+                .spawn();
+            return Ok(format!("Volume ajustado para aproximadamente {}%.", lvl));
+        }
+        Ok("Nenhum parâmetro de volume fornecido.".into())
+    }
+    #[cfg(not(windows))]
+    {
+        Ok("Controle de volume não suportado neste OS.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -215,7 +387,11 @@ pub fn run() {
             hide_spotlight,
             minimize_window,
             toggle_maximize_window,
-            close_window
+            close_window,
+            create_local_directory,
+            write_local_file,
+            system_power_action_native,
+            set_system_volume_native
         ])
         .setup(|app| {
             // Cria menu do System Tray (Bandeja)

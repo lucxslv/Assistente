@@ -74,11 +74,29 @@ class ToolRegistry:
         if scope == ToolScope.DEVICE:
             import os
             is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+
+            # 1. Se estiver na nuvem e prefer_remote for solicitado (e houver dispositivo WebSocket ativo)
+            if is_cloud and prefer_remote:
+                try:
+                    from brain.broker.device_broker import device_broker
+                    if device_broker.has_active_device():
+                        c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
+                        return await device_broker.dispatch_device_tool(c_id, name, arguments)
+                except Exception as e:
+                    logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Prosseguindo com resposta desktop.")
+
+            # 2. Se estiver na nuvem (executando via stream SSE para o app Desktop)
             if is_cloud:
-                if name == "manage_application":
+                if name == "create_folder":
+                    folder = arguments.get("path", "pasta")
+                    return f"Comando para criar a pasta '{folder}' enviado para execução no computador local via app Desktop."
+                elif name == "manage_application":
                     app = arguments.get("app_name", "aplicativo")
                     act = arguments.get("action", "open")
                     return f"Comando '{act}' para '{app}' enviado para execução no computador local do usuário via app Desktop."
+                elif name == "write_file":
+                    p = arguments.get("path", "arquivo")
+                    return f"Comando para gravar no arquivo '{p}' enviado para execução no computador local via app Desktop."
                 elif name == "system_power_action":
                     act = arguments.get("action", "lock")
                     return f"Ação de energia '{act}' enviada para o computador do usuário via app Desktop."
@@ -88,20 +106,9 @@ class ToolRegistry:
                     return f"Ação de automação '{name}' enviada para o computador do usuário via app Desktop."
                 elif name in ("play_music", "pause_music", "resume_music", "stop_music"):
                     return f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
-                elif name in ("list_directory", "read_file", "write_file", "replace_in_file"):
-                    return (
-                        "Operação restrita: por motivos de segurança e privacidade, o assistente "
-                        "não possui permissão para acessar ou manipular os arquivos locais do seu computador através da conexão em nuvem."
-                    )
-
-            if is_cloud and prefer_remote:
-                try:
-                    from brain.broker.device_broker import device_broker
-                    if device_broker.has_active_device():
-                        c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
-                        return await device_broker.dispatch_device_tool(c_id, name, arguments)
-                except Exception as e:
-                    logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Executando localmente.")
+                elif name in ("list_directory", "read_file", "replace_in_file"):
+                    p = arguments.get("path", "pasta")
+                    return f"Comando de arquivo para '{p}' enviado para o aplicativo Desktop local do usuário."
 
         # Notifica o observador de estado (se o módulo de API estiver ativo)
         state_mgr = None
@@ -391,6 +398,23 @@ class ToolRegistry:
                 "type": "object",
                 "properties": {},
                 "required": [],
+            },
+            scope=ToolScope.DEVICE,
+        )
+
+        self.register(
+            name="create_folder",
+            handler=file_explorer.create_folder,
+            description="Cria uma nova pasta ou diretório no computador do usuário (ex: 'teste', 'Documentos/Projetos', 'Desktop/Minha Pasta').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "O nome da pasta ou caminho onde a pasta deve ser criada no computador do usuário (ex: 'teste', 'Desktop/teste', 'Documentos/Nova Pasta').",
+                    }
+                },
+                "required": ["path"],
             },
             scope=ToolScope.DEVICE,
         )
