@@ -44,6 +44,7 @@ class MemoryDatabase:
         confidence: float = 0.8,
         user_id: str = "default",
         metadata: Optional[Dict[str, Any]] = None,
+        action: str = "reinforce",
     ) -> Dict[str, Any]:
         """Insere uma memória ou reforça uma similaridade existente (> 0.82) para evitar duplicatas."""
         content = content.strip()
@@ -69,11 +70,35 @@ class MemoryDatabase:
                         similar = cur.fetchone()
                         if similar:
                             sim_id, sim_content, old_conf, old_imp, sim_meta = similar
-                            # Reforça memória existente aumentando confiança e renovando confirmação
+                            is_contradiction = (
+                                action == "supersede"
+                                or any(w in content.lower() for w in ["em vez de", "não prefere mais", "parou de usar", "mudou para", "agora prefere"])
+                            )
+
+                            if is_contradiction:
+                                # Substitui memória antiga em caso de contradição ou evolução de preferência
+                                cur.execute(
+                                    """
+                                    UPDATE "UserMemory"
+                                    SET content = %s,
+                                        confidence = %s,
+                                        importance = %s,
+                                        metadata = %s,
+                                        last_confirmed_at = NOW(),
+                                        updated_at = NOW()
+                                    WHERE id = %s
+                                    """,
+                                    (content, confidence, importance, json.dumps({**(sim_meta or {}), **meta, "superseded": True}), sim_id),
+                                )
+                                logger.info(
+                                    f"[MemoryDB] Memória contraditória atualizada/superseded (ID={sim_id}): '{content[:40]}...'"
+                                )
+                                return {"action": "superseded", "id": str(sim_id)}
+
+                            # Caso contrário, reforça memória existente aumentando confiança e renovando confirmação
                             new_conf = min(0.99, round(float(old_conf or 0.8) + 0.05, 3))
                             new_imp = max(float(old_imp or 0.5), round(importance, 3))
                             
-                            # Se o novo conteúdo for mais detalhado e rico, atualiza o texto
                             updated_content = content if len(content) > len(sim_content) else sim_content
                             merged_meta = {**(sim_meta or {}), **meta, "reinforcement_count": (sim_meta or {}).get("reinforcement_count", 0) + 1}
 

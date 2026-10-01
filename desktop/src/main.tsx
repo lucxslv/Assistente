@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { SpotlightApp } from "./components/SpotlightApp";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import "katex/dist/katex.min.css";
 import "./index.css";
 
 function Root() {

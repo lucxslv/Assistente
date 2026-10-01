@@ -34,6 +34,7 @@ Sua função é analisar o último turno da conversa (mensagem do usuário e res
   - type: "semantic_preference", "semantic_fact", "semantic_learning", "episodic_event"
   - confidence: 0.1 a 1.0 (afirmações explícitas têm confiança alta >= 0.85; deduções têm confiança moderada 0.4-0.7)
   - importance: 0.1 a 1.0 (relevância futura de 0 a 1)
+  - action: "reinforce" (fato novo ou reforço de preferência) OU "supersede" (se contradizer, anular ou substituir uma preferência/hábito anterior)
 
 # FEEDBACK COMPORTAMENTAL (USER MODEL)
 Analise se o usuário deu pistas sobre como prefere que o Charlie se comunique:
@@ -50,7 +51,8 @@ Retorne ESTRITAMENTE um JSON no seguinte formato (sem blocos de markdown adicion
       "content": "Descrição clara e independente da memória",
       "type": "semantic_preference | semantic_fact | semantic_learning | episodic_event",
       "confidence": 0.85,
-      "importance": 0.75
+      "importance": 0.75,
+      "action": "reinforce | supersede"
     }
   ],
   "user_model_feedback": {
@@ -117,12 +119,14 @@ CHARLIE: {assistant_reply[:500]}
                 conf = float(m.get("confidence", 0.8))
                 imp = float(m.get("importance", 0.5))
 
+                action = m.get("action", "reinforce")
                 db.add_or_reinforce_memory(
                     content=content,
                     memory_type=m_type,
                     importance=imp,
                     confidence=conf,
                     user_id=user_id,
+                    action=action,
                 )
 
             # 2. Atualiza User Model (Aprendizado Comportamental Gradual via EMA)
