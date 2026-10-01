@@ -28,8 +28,8 @@ class MemoryDatabase:
         return cls._instance
 
     def _init_config(self):
-        raw_url = os.getenv("DATABASE_URL", "")
-        self.db_url = raw_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        from api.db import get_normalized_db_url
+        self.db_url = get_normalized_db_url()
 
     def _get_connection(self):
         return psycopg.connect(self.db_url, autocommit=True)

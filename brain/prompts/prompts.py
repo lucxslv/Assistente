@@ -212,7 +212,7 @@ Siga rigorosamente estas regras de formatação:
    - Se um item tiver sub-pontos, quebre em novas linhas com marcadores aninhados em vez de parágrafos corridos.
 3. **Equações e Fórmulas:**
    - Evite despejar equações complexas em LaTeX cru em meio ao texto se uma notação simples resolver.
-   - Se for usar equações, use blocos destacados e limpos com espaços (ex: `novo_score = 0.9 * antigo + 0.1 * novo` ou `$$\text{novo} = \alpha \cdot \text{obs} + (1 - \alpha) \cdot \text{antigo}$$`). NUNCA cole comandos LaTeX sem espaços ou quebrados.
+   - Se for usar equações, use blocos destacados e limpos com espaços (ex: `novo_score = 0.9 * antigo + 0.1 * novo` ou `novo = alpha * obs + (1 - alpha) * antigo`). NUNCA cole comandos LaTeX sem espaços ou quebrados.
 4. **Leitura Dinâmica:**
    - Destaque em **negrito** apenas as palavras e conclusões fundamentais para permitir leitura rápida.
    - Divida análises longas em seções bem delimitadas.
