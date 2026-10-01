@@ -106,12 +106,15 @@ class AssistantPipeline:
         # Etapa 5: Recuperador de Memória Semântica (RAG) estritamente isolado pelo user_id
         memory_str = self.retriever.get_summary_context(query=user_text, user_id=uid)
 
-        # Etapa 6: Selecionador de Ferramentas e Configuração do Prompt
+        # Etapa 6: Selecionador de Ferramentas e Configuração do Prompt Adaptativo
         system_prompt = build_system_prompt(
             profile=self.profile,
             context=context_str,
             memory_summary=memory_str,
             tools=self.tools,
+            user_id=uid,
+            thread_id=thread_id,
+            user_text=user_text,
         )
 
         self.memory.add_user(user_text)
@@ -190,6 +193,20 @@ class AssistantPipeline:
             final_reply = "Desculpe, ocorreu um erro ao gerar a resposta."
 
         self.memory.add_assistant(final_reply)
+
+        # Etapa 10: Memory Extractor & Aprendizado Contínuo (executa em background sem travar o stream)
+        try:
+            from brain.memory.extractor import memory_extractor
+            asyncio.create_task(
+                memory_extractor.analyze_turn_async(
+                    user_text=user_text,
+                    assistant_reply=final_reply,
+                    user_id=uid,
+                    thread_id=thread_id,
+                )
+            )
+        except Exception as e:
+            logger.debug("Falha ao disparar memory_extractor em background: %s", e)
 
         yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id})
 

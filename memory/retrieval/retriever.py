@@ -1,16 +1,22 @@
-"""Recuperador unificado e semântico de memórias (RAG)."""
+"""Recuperador unificado e semântico de memórias (RAG).
 
-from typing import Optional
+Separa estritamente a recuperação em:
+- Preferências diretas
+- Memória Episódica (acontecimentos e marcos com continuidade temporal)
+- Memória Semântica (fatos, preferências e regras com relevância e importância)
+"""
+
+from typing import Dict, List, Optional
 from memory.database import db
 
 
 class MemoryRetriever:
-    """Consolida memórias semânticas e preferências para injeção de contexto dinâmico."""
+    """Consolida memórias semânticas e episódicas para injeção inteligente de contexto dinâmico."""
 
     def get_summary_context(self, query: Optional[str] = None, user_id: Optional[str] = None) -> str:
-        """Retorna as memórias consolidadas para injeção no system prompt.
-
-        Se uma query for fornecida, realiza busca semântica por similaridade (RAG).
+        """Retorna apenas as memórias relevantes selecionadas por relevância e importância.
+        
+        NUNCA envia toda a memória para o LLM. Apenas os itens pertinentes à consulta atual.
         """
         try:
             from api.routes.auth import current_user_id_var
@@ -18,35 +24,54 @@ class MemoryRetriever:
         except Exception:
             uid = user_id or "default"
 
+        sections: List[str] = []
+
+        # 1. Preferências diretas do usuário
         prefs = db.get_all_preferences(user_id=uid)
-        lines = []
-
-        # 1. Preferências do usuário
         if prefs:
-            lines.append("## Preferências Registradas do Usuário:")
-            for k, v in prefs.items():
-                lines.append(f"- {k}: {v}")
+            pref_lines = [f"- {k}: {v}" for k, v in list(prefs.items())[:6]]
+            sections.append("## Preferências Diretas do Usuário:\n" + "\n".join(pref_lines))
 
-        # 2. Busca semântica vetorial (RAG) se houver uma consulta ativa
-        relevant_memories = []
+        # 2. Busca semântica e episódica vetorial (RAG)
         if query and query.strip():
-            matches = db.search_memories(query, limit=5, threshold=0.35, user_id=uid)
-            if matches:
-                relevant_memories = [m["content"] for m in matches]
+            matches = db.search_memories(query, limit=6, threshold=0.35, user_id=uid)
+            episodic_matches: List[str] = []
+            semantic_matches: List[str] = []
 
-        # 3. Se não houver matches semânticos ou não houver query, usa fatos gerais
-        if relevant_memories:
-            lines.append("\n## Memórias Relevantes para esta Conversa (RAG):")
-            for mem in relevant_memories:
-                lines.append(f"- {mem}")
-        else:
+            for m in matches:
+                m_type = m.get("memory_type", "")
+                content = m.get("content", "")
+                conf = m.get("confidence", 0.8)
+                
+                # Se for episódico (eventos passados, projetos)
+                if "episodic" in m_type or m.get("category") == "event":
+                    episodic_matches.append(f"- {content}")
+                else:
+                    # Semântico (fatos, preferências de aprendizagem)
+                    semantic_matches.append(f"- {content}")
+
+            if episodic_matches:
+                sections.append(
+                    "## Memória Episódica Relevante (Acontecimentos e Histórico de Projetos):\n"
+                    + "\n".join(episodic_matches)
+                )
+
+            if semantic_matches:
+                sections.append(
+                    "## Memória Semântica Relevante (Fatos e Preferências):\n"
+                    + "\n".join(semantic_matches)
+                )
+
+        # 3. Fallback se não houver query ou matches semânticos: exibe até 4 fatos de maior importância
+        if len(sections) <= 1:
             facts = db.get_all_facts(user_id=uid)
             if facts:
-                lines.append("\n## Fatos Gerais Conhecidos sobre o Usuário:")
-                for fact in facts[:8]:
-                    lines.append(f"- {fact}")
+                sections.append(
+                    "## Fatos Gerais Conhecidos sobre o Usuário:\n"
+                    + "\n".join(f"- {f}" for f in facts[:4])
+                )
 
-        if not lines:
-            return "Nenhuma memória registrada ainda."
+        if not sections:
+            return "Nenhuma memória relevante registrada para esta interação."
 
-        return "\n".join(lines)
+        return "\n\n".join(sections)
