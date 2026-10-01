@@ -46,7 +46,7 @@ async def update_settings(data: SettingsUpdate):
 
 @router.get("/memory")
 async def get_user_memory(user: dict = Depends(get_current_user)):
-    """Retorna a memória episódica (fatos e preferências) do usuário autenticado."""
+    """Retorna as memórias semânticas e episódicas do usuário autenticado."""
     user_id = str(user["id"])
     facts = db.get_all_facts(user_id=user_id)
     prefs = db.get_all_preferences(user_id=user_id)
@@ -55,6 +55,29 @@ async def get_user_memory(user: dict = Depends(get_current_user)):
         "facts": facts,
         "preferences": prefs,
         "count": len(facts),
+    }
+
+
+@router.get("/user-model")
+async def get_user_model_profile(user: dict = Depends(get_current_user)):
+    """Retorna o modelo comportamental adaptativo do usuário e os traços do Charlie Core."""
+    from brain.personality.user_model import user_model_manager
+    from brain.personality.charlie_core import charlie_core
+    user_id = str(user["id"])
+    model = user_model_manager.get_user_model(user_id=user_id)
+    return {
+        "user_id": user_id,
+        "charlie_core": {
+            "name": charlie_core.name,
+            "traits": charlie_core.traits.to_dict(),
+        },
+        "user_model": {
+            "communication": model.communication.to_dict(),
+            "interaction": model.interaction.to_dict(),
+            "traits": model.traits,
+            "stats": model.stats,
+            "updated_at": model.updated_at,
+        },
     }
 
 

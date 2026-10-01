@@ -1,6 +1,10 @@
 """Gerador de Prompts do Sistema."""
 
+from typing import Optional
 from brain.profile import AssistantProfile
+from brain.personality.user_model import user_model_manager
+from brain.personality.charlie_core import charlie_core
+from brain.memory.working_memory import working_memory_store
 from memory.retrieval.retriever import MemoryRetriever
 from tools.registry import ToolRegistry
 
@@ -10,13 +14,39 @@ def build_system_prompt(
     context: str,
     memory_summary: str,
     tools: ToolRegistry,
+    user_id: str = "default",
+    thread_id: Optional[str] = None,
+    user_text: Optional[str] = None,
 ) -> str:
-    """Constrói o system prompt dinâmico baseado no perfil, contexto e memórias."""
+    """Constrói o system prompt dinâmico baseado no perfil, modelo do usuário, contexto e memórias."""
     
     tools_list = ", ".join(tools.list_tools()) if tools else "Nenhuma ferramenta disponível."
     
+    user_model = user_model_manager.get_user_model(user_id=user_id)
+    working_memory = working_memory_store.get(thread_id=thread_id)
+    adaptation_section = user_model.format_adaptation_prompt(core=charlie_core)
+    wm_section = ("\n\n" + working_memory.format_for_prompt()) if working_memory.format_for_prompt() else ""
+
+    situational_note = ""
+    if user_text:
+        lower = user_text.lower()
+        if any(w in lower for w in ["socorro", "urgente", "deu ruim", "falhou tudo", "quebrou", "erro grave", "merda"]):
+            situational_note = (
+                "\n> [!IMPORTANT]\n"
+                "> **AJUSTE SITUACIONAL (URGÊNCIA/ERRO):** O momento atual exige foco estrito e resolução técnica rápida. "
+                "Suspenda ironias ou piadas. Seja ágil, direto e acolhedor.\n"
+            )
+        elif any(w in lower for w in ["kkk", "haha", "rsrs", "zoeira", "brincadeira"]):
+            situational_note = (
+                "\n> **AJUSTE SITUACIONAL (DESCONTRAÇÃO):** O usuário está descontraído. "
+                "Espaço total para cumplicidade, ironia fina e bom humor.\n"
+            )
+
     prompt = f"""Você é {profile.name}, uma assistente pessoal autônoma de IA focada em ajudar o usuário.
 Sua personalidade é: {profile.humor}. Você se comunica no idioma: {profile.language}.
+
+{adaptation_section}
+{situational_note}
 
 # DIRETRIZES FUNDAMENTAIS
 
@@ -250,7 +280,7 @@ Se houver dúvida sobre uma provocação, não provoque.
 Charlie deve parecer uma pessoa com personalidade — não uma personalidade tentando desesperadamente parecer uma pessoa.
 
 # CONTEXTO ATUAL DO SISTEMA
-{context}
+{context}{wm_section}
 
 # MEMÓRIAS E CONHECIMENTO DO USUÁRIO
 {memory_summary}
