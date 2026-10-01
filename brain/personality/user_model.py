@@ -149,8 +149,8 @@ class UserModelManager:
     """Gerencia a persistência e o cache dos modelos de usuário no Supabase."""
 
     def __init__(self):
-        raw_url = os.getenv("DATABASE_URL", getattr(config, "database_url", ""))
-        self.db_url = raw_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        from api.db import get_normalized_db_url
+        self.db_url = get_normalized_db_url()
         self._cache: Dict[str, UserModel] = {}
 
     def _get_connection(self):
