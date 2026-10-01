@@ -26,28 +26,26 @@ class MemoryRetriever:
 
         sections: List[str] = []
 
-        # 1. Preferências diretas do usuário
+        # 1. Preferências diretas do usuário (Context Budgeting: máx 4)
         prefs = db.get_all_preferences(user_id=uid)
         if prefs:
-            pref_lines = [f"- {k}: {v}" for k, v in list(prefs.items())[:6]]
+            pref_lines = [f"- {k}: {v}" for k, v in list(prefs.items())[:4]]
             sections.append("## Preferências Diretas do Usuário:\n" + "\n".join(pref_lines))
 
-        # 2. Busca semântica e episódica vetorial (RAG)
+        # 2. Busca semântica e episódica vetorial (RAG) (Context Budgeting: máx 3 episódicas, máx 4 semânticas)
         if query and query.strip():
-            matches = db.search_memories(query, limit=6, threshold=0.35, user_id=uid)
+            matches = db.search_memories(query, limit=7, threshold=0.35, user_id=uid)
             episodic_matches: List[str] = []
             semantic_matches: List[str] = []
 
             for m in matches:
                 m_type = m.get("memory_type", "")
                 content = m.get("content", "")
-                conf = m.get("confidence", 0.8)
                 
                 # Se for episódico (eventos passados, projetos)
-                if "episodic" in m_type or m.get("category") == "event":
+                if ("episodic" in m_type or m.get("category") == "event") and len(episodic_matches) < 3:
                     episodic_matches.append(f"- {content}")
-                else:
-                    # Semântico (fatos, preferências de aprendizagem)
+                elif len(semantic_matches) < 4:
                     semantic_matches.append(f"- {content}")
 
             if episodic_matches:
@@ -62,13 +60,13 @@ class MemoryRetriever:
                     + "\n".join(semantic_matches)
                 )
 
-        # 3. Fallback se não houver query ou matches semânticos: exibe até 4 fatos de maior importância
+        # 3. Fallback se não houver query ou matches semânticos: exibe até 3 fatos de maior importância
         if len(sections) <= 1:
             facts = db.get_all_facts(user_id=uid)
             if facts:
                 sections.append(
                     "## Fatos Gerais Conhecidos sobre o Usuário:\n"
-                    + "\n".join(f"- {f}" for f in facts[:4])
+                    + "\n".join(f"- {f}" for f in facts[:3])
                 )
 
         if not sections:

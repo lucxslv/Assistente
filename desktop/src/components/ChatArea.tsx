@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import {
   Copy,
   Check,
@@ -580,8 +582,90 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
                             {m.content ? (
                               <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                                rehypePlugins={[rehypeKatex]}
                                 components={{
+                                  p({ children }) {
+                                    return (
+                                      <p className="mb-3 leading-relaxed text-[13.5px] text-[var(--text-primary)] last:mb-0">
+                                        {children}
+                                      </p>
+                                    );
+                                  },
+                                  h1({ children }) {
+                                    return (
+                                      <h1 className="text-[17px] font-bold text-white mt-4 mb-2 pb-1 border-b border-[var(--border)]">
+                                        {children}
+                                      </h1>
+                                    );
+                                  },
+                                  h2({ children }) {
+                                    return (
+                                      <h2 className="text-[15px] font-bold text-white mt-3.5 mb-2">
+                                        {children}
+                                      </h2>
+                                    );
+                                  },
+                                  h3({ children }) {
+                                    return (
+                                      <h3 className="text-[14px] font-semibold text-[var(--accent)] mt-3 mb-1.5">
+                                        {children}
+                                      </h3>
+                                    );
+                                  },
+                                  ul({ children }) {
+                                    return (
+                                      <ul className="my-2.5 pl-5 list-disc space-y-1.5 text-[13.5px] text-[var(--text-secondary)] marker:text-[var(--accent)]">
+                                        {children}
+                                      </ul>
+                                    );
+                                  },
+                                  ol({ children }) {
+                                    return (
+                                      <ol className="my-2.5 pl-5 list-decimal space-y-1.5 text-[13.5px] text-[var(--text-secondary)] marker:text-[var(--accent)] marker:font-semibold">
+                                        {children}
+                                      </ol>
+                                    );
+                                  },
+                                  li({ children }) {
+                                    return <li className="leading-relaxed pl-0.5">{children}</li>;
+                                  },
+                                  strong({ children }) {
+                                    return <strong className="font-semibold text-white">{children}</strong>;
+                                  },
+                                  blockquote({ children }) {
+                                    return (
+                                      <blockquote className="my-3 pl-3.5 border-l-2 border-[var(--accent)] bg-[var(--surface-hover)]/70 py-2 px-3 rounded-r-[var(--radius-sm)] text-[13px] text-[var(--text-secondary)] italic">
+                                        {children}
+                                      </blockquote>
+                                    );
+                                  },
+                                  hr() {
+                                    return <hr className="my-3.5 border-[var(--border)]" />;
+                                  },
+                                  table({ children }) {
+                                    return (
+                                      <div className="my-3 overflow-x-auto rounded-[var(--radius-sm)] border border-[var(--border)]">
+                                        <table className="w-full text-left text-xs border-collapse">
+                                          {children}
+                                        </table>
+                                      </div>
+                                    );
+                                  },
+                                  th({ children }) {
+                                    return (
+                                      <th className="p-2 border-b border-[var(--border)] bg-[var(--surface-hover)] font-semibold text-[var(--text-primary)]">
+                                        {children}
+                                      </th>
+                                    );
+                                  },
+                                  td({ children }) {
+                                    return (
+                                      <td className="p-2 border-b border-[var(--border)] text-[var(--text-secondary)]">
+                                        {children}
+                                      </td>
+                                    );
+                                  },
                                   code({ node, inline, className, children, ...props }: any) {
                                     const match = /language-(\w+)/.exec(className || "");
                                     const codeString = String(children).replace(/\n$/, "");
