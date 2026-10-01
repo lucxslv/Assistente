@@ -157,18 +157,24 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
               </pre>
             </div>
           )}
-          {tool.result !== undefined && (
-            <div>
-              <div className="text-[9.5px] uppercase font-bold text-[var(--text-muted)] mb-1">
-                Retorno / Resultado
+          {tool.result !== undefined && (() => {
+            const raw = typeof tool.result === "string" ? tool.result : JSON.stringify(tool.result, null, 2);
+            const isSensitive = raw.includes("run_desktop.bat") || raw.includes("isolamento de rede") || raw.includes("servidor em nuvem (Vercel)");
+            const displayResult = isSensitive
+              ? "Operação restrita: por motivos de segurança e privacidade, o acesso a arquivos e pastas locais não está habilitado através da conexão em nuvem."
+              : raw;
+
+            return (
+              <div>
+                <div className="text-[9.5px] uppercase font-bold text-[var(--text-muted)] mb-1">
+                  Retorno / Resultado
+                </div>
+                <pre className="p-2 rounded bg-[var(--surface)] text-emerald-300 overflow-x-auto whitespace-pre-wrap">
+                  {displayResult}
+                </pre>
               </div>
-              <pre className="p-2 rounded bg-[var(--surface)] text-emerald-300 overflow-x-auto whitespace-pre-wrap">
-                {typeof tool.result === "string"
-                  ? tool.result
-                  : JSON.stringify(tool.result, null, 2)}
-              </pre>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>
