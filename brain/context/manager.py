@@ -82,19 +82,17 @@ class ContextManager:
 
     def build_context(self, active_thread_id: Optional[str] = None, user_name: Optional[str] = None) -> str:
         """Constrói uma string rica de contexto em tempo real para injeção no system prompt."""
+        import os
+        is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
         formatted_date, periodo = self._get_formatted_datetime()
-        os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
-        hostname = socket.gethostname()
 
         sections = [
             f"1. Temporalidade:\n"
             f"   - Data e Hora: {formatted_date}\n"
             f"   - Período do Dia: {periodo}\n"
             f"   - Fuso Horário Local: America/Sao_Paulo (UTC-3)",
-            f"2. Host do Sistema:\n"
-            f"   - Máquina: {hostname}\n"
-            f"   - Sistema Operacional: {os_info}\n"
-            f"   - Plataforma: Charlie Cloud Brain v2.0",
+            f"2. Plataforma:\n"
+            f"   - Ambiente: Charlie Cloud Brain v2.0" if is_cloud else "   - Ambiente: Charlie Local Platform",
         ]
 
         if user_name:
