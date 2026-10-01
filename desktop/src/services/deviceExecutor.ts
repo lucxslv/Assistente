@@ -1,4 +1,5 @@
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 
 // Mapeamento abrangente de aplicativos do Windows para protocolos URI ou executáveis
 const APP_PROTOCOLS: Record<string, string> = {
@@ -43,8 +44,23 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
     // Backend local não está ativo; executa nativamente via Tauri
   }
 
-  // 2. Execução nativa no Windows usando capacidades do Tauri Opener
+  // 2. Execução nativa no Windows usando capacidades do Tauri e Win32
   try {
+    if (name === "create_folder") {
+      const folderPath = String(args.path || "Nova Pasta");
+      const res = await invoke<string>("create_local_directory", { path: folderPath });
+      console.log(`[DeviceExecutor] Pasta criada nativamente:`, res);
+      return res;
+    }
+
+    if (name === "write_file") {
+      const filePath = String(args.path || "arquivo.txt");
+      const content = String(args.content || "");
+      const res = await invoke<string>("write_local_file", { path: filePath, content });
+      console.log(`[DeviceExecutor] Arquivo gravado nativamente:`, res);
+      return res;
+    }
+
     if (name === "manage_application") {
       const appName = String(args.app_name || "").toLowerCase().trim();
       const action = String(args.action || "open").toLowerCase().trim();
@@ -69,6 +85,19 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
         await openUrl("snippingtool:");
         return `Captura de tela aberta: ${err?.message || ""}`;
       }
+    }
+
+    if (name === "set_system_volume") {
+      const level = args.level !== undefined ? Number(args.level) : null;
+      const mute = args.mute !== undefined ? Boolean(args.mute) : null;
+      const res = await invoke<string>("set_system_volume_native", { level, mute });
+      return res;
+    }
+
+    if (name === "system_power_action") {
+      const action = String(args.action || "lock");
+      const res = await invoke<string>("system_power_action_native", { action });
+      return res;
     }
   } catch (err: any) {
     console.warn(`[DeviceExecutor] Erro ao executar ${name} via Tauri:`, err);

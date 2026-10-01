@@ -412,7 +412,17 @@ export function App() {
             // Executa ferramentas locais nativamente no Windows
             if (
               ev.data.scope === "device" ||
-              ["manage_application", "set_system_volume", "system_power_action", "press_key", "type_text", "take_screenshot"].includes(ev.data.name)
+              [
+                "manage_application",
+                "set_system_volume",
+                "system_power_action",
+                "press_key",
+                "type_text",
+                "take_screenshot",
+                "create_folder",
+                "write_file",
+                "list_directory",
+              ].includes(ev.data.name)
             ) {
               executeDeviceTool(ev.data.name, ev.data.args || {}).catch((err) =>
                 console.warn("Erro ao executar ferramenta local:", err)

@@ -107,15 +107,44 @@ def resolve_friendly_path(path: str) -> Path:
     elif clean_p.startswith("~"):
         return Path(os.path.expanduser(clean_p)).resolve()
 
-    # 1. Tenta o caminho direto
+    # Subpastas de pastas especiais (ex: 'desktop/teste', 'documentos/meus_arquivos')
+    for prefix in (
+        "desktop/", "desktop\\", "área de trabalho/", "área de trabalho\\", "area de trabalho/", "area de trabalho\\",
+    ):
+        if lower.startswith(prefix):
+            sub = clean_p[len(prefix):].lstrip("/\\")
+            return desktop_dir / sub
+
+    for prefix in (
+        "documentos/", "documentos\\", "documents/", "documents\\",
+    ):
+        if lower.startswith(prefix):
+            sub = clean_p[len(prefix):].lstrip("/\\")
+            return docs_dir / sub
+
+    for prefix in (
+        "downloads/", "downloads\\",
+    ):
+        if lower.startswith(prefix):
+            sub = clean_p[len(prefix):].lstrip("/\\")
+            return downloads_dir / sub
+
+    for prefix in (
+        "imagens/", "imagens\\", "pictures/", "pictures\\",
+    ):
+        if lower.startswith(prefix):
+            sub = clean_p[len(prefix):].lstrip("/\\")
+            return pics_dir / sub
+
+    # 1. Tenta o caminho direto se for absoluto ou já existir
     direct = Path(clean_p).resolve()
-    if direct.exists():
+    if direct.exists() or Path(clean_p).is_absolute():
         return direct
 
-    # 2. Se não existe diretamente, busca em diretórios comuns de projetos e pastas de usuário
+    # 2. Se for relativo e não existe diretamente, busca em diretórios comuns de usuário
     candidates = [
-        docs_dir / clean_p,
         desktop_dir / clean_p,
+        docs_dir / clean_p,
         downloads_dir / clean_p,
         home / clean_p,
     ]
@@ -123,7 +152,27 @@ def resolve_friendly_path(path: str) -> Path:
         if c.exists():
             return c.resolve()
 
-    return direct
+    # Se ainda não existe (ex: nova pasta ou novo arquivo), cria no Desktop do usuário
+    return (desktop_dir / clean_p).resolve()
+
+
+def create_folder(path: str) -> str:
+    """
+    Cria uma nova pasta ou diretório no computador do usuário.
+    Pode ser um nome simples (ex: 'teste', 'Projetos', 'Viagem') que será criado no Desktop do usuário,
+    ou um caminho especificado (ex: 'Documentos/Projetos', 'Desktop/teste').
+    """
+    try:
+        target = resolve_friendly_path(path)
+        blocked, reason = is_blocked_path(target)
+        if blocked:
+            return reason
+
+        target.mkdir(parents=True, exist_ok=True)
+        return f"Sucesso: Pasta '{target.name}' criada com sucesso em '{target.parent}'."
+    except Exception as e:
+        logger.error(f"Erro em create_folder: {e}")
+        return f"Erro ao criar a pasta: {str(e)}"
 
 
 def list_directory(path: str = "Documentos") -> str:
