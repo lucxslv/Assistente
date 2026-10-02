@@ -1,30 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { useAgentRuntime } from "../services/agentRuntimeStore";
-import { AgentLogCategory, RiskLevel } from "../types";
 import {
   Play,
   Pause,
   RotateCw,
   CheckCircle2,
   AlertCircle,
-  Clock,
-  Shield,
-  Terminal,
   Cpu,
-  FileCheck,
-  ChevronDown,
-  ChevronRight,
   Sparkles,
   Trash2,
   FolderOpen,
   Folder,
   ArrowRight,
-  Search,
-  LayoutDashboard,
+  X,
+  History as HistoryIcon,
 } from "lucide-react";
 import { AgentWorkspace } from "./workspace/AgentWorkspace";
-
-type AgentTab = "workspace" | "tasks" | "permissions" | "evidence" | "logs" | "processes" | "history";
 
 export const AgentCommandCenter: React.FC = () => {
   const {
@@ -49,23 +40,16 @@ export const AgentCommandCenter: React.FC = () => {
     clearSession,
   } = useAgentRuntime();
 
-  const [activeTab, setActiveTab] = useState<AgentTab>("workspace");
   const [goalInput, setGoalInput] = useState("");
   const [projectInput, setProjectInput] = useState("Charlie");
-  const [logFilter, setLogFilter] = useState<AgentLogCategory | "ALL">("ALL");
-  const [logSearch, setLogSearch] = useState("");
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
-  const [historyFilter, setHistoryFilter] = useState<"ALL" | "completed" | "failed">("ALL");
+  const [showProcessesModal, setShowProcessesModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   useEffect(() => {
-    if (activeTab === "processes") {
+    if (showProcessesModal) {
       refreshProcesses();
     }
-  }, [activeTab]);
-
-  const toggleTaskExpand = (taskId: string) => {
-    setExpandedTasks((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
-  };
+  }, [showProcessesModal]);
 
   const handleStartGoal = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,16 +58,6 @@ export const AgentCommandCenter: React.FC = () => {
     setGoalInput("");
   };
 
-  const filteredLogs = logs.filter((log) => {
-    const matchesCategory = logFilter === "ALL" || log.category === logFilter;
-    const matchesSearch =
-      !logSearch ||
-      log.message.toLowerCase().includes(logSearch.toLowerCase()) ||
-      log.category.toLowerCase().includes(logSearch.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  // Indicador de status pontual e sutil
   const renderStatusBadge = (status: string) => {
     switch (status) {
       case "running":
@@ -130,39 +104,10 @@ export const AgentCommandCenter: React.FC = () => {
     }
   };
 
-  const renderRiskBadge = (risk: RiskLevel) => {
-    switch (risk) {
-      case "CRITICAL":
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-rose-950/80 text-rose-300 border border-rose-800/60">
-            Crítico
-          </span>
-        );
-      case "HIGH":
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800/60">
-            Alto
-          </span>
-        );
-      case "MEDIUM":
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
-            Médio
-          </span>
-        );
-      default:
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800/60 text-zinc-400 border border-zinc-700/50">
-            Baixo
-          </span>
-        );
-    }
-  };
-
   return (
     <div className="flex-1 flex flex-col h-full bg-[#090A0F] text-[#F2F3F5] overflow-hidden select-none">
-      {/* ================= Header Superior Discreto ================= */}
-      <header className="px-6 py-3.5 border-b border-white/[0.08] bg-[#12151C]/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+      {/* ================= HEADER SUPERIOR DISCRETO (ÚNICO) ================= */}
+      <header className="px-6 py-3 border-b border-white/[0.08] bg-[#12151C]/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-zinc-400 text-sm">
             ⚙️
@@ -175,23 +120,32 @@ export const AgentCommandCenter: React.FC = () => {
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
                 v1.2
               </span>
-              {session && renderStatusBadge(session.status)}
+              {session ? (
+                renderStatusBadge(session.status)
+              ) : (
+                <div className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
+                  Pronto
+                </div>
+              )}
             </div>
-            <p className="text-xs text-zinc-400 max-w-xl truncate mt-0.5 font-normal">
-              {session ? session.goal : "Aguardando definição de objetivo."}
-            </p>
+            {session && (
+              <p className="text-xs text-zinc-400 max-w-xl truncate mt-0.5 font-normal">
+                {session.goal}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Master Controls */}
+        {/* Master Controls & Utilitários */}
         <div className="flex items-center gap-2">
-          {session ? (
+          {session && (
             <>
               {session.status === "running" && (
                 <button
                   type="button"
                   onClick={pauseAgent}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition cursor-pointer"
                 >
                   <Pause className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Pausar</span>
@@ -202,7 +156,7 @@ export const AgentCommandCenter: React.FC = () => {
                 <button
                   type="button"
                   onClick={resumeAgent}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-100 hover:bg-white text-zinc-950 transition cursor-pointer shadow-sm"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-100 hover:bg-white text-zinc-950 transition cursor-pointer shadow-sm"
                 >
                   <Play className="w-3.5 h-3.5" />
                   <span>Retomar</span>
@@ -213,7 +167,7 @@ export const AgentCommandCenter: React.FC = () => {
                 <button
                   type="button"
                   onClick={cancelAgent}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-900/40 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-900/40 transition cursor-pointer"
                 >
                   <span>Cancelar</span>
                 </button>
@@ -222,874 +176,340 @@ export const AgentCommandCenter: React.FC = () => {
               <button
                 type="button"
                 onClick={clearSession}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
               >
                 <span>Nova Missão</span>
               </button>
             </>
-          ) : (
-            <div className="text-xs text-zinc-500 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
-              Runtime local pronto
-            </div>
           )}
-        </div>
-      </header>
 
-      {/* ================= Sub-Navegação (Tabs Operacionais) ================= */}
-      <div className="px-6 border-b border-white/[0.08] bg-[#12151C]/40 flex items-center justify-between text-xs">
-        <nav className="flex space-x-1">
+          {/* Botões Utilitários (Não Poluem as Abas Principais) */}
           <button
-            onClick={() => setActiveTab("workspace")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "workspace"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
+            type="button"
+            onClick={() => setShowProcessesModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] border border-white/[0.06] transition cursor-pointer"
+            title="Telemetria de Processos do SO"
           >
-            <LayoutDashboard className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Workspace</span>
-            {session && ((session.artifacts?.length || 0) > 0 || (session.changes?.length || 0) > 0) && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-            )}
+            <Cpu className="w-3.5 h-3.5 text-zinc-500" />
+            <span className="hidden sm:inline">Processos</span>
           </button>
 
           <button
-            onClick={() => setActiveTab("tasks")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
-              activeTab === "tasks"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
+            type="button"
+            onClick={() => setShowHistoryModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] border border-white/[0.06] transition cursor-pointer"
+            title="Histórico de Sessões do Agente"
           >
-            <span>Linha do Tempo</span>
-            {session && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.06] text-zinc-400 font-mono">
-                {session.tasks.filter((t) => t.status === "success").length}/{session.tasks.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("permissions")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 relative ${
-              activeTab === "permissions"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Permissões</span>
-            {pendingPermissions.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5" />
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("evidence")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
-              activeTab === "evidence"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <FileCheck className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Evidências</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("logs")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
-              activeTab === "logs"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Console</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("processes")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
-              activeTab === "processes"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Processos</span>
-            {processes.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.06] text-zinc-400 font-mono">
-                {processes.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
-              activeTab === "history"
-                ? "border-zinc-300 text-zinc-100"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Histórico</span>
+            <HistoryIcon className="w-3.5 h-3.5 text-zinc-500" />
+            <span className="hidden sm:inline">Histórico</span>
             {history.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.06] text-zinc-400 font-mono">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.06] text-zinc-400">
                 {history.length}
               </span>
             )}
           </button>
-        </nav>
+        </div>
+      </header>
 
-        {session && (
-          <div className="text-[11px] text-zinc-500 font-mono">
-            {session.progress}% concluído
-          </div>
-        )}
-      </div>
-
-      {/* ================= Conteúdo Principal ================= */}
-      <main className={`flex-1 ${session && activeTab === "workspace" ? "p-0 overflow-hidden" : "overflow-y-auto p-6"}`}>
-        {/* Caso não haja sessão ativa: Cockpit do Ambiente & Inicializador de Missão */}
-        {!session && (
-          <div className="max-w-4xl mx-auto space-y-6 py-2">
-            {/* 1. Header do Cockpit do Ambiente */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/[0.08]">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-base font-semibold text-zinc-100 tracking-tight">
-                    Cockpit do Agente Autônomo
-                  </h1>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Ambiente Local Ativo
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-1">
-                  Execução autônoma supervisionada no sistema operacional local com grafo de tarefas (DAG) e verificação multi-modal.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
-                <span className="px-2 py-1 rounded bg-[#12151C] border border-white/[0.08]">
-                  Windows x64
-                </span>
-                <span className="px-2 py-1 rounded bg-[#12151C] border border-white/[0.08]">
-                  Zero-Trust
-                </span>
-              </div>
-            </div>
-
-            {/* 2. Grid de Diagnóstico do Ambiente do Computador (3 Cards #12151C) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              {/* Card 1: Workspace & Disco */}
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-500 text-xs flex items-center gap-1.5 font-medium">
-                    <Folder className="w-3.5 h-3.5 text-zinc-400" />
-                    Espaço de Trabalho
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Leitura & Escrita</span>
-                </div>
+      {/* ================= CORPO PRINCIPAL ================= */}
+      <main className="flex-1 overflow-hidden relative">
+        {session ? (
+          /* Se houver sessão, renderiza o AgentWorkspace com sua BARRA ÚNICA DE 4 SEÇÕES */
+          <AgentWorkspace
+            session={session}
+            logs={logs}
+            permissions={permissions}
+            pendingPermissions={pendingPermissions}
+            onReviewChange={resolveChangeReview}
+            onResolvePermission={(reqId, decision) => resolvePermission(reqId, decision)}
+            onRetryTask={retryTask}
+          />
+        ) : (
+          /* Se não houver sessão ativa, renderiza o Cockpit de Partida */
+          <div className="h-full overflow-y-auto p-6 max-w-4xl mx-auto space-y-6">
+            <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-5 h-5 text-indigo-400" />
                 <div>
-                  <div className="text-xs font-semibold text-zinc-200">assistente</div>
-                  <div className="text-[10px] text-zinc-500 font-mono truncate mt-0.5" title="c:\Users\lucas\OneDrive\Documentos\assistente">
-                    c:\Users\lucas\OneDrive\Documentos\assistente
-                  </div>
-                </div>
-                <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-zinc-400 flex items-center justify-between font-mono">
-                  <span>Acesso ao Disco Local:</span>
-                  <span className="text-emerald-400">Habilitado</span>
-                </div>
-              </div>
-
-              {/* Card 2: Ferramentas do SO */}
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-500 text-xs flex items-center gap-1.5 font-medium">
-                    <Terminal className="w-3.5 h-3.5 text-zinc-400" />
-                    Drivers de Execução
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">Win32 Native</span>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-zinc-200">PowerShell & Shell Local</div>
-                  <div className="text-[10px] text-zinc-500 font-mono truncate mt-0.5">
-                    Arquivos, Pastas, Processos, Janelas
-                  </div>
-                </div>
-                <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-zinc-400 flex items-center justify-between font-mono">
-                  <span>Ferramentas Prontas:</span>
-                  <span className="text-zinc-200">9 Ferramentas</span>
-                </div>
-              </div>
-
-              {/* Card 3: Verifier & Sandbox */}
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-500 text-xs flex items-center gap-1.5 font-medium">
-                    <Shield className="w-3.5 h-3.5 text-zinc-400" />
-                    Motor de Verificação
-                  </span>
-                  <span className="text-[10px] text-amber-400 font-mono">Zero-Trust</span>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-zinc-200">Auditoria & Evidências</div>
-                  <div className="text-[10px] text-zinc-500 font-mono truncate mt-0.5">
-                    Inspeção Multi-Modal pós-tarefa
-                  </div>
-                </div>
-                <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-zinc-400 flex items-center justify-between font-mono">
-                  <span>Permissões Pendentes:</span>
-                  <span className={pendingPermissions.length > 0 ? "text-amber-400 font-bold" : "text-zinc-400"}>
-                    {pendingPermissions.length}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Card Principal de Início de Missão */}
-            <div className="bg-[#12151C] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-zinc-200">
-                  <Sparkles className="w-4 h-4 text-zinc-300" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-semibold text-zinc-100">Definir Novo Objetivo do Agente</h2>
+                  <h2 className="text-sm font-semibold text-zinc-100 font-mono uppercase tracking-wider">
+                    Iniciar Missão Autônoma
+                  </h2>
                   <p className="text-xs text-zinc-400 mt-0.5">
-                    O Charlie analisará o objetivo, construirá um grafo de tarefas e executará ações no seu computador com validação passo a passo.
+                    O Charlie decompõe objetivos complexos em um DAG de tarefas verificáveis no seu computador.
                   </p>
                 </div>
               </div>
 
               <form onSubmit={handleStartGoal} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                    Instrução ou Objetivo de Execução
+                  <label className="text-[11px] font-mono uppercase text-zinc-400 block mb-1.5">
+                    Objetivo da Missão
                   </label>
                   <textarea
                     value={goalInput}
                     onChange={(e) => setGoalInput(e.target.value)}
-                    placeholder="Descreva o que o agente deve fazer (ex: Criar pasta Teste no Desktop e criar notas.txt com Olá Mundo...)"
+                    placeholder="Ex: Analisar completamente meu PC e gerar um relatório técnico com hardware, processos e espaço..."
                     rows={3}
-                    className="w-full px-3.5 py-2.5 bg-[#0C0D12] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition resize-none font-mono"
+                    className="w-full bg-[#090A0F] border border-white/[0.08] rounded-lg p-3 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-white/20"
                   />
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Projeto / Contexto de Execução
-                    </label>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Folder className="w-3.5 h-3.5 text-zinc-500" />
                     <input
                       type="text"
                       value={projectInput}
                       onChange={(e) => setProjectInput(e.target.value)}
-                      placeholder="Charlie"
-                      className="w-full px-3 py-2 bg-[#0C0D12] border border-white/[0.08] rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition"
+                      placeholder="Projeto / Pasta"
+                      className="bg-[#090A0F] border border-white/[0.08] rounded-lg px-2.5 py-1 text-xs text-zinc-300 placeholder-zinc-500 focus:outline-none"
                     />
-                  </div>
-                </div>
-
-                {/* Sugestões Práticas de Ações no Ambiente */}
-                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400">
-                    <span className="text-zinc-500">Sugestões de teste:</span>
-                    <button
-                      type="button"
-                      onClick={() => setGoalInput("Charlie, analise completamente meu PC e gere o relatório system-analysis.md")}
-                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
-                    >
-                      🖥️ Analisar PC completo
-                    </button>
-                    <span>•</span>
-                    <button
-                      type="button"
-                      onClick={() => setGoalInput("Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo")}
-                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
-                    >
-                      📁 Criar pasta & arquivo
-                    </button>
-                    <span>•</span>
-                    <button
-                      type="button"
-                      onClick={() => setGoalInput("Inspecionar processos ativos do Windows e uso de recursos de CPU")}
-                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
-                    >
-                      ⚡ Inspecionar processos
-                    </button>
-                    <span>•</span>
-                    <button
-                      type="button"
-                      onClick={() => setGoalInput("Executar verificação de status do Git no repositório")}
-                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
-                    >
-                      💻 Verificar Git
-                    </button>
                   </div>
 
                   <button
                     type="submit"
                     disabled={!goalInput.trim()}
-                    className="px-4 py-2 rounded-lg font-medium text-xs bg-zinc-100 hover:bg-white disabled:opacity-40 disabled:hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
+                    className="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-500 hover:bg-indigo-400 text-white transition disabled:opacity-40 cursor-pointer shadow-sm flex items-center gap-1.5"
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" /> Iniciar Missão
+                    <span>Lançar Missão</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </form>
-            </div>
 
-            {/* 4. Missões Recentes do Histórico (se houver) */}
-            {history.length > 0 && (
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider font-mono">
-                    Missões Anteriores Executadas no Ambiente
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("history")}
-                    className="text-xs text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1 cursor-pointer"
-                  >
-                    Ver todas ({history.length}) <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  {history.slice(0, 4).map((h) => (
-                    <div
-                      key={h.id}
-                      onClick={() => loadSession(h)}
-                      className="bg-[#0C0D12] border border-white/[0.06] hover:border-white/[0.12] rounded-lg p-3 transition cursor-pointer flex items-center justify-between group"
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        <div className="text-xs font-medium text-zinc-200 truncate group-hover:text-white transition">
-                          {h.goal}
-                        </div>
-                        <div className="text-[10px] text-zinc-500 font-mono mt-1 flex items-center gap-2">
-                          <span>{h.progress}% concluído</span>
-                          <span>•</span>
-                          <span>{h.tasks ? h.tasks.length : 0} tarefas</span>
-                        </div>
-                      </div>
-                      <div className="shrink-0">
-                        {h.status === "completed" ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        ) : h.status === "failed" ? (
-                          <AlertCircle className="w-4 h-4 text-rose-400" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-zinc-500" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= TAB 1: WORKSPACE (CHARLIE AGENT WORKSPACE 1.0) ================= */}
-        {session && activeTab === "workspace" && (
-          <div className="h-full flex-1 overflow-hidden">
-            <AgentWorkspace
-              session={session}
-              onReviewChange={resolveChangeReview}
-              onResolvePermission={(reqId) => resolvePermission(reqId, "allow_for_task")}
-            />
-          </div>
-        )}
-
-        {/* ================= TAB 2: TASK GRAPH (DAG COMPLETO COM ACCORDION) ================= */}
-        {session && activeTab === "tasks" && (
-          <div className="space-y-4 max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-200">Grafo de Tarefas e Dependências</h2>
-                <span className="text-xs text-zinc-500">{session.tasks.length} etapas no plano operacional</span>
-              </div>
-            </div>
-
-            {/* Vertical Timeline com Accordion Interativo */}
-            <div className="relative pl-7 space-y-4 before:absolute before:left-3 before:top-3 before:bottom-3 before:w-[1px] before:bg-white/[0.08]">
-              {session.tasks.map((task) => {
-                const isExpanded = !!expandedTasks[task.id];
-                return (
-                  <div key={task.id} className="relative">
-                    {/* Marcador na linha */}
-                    <div className="absolute -left-7 mt-3">
-                      {task.status === "success" ? (
-                        <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-                          <CheckCircle2 className="w-3 h-3" />
-                        </div>
-                      ) : task.status === "running" ? (
-                        <div className="w-5 h-5 rounded-full bg-slate-400/20 border border-slate-400 text-slate-300 flex items-center justify-center animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                        </div>
-                      ) : task.status === "failure" ? (
-                        <div className="w-5 h-5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
-                          <AlertCircle className="w-3 h-3" />
-                        </div>
-                      ) : (
-                        <div className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 flex items-center justify-center text-[10px] font-mono">
-                          •
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Card Accordion */}
-                    <div className="bg-[#12151C] border border-white/[0.08] rounded-xl overflow-hidden transition-all">
-                      <div
-                        onClick={() => toggleTaskExpand(task.id)}
-                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <button className="text-zinc-500 hover:text-zinc-300 transition">
-                            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-medium text-zinc-200 truncate">{task.title}</h4>
-                            <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
-                              {task.tool || "etapa lógica"} {task.dependencies.length > 0 && `• depende de: ${task.dependencies.join(", ")}`}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs">
-                          {task.evidence?.passed && (
-                            <span className="text-[11px] text-zinc-500 font-normal">verificado</span>
-                          )}
-                          {task.attempts > 1 && (
-                            <span className="text-[10px] font-mono text-zinc-500">
-                              tentativa {task.attempts}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Accordion Expandido com Saída e Evidências */}
-                      {isExpanded && (
-                        <div className="p-4 border-t border-white/[0.06] bg-[#0C0D12] space-y-3 text-xs">
-                          {task.description && (
-                            <p className="text-zinc-400 text-xs">{task.description}</p>
-                          )}
-
-                          {task.args && (
-                            <div>
-                              <span className="text-[11px] font-mono text-zinc-500 block mb-1">Parâmetros:</span>
-                              <pre className="p-2.5 bg-[#08090C] border border-white/[0.06] rounded-lg font-mono text-[11px] text-zinc-300 overflow-x-auto">
-                                {JSON.stringify(task.args, null, 2)}
-                              </pre>
-                            </div>
-                          )}
-
-                          {task.evidence && (
-                            <div>
-                              <span className="text-[11px] font-mono text-zinc-500 block mb-1">Evidência Comprovada:</span>
-                              <div className="p-2.5 bg-[#08090C] border border-emerald-950/40 rounded-lg text-emerald-400 font-mono text-[11px]">
-                                {task.evidence.summary}
-                              </div>
-                            </div>
-                          )}
-
-                          {task.error && (
-                            <div className="p-2.5 bg-rose-950/20 border border-rose-900/30 rounded-lg text-rose-300 font-mono text-[11px]">
-                              {task.error}
-                            </div>
-                          )}
-
-                          {task.status === "failure" && (
-                            <button
-                              onClick={() => retryTask(task.id)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition cursor-pointer"
-                            >
-                              Tentar Novamente
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ================= TAB 3: PERMISSIONS ================= */}
-        {activeTab === "permissions" && (
-          <div className="max-w-4xl mx-auto space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-200">Controle de Acesso e Permissões</h2>
-                <span className="text-xs text-zinc-500">Supervisão de segurança do Local Runtime</span>
-              </div>
-            </div>
-
-            {permissions.length === 0 ? (
-              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
-                <Shield className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
-                <p className="text-xs font-medium text-zinc-400">Nenhuma solicitação de permissão pendente.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {permissions.map((perm) => (
-                  <div
-                    key={perm.id}
-                    className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs font-mono text-zinc-200 bg-[#0C0D12] px-2 py-0.5 rounded border border-white/[0.06]">
-                            {perm.tool}
-                          </code>
-                          {renderRiskBadge(perm.risk)}
-                        </div>
-                        <p className="text-xs text-zinc-400 mt-1">{perm.reason}</p>
-                      </div>
-
-                      <span className="text-[11px] font-mono text-zinc-500">
-                        {new Date(perm.requestedAt).toLocaleTimeString("pt-BR")}
-                      </span>
-                    </div>
-
-                    {perm.status === "pending" ? (
-                      <div className="flex flex-wrap gap-2 pt-1 border-t border-white/[0.06]">
-                        <button
-                          onClick={() => resolvePermission(perm.id, "allow_once")}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-200 hover:bg-white text-zinc-950 transition cursor-pointer"
-                        >
-                          Permitir Uma Vez
-                        </button>
-                        <button
-                          onClick={() => resolvePermission(perm.id, "trust_in_project")}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition cursor-pointer"
-                        >
-                          Confiar no Projeto
-                        </button>
-                        <button
-                          onClick={() => resolvePermission(perm.id, "deny")}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 transition cursor-pointer"
-                        >
-                          Negar
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-[11px] text-zinc-500 font-mono">
-                        Decisão: {perm.status}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= TAB 4: EVIDENCE ================= */}
-        {activeTab === "evidence" && (
-          <div className="max-w-4xl mx-auto space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-200">Evidências do Verifier</h2>
-                <span className="text-xs text-zinc-500">Comprovações tangíveis coletadas em disco e comandos</span>
-              </div>
-            </div>
-
-            {(!session || session.tasks.filter((t) => t.evidence).length === 0) ? (
-              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
-                <FileCheck className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
-                <p className="text-xs font-medium text-zinc-400">Nenhuma evidência registrada ainda.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {session.tasks
-                  .filter((t) => t.evidence)
-                  .map((task) => (
-                    <div
-                      key={task.id}
-                      className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-2 text-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-zinc-200">{task.title}</span>
-                        <span className="text-[11px] font-mono text-zinc-500">
-                          {task.evidence?.verifiedAt ? new Date(task.evidence.verifiedAt).toLocaleTimeString("pt-BR") : ""}
-                        </span>
-                      </div>
-                      <p className="text-emerald-400 font-mono text-[11px] bg-[#0C0D12] p-2.5 rounded-lg border border-white/[0.06]">
-                        {task.evidence?.summary}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= TAB 5: LOGS ================= */}
-        {activeTab === "logs" && (
-          <div className="max-w-4xl mx-auto space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5">
-                {(["ALL", "SYSTEM", "AGENT", "TOOL", "PERMISSION", "VERIFIER", "ERROR"] as const).map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setLogFilter(cat)}
-                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer ${
-                      logFilter === cat
-                        ? "bg-zinc-200 text-zinc-950 font-semibold"
-                        : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.08]"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-zinc-500" />
-                <input
-                  type="text"
-                  value={logSearch}
-                  onChange={(e) => setLogSearch(e.target.value)}
-                  placeholder="Pesquisar nos registros..."
-                  className="pl-8 pr-3 py-1.5 bg-[#0C0D12] border border-white/[0.08] rounded-lg text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-                />
-              </div>
-            </div>
-
-            {/* Fundo de terminal limpo em tom carvão */}
-            <div className="p-4 bg-[#0B0C10] border border-white/[0.06] rounded-xl font-mono text-[11px] space-y-1.5 max-h-[500px] overflow-y-auto">
-              {filteredLogs.length === 0 ? (
-                <div className="text-zinc-600">Nenhum registro para exibir.</div>
-              ) : (
-                filteredLogs.map((log) => (
-                  <div key={log.id} className="leading-relaxed flex items-start gap-2">
-                    <span className="text-zinc-600 shrink-0 select-none">[{log.timestamp}]</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded text-[9px] shrink-0 font-bold ${
-                        log.category === "ERROR"
-                          ? "bg-rose-950/60 text-rose-400"
-                          : log.category === "TOOL"
-                          ? "bg-slate-900 text-slate-300"
-                          : log.category === "VERIFIER"
-                          ? "bg-emerald-950/60 text-emerald-400"
-                          : "bg-zinc-800 text-zinc-400"
-                      }`}
-                    >
-                      {log.category}
-                    </span>
-                    <span className="text-zinc-300 whitespace-pre-wrap break-all">{log.message}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ================= TAB 6: PROCESSES ================= */}
-        {activeTab === "processes" && (
-          <div className="max-w-4xl mx-auto space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-200">Processos Ativos do Sistema</h2>
-                <span className="text-xs text-zinc-500">Telemetria de processos do Windows em tempo real</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => refreshProcesses()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
-              >
-                <RotateCw className="w-3.5 h-3.5" /> Atualizar
-              </button>
-            </div>
-
-            {processes.length === 0 ? (
-              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
-                <Cpu className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
-                <p className="text-xs font-medium text-zinc-400">Nenhum processo capturado.</p>
-              </div>
-            ) : (
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0C0D12] text-zinc-500 uppercase text-[10px] font-mono border-b border-white/[0.06]">
-                    <tr>
-                      <th className="py-2.5 px-4 font-normal">PID</th>
-                      <th className="py-2.5 px-4 font-normal">Processo</th>
-                      <th className="py-2.5 px-4 font-normal">CPU</th>
-                      <th className="py-2.5 px-4 font-normal">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.04] font-mono">
-                    {processes.map((proc) => (
-                      <tr key={proc.pid} className="hover:bg-white/[0.02]">
-                        <td className="py-2 px-4 text-zinc-500">{proc.pid}</td>
-                        <td className="py-2 px-4 font-sans text-zinc-200">{proc.name}</td>
-                        <td className="py-2 px-4 text-zinc-400">{proc.cpu}%</td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] text-zinc-500">
-                            {proc.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= TAB 7: HISTORY ================= */}
-        {activeTab === "history" && (
-          <div className="max-w-4xl mx-auto space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-medium text-zinc-200">Histórico de Missões do Agente</h2>
-                <span className="text-xs text-zinc-500">Registro persistente em disco de todas as sessões executadas</span>
-              </div>
-              {history.length > 0 && (
+              {/* Botão de Sugestão Rápida */}
+              <div className="pt-2 border-t border-white/[0.06]">
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm("Deseja realmente limpar todo o histórico?")) {
-                      clearHistory();
-                    }
+                    startGoal(
+                      "Charlie, analise completamente meu PC e crie um relatório com arquitetura, processos e armazenamento",
+                      "Charlie-Diagnostics"
+                    );
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs text-zinc-500 hover:text-rose-400 transition cursor-pointer"
+                  className="w-full text-left p-3 rounded-lg bg-[#090A0F]/60 border border-white/[0.04] hover:border-white/[0.12] transition group cursor-pointer flex items-center justify-between"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Limpar
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-sm">🔍</span>
+                    <div>
+                      <div className="text-xs font-medium text-zinc-200 group-hover:text-white transition">
+                        Charlie, analise completamente meu PC...
+                      </div>
+                      <div className="text-[11px] text-zinc-500">
+                        Decompõe varredura de hardware, processos e armazenamento gerando relatório e artefatos.
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs text-indigo-400 font-mono group-hover:translate-x-0.5 transition">
+                    Executar →
+                  </span>
                 </button>
-              )}
-            </div>
-
-            {/* Cartões de Métricas Agregadas */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Total de Missões</span>
-                <p className="text-lg font-medium text-zinc-100 mt-0.5">{historyMetrics.totalSessions}</p>
-              </div>
-
-              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Taxa de Sucesso</span>
-                <p className="text-lg font-medium text-zinc-100 mt-0.5">{historyMetrics.successRate}%</p>
-              </div>
-
-              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Concluídas</span>
-                <p className="text-lg font-medium text-zinc-100 mt-0.5">{historyMetrics.completedSessions}</p>
-              </div>
-
-              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Tarefas Validadas</span>
-                <p className="text-lg font-medium text-zinc-100 mt-0.5 font-mono">
-                  {historyMetrics.completedTasks} / {historyMetrics.totalTasks}
-                </p>
               </div>
             </div>
 
-            {/* Filtros */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("ALL")}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
-                  historyFilter === "ALL"
-                    ? "bg-zinc-200 text-zinc-950 font-semibold"
-                    : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                Todas ({history.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("completed")}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
-                  historyFilter === "completed"
-                    ? "bg-zinc-200 text-zinc-950 font-semibold"
-                    : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                Concluídas ({history.filter((s) => s.status === "completed").length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("failed")}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
-                  historyFilter === "failed"
-                    ? "bg-zinc-200 text-zinc-950 font-semibold"
-                    : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                Falhas ({history.filter((s) => s.status === "failed").length})
-              </button>
-            </div>
-
-            {/* Lista de Sessões */}
-            {history.filter((s) => historyFilter === "ALL" || s.status === historyFilter).length === 0 ? (
-              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
-                <Clock className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
-                <p className="text-xs font-medium text-zinc-400">Nenhuma missão no histórico.</p>
-              </div>
-            ) : (
+            {/* Histórico Recente de Missões */}
+            {history.length > 0 && (
               <div className="space-y-3">
-                {history
-                  .filter((s) => historyFilter === "ALL" || s.status === historyFilter)
-                  .map((item) => (
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span className="font-mono uppercase text-[11px]">Sessões Anteriores</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowHistoryModal(true)}
+                    className="text-zinc-500 hover:text-zinc-300 transition"
+                  >
+                    Ver todas ({history.length})
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {history.slice(0, 3).map((item) => (
                     <div
                       key={item.id}
-                      className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-2.5"
+                      onClick={() => loadSession(item)}
+                      className="p-3 bg-[#12151C] border border-white/[0.06] hover:border-white/[0.12] rounded-xl flex items-center justify-between cursor-pointer transition"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-xs text-zinc-100">{item.goal}</span>
-                            {renderStatusBadge(item.status)}
-                          </div>
-                          <div className="text-[11px] text-zinc-500 flex items-center gap-2 font-mono">
-                            <span>{new Date(item.startedAt).toLocaleString("pt-BR")}</span>
-                            <span>•</span>
-                            <span>{item.tasks?.filter((t) => t.status === "success").length || 0} de {item.tasks?.length || 0} tarefas</span>
-                          </div>
+                      <div className="min-w-0 pr-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-zinc-200 truncate">{item.goal}</span>
+                          {renderStatusBadge(item.status)}
                         </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              loadSession(item);
-                              setActiveTab("workspace");
-                            }}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 transition cursor-pointer"
-                          >
-                            <FolderOpen className="w-3.5 h-3.5" /> Carregar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteHistorySession(item.id)}
-                            className="p-1 rounded text-zinc-500 hover:text-rose-400 transition cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="text-[11px] text-zinc-500 font-mono mt-0.5 flex items-center gap-2">
+                          <span>{new Date(item.startedAt).toLocaleString("pt-BR")}</span>
+                          <span>•</span>
+                          <span>{item.tasks?.filter((t) => t.status === "success").length || 0} tarefas concluídas</span>
                         </div>
                       </div>
 
-                      {item.summary && (
-                        <p className="text-xs text-zinc-400 bg-[#0C0D12] p-2 rounded border border-white/[0.04]">
-                          {item.summary}
-                        </p>
-                      )}
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 rounded bg-white/[0.04] text-xs font-mono text-zinc-300 flex items-center gap-1 shrink-0"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span>Restaurar</span>
+                      </button>
                     </div>
                   ))}
+                </div>
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* ================= MODAL DE PROCESSOS DO SO ================= */}
+      {showProcessesModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#12151C] border border-white/[0.12] rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-zinc-400" />
+                <h3 className="text-xs font-semibold text-zinc-200 uppercase font-mono tracking-wider">
+                  Processos Ativos do Sistema ({processes.length})
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => refreshProcesses()}
+                  className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition"
+                  title="Atualizar"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowProcessesModal(false)}
+                  className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-[#0C0D12] text-zinc-500 uppercase text-[10px] border-b border-white/[0.06]">
+                  <tr>
+                    <th className="py-2 px-3 font-normal">PID</th>
+                    <th className="py-2 px-3 font-normal font-sans">Processo</th>
+                    <th className="py-2 px-3 font-normal">CPU</th>
+                    <th className="py-2 px-3 font-normal">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {processes.slice(0, 50).map((proc) => (
+                    <tr key={proc.pid} className="hover:bg-white/[0.02]">
+                      <td className="py-1.5 px-3 text-zinc-500">{proc.pid}</td>
+                      <td className="py-1.5 px-3 font-sans text-zinc-200">{proc.name}</td>
+                      <td className="py-1.5 px-3 text-zinc-400">{proc.cpu}%</td>
+                      <td className="py-1.5 px-3 text-zinc-500 text-[10px]">{proc.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL DE HISTÓRICO DE SESSÕES ================= */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#12151C] border border-white/[0.12] rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-white/[0.08] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HistoryIcon className="w-4 h-4 text-zinc-400" />
+                <h3 className="text-xs font-semibold text-zinc-200 uppercase font-mono tracking-wider">
+                  Histórico de Missões do Charlie ({history.length})
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Deseja realmente limpar todo o histórico?")) {
+                        clearHistory();
+                      }
+                    }}
+                    className="text-xs text-zinc-500 hover:text-rose-400 transition flex items-center gap-1 mr-2"
+                  >
+                    <Trash2 className="w-3 h-3" /> Limpar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowHistoryModal(false)}
+                  className="p-1.5 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Métricas Agregadas */}
+            <div className="grid grid-cols-3 gap-2 p-4 border-b border-white/[0.06] bg-[#0C0D12]">
+              <div className="p-2 rounded bg-white/[0.02]">
+                <span className="text-[10px] text-zinc-500 font-mono uppercase block">Total</span>
+                <span className="text-sm font-bold text-zinc-200 font-mono">{historyMetrics.totalSessions}</span>
+              </div>
+              <div className="p-2 rounded bg-white/[0.02]">
+                <span className="text-[10px] text-zinc-500 font-mono uppercase block">Sucesso</span>
+                <span className="text-sm font-bold text-emerald-400 font-mono">{historyMetrics.successRate}%</span>
+              </div>
+              <div className="p-2 rounded bg-white/[0.02]">
+                <span className="text-[10px] text-zinc-500 font-mono uppercase block">Tarefas Validadas</span>
+                <span className="text-sm font-bold text-zinc-200 font-mono">{historyMetrics.completedTasks}/{historyMetrics.totalTasks}</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+              {history.length === 0 ? (
+                <div className="text-center py-10 text-zinc-500 text-xs">
+                  Nenhuma sessão registrada no histórico.
+                </div>
+              ) : (
+                history.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3 bg-[#090A0F] border border-white/[0.06] rounded-lg flex items-center justify-between hover:border-white/[0.12] transition"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-zinc-200 truncate">{item.goal}</span>
+                        {renderStatusBadge(item.status)}
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                        {new Date(item.startedAt).toLocaleString("pt-BR")} • {item.tasks?.length || 0} tarefas
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          loadSession(item);
+                          setShowHistoryModal(false);
+                        }}
+                        className="px-2 py-1 rounded bg-white/[0.06] hover:bg-white/[0.1] text-xs font-mono text-zinc-300 transition"
+                      >
+                        Carregar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteHistorySession(item.id)}
+                        className="p-1 text-zinc-500 hover:text-rose-400 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
