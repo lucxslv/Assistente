@@ -17,6 +17,8 @@ def build_system_prompt(
     user_id: str = "default",
     thread_id: Optional[str] = None,
     user_text: Optional[str] = None,
+    user_facts: Optional[list[str]] = None,
+    user_preferences: Optional[dict[str, str]] = None,
 ) -> str:
     """Constrói o system prompt dinâmico baseado no perfil, modelo do usuário, contexto e memórias."""
     
@@ -26,6 +28,20 @@ def build_system_prompt(
     working_memory = working_memory_store.get(thread_id=thread_id)
     adaptation_section = user_model.format_adaptation_prompt(core=charlie_core)
     wm_section = ("\n\n" + working_memory.format_for_prompt()) if working_memory.format_for_prompt() else ""
+
+    # Formatação padronizada do bloco [MEMÓRIA DO USUÁRIO] com isolamento estrito
+    facts_list = user_facts if user_facts is not None else []
+    prefs_dict = user_preferences if user_preferences is not None else {}
+
+    if facts_list:
+        user_facts_formatted = "\n".join(f"  * {f}" for f in facts_list)
+    else:
+        user_facts_formatted = "  * (Nenhum fato duradouro registrado ainda)"
+
+    if prefs_dict:
+        user_prefs_formatted = "\n".join(f"  * {k}: {v}" for k, v in prefs_dict.items())
+    else:
+        user_prefs_formatted = "  * (Nenhuma preferência declarada ainda)"
 
     situational_note = ""
     if user_text:
@@ -285,11 +301,18 @@ O princípio orientador é:
 - **Transparência de Ação**: Quando você inspecionar pastas, ler arquivos ou executar ações no computador, faça isso de forma integrada à conversa. O usuário acompanha as etapas no painel lateral de trabalho enquanto dialoga com você no chat.
 - **Sentimento transmitido**: O usuário deve sentir: *"Estou conversando com uma inteligência autônoma que pode agir ao meu lado"*, e não *"Estou enviando tarefas para uma fila de comandos"*.
 
+## APRENDIZADO CONTÍNUO E MOTOR DE MEMÓRIA (MANDATÓRIO)
+
+Sempre que o usuário declarar preferências pessoais, detalhes sobre seu fluxo de trabalho, ferramentas que utiliza, projetos ou rotinas, invoque silenciosamente a ferramenta `save_user_memory` ou `save_user_preference` vinculada ao `user_id` autenticado.
+
+- **Preferências (`save_user_preference`):** Invoque quando o usuário explicitar preferências de comunicação ou ambiente de desenvolvimento (ex: `tom_de_voz: formal`, `sistema_operacional: Linux`, `estilo_respostas: direto`).
+- **Fatos e Projetos (`save_user_memory`):** Invoque quando o usuário relatar projetos em andamento, tecnologias adotadas, rotinas ou fatos pessoais duradouros.
+- **Naturalidade:** Execute essas ferramentas silenciosamente sem anunciar tecnicalidades. Mantenha a resposta calorosa, empática e focada na solicitação do usuário.
+
 ## REGRAS DE FERRAMENTAS
 
 - Você TEM permissão para usar as ferramentas fornecidas.
-- Quando usar ferramentas de mídia (tocar música, controlar volume etc.) ou memória (salvar fatos/preferências), aja silenciosamente ou responda com o mínimo de palavras possível.
-- Exemplos: "É pra já.", "Feito.", "Já salvei."
+- Quando usar ferramentas de mídia (tocar música, controlar volume etc.) ou memória (`save_user_memory`, `save_user_preference`), aja silenciosamente ou responda com naturalidade sem explicar a mecânica interna da ferramenta.
 - Não transforme uma execução de ferramenta em uma explicação longa.
 - Nunca invente que uma ferramenta foi executada quando ela não foi.
 
@@ -336,7 +359,13 @@ Charlie deve parecer uma pessoa com personalidade — não uma personalidade ten
 # CONTEXTO ATUAL DO SISTEMA
 {context}{wm_section}
 
-# MEMÓRIAS E CONHECIMENTO DO USUÁRIO
+# [MEMÓRIA DO USUÁRIO]
+- Fatos conhecidos:
+{user_facts_formatted}
+- Preferências:
+{user_prefs_formatted}
+
+# CONTEXTO SEMÂNTICO COMPLEMENTAR (RAG)
 {memory_summary}
 
 # FERRAMENTAS DISPONÍVEIS

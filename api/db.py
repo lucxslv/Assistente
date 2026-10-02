@@ -66,6 +66,13 @@ async def init_db_pool() -> Optional[asyncpg.Pool]:
             except Exception as schema_err:
                 logger.warning(f"Aviso ao inicializar audit_chat_logs: {schema_err}")
 
+            # Inicializa schema de persistência de chat e memórias de forma assíncrona
+            try:
+                from api.services.chat_persistence import ensure_chat_persistence_schema
+                await ensure_chat_persistence_schema(_pool)
+            except Exception as persist_err:
+                logger.warning(f"Aviso ao inicializar schema de persistência: {persist_err}")
+
         except Exception as e:
             _last_db_error = f"{type(e).__name__}: {str(e)}"
             logger.error(f"Falha ao conectar no Supabase: {e}")

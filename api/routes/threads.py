@@ -23,16 +23,30 @@ async def list_threads(user: dict = Depends(get_current_user)):
     if not pool:
         return []
 
-    u_uuid = uuid.UUID(user["id"])
+    u_uuid = None
+    try:
+        u_uuid = uuid.UUID(str(user["id"]))
+    except (ValueError, TypeError):
+        pass
     email = user.get("email")
+    u_id_str = str(user["id"])
+
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT id, name, "createdAt", "updatedAt"
-            FROM "Thread"
-            WHERE "deletedAt" IS NULL
-              AND ("userId" = $1 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $2))
-            ORDER BY "updatedAt" DESC
-        """, u_uuid, email)
+            SELECT COALESCE(t.id, cs.id) as id,
+                   COALESCE(t.name, cs.title) as name,
+                   COALESCE(t."createdAt", cs.created_at) as "createdAt",
+                   COALESCE(t."updatedAt", cs.updated_at) as "updatedAt"
+            FROM public.chat_sessions cs
+            FULL OUTER JOIN "Thread" t ON t.id = cs.id
+            WHERE (t."deletedAt" IS NULL OR t."deletedAt" IS NULL)
+              AND (
+                cs.user_id = $1 OR cs.user_id = $2
+                OR (t."userId" IS NOT NULL AND t."userId" = $3)
+                OR (t."userIdentifier" IS NOT NULL AND t."userIdentifier" = $2)
+              )
+            ORDER BY "updatedAt" DESC NULLS LAST
+        """, u_id_str, email, u_uuid)
 
         return [
             {
@@ -51,15 +65,17 @@ async def create_thread(data: ThreadCreate, user: dict = Depends(get_current_use
     pool = await get_or_init_db_pool()
     thread_id = str(uuid.uuid4())
     now = datetime.datetime.now(datetime.timezone.utc)
-    u_uuid = uuid.UUID(user["id"])
     email = user.get("email")
 
     if pool:
-        async with pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", "userId", "userIdentifier", metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-            """, uuid.UUID(thread_id), data.name, now, now, u_uuid, email, json.dumps({}))
+        from api.services.chat_persistence import ensure_session_record
+        await ensure_session_record(
+            pool=pool,
+            session_id=thread_id,
+            user_id=str(user["id"]),
+            user_email=email,
+            prompt=data.name,
+        )
 
     return {
         "id": thread_id,
@@ -83,17 +99,27 @@ async def delete_thread(thread_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
 
     email = user.get("email")
+    u_id_str = str(user["id"])
     async with pool.acquire() as conn:
         res = await conn.execute("""
             UPDATE "Thread"
             SET "deletedAt" = CURRENT_TIMESTAMP
             WHERE id = $1 AND ("userId" = $2 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3))
         """, t_uuid, u_uuid, email)
+
+        await conn.execute("""
+            DELETE FROM public.chat_sessions
+            WHERE id = $1 AND (user_id = $2 OR user_id = $3)
+        """, t_uuid, u_id_str, email)
+
         if res == "UPDATE 0":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversa não encontrada ou você não tem permissão para excluí-la.",
-            )
+            # Se não atualizou Thread, verifica se foi excluído em chat_sessions
+            sess_chk = await conn.fetchval("SELECT 1 FROM public.chat_sessions WHERE id = $1", t_uuid)
+            if sess_chk:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Você não tem permissão para excluir esta conversa.",
+                )
 
     return {"status": "deleted", "id": thread_id}
 
@@ -117,12 +143,20 @@ async def update_thread(thread_id: str, data: ThreadUpdate, user: dict = Depends
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
 
     email = user.get("email")
+    u_id_str = str(user["id"])
     async with pool.acquire() as conn:
         res = await conn.execute("""
             UPDATE "Thread"
             SET name = $1, "updatedAt" = CURRENT_TIMESTAMP
             WHERE id = $2 AND ("userId" = $3 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $4))
         """, data.name, t_uuid, u_uuid, email)
+
+        await conn.execute("""
+            UPDATE public.chat_sessions
+            SET title = $1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2 AND (user_id = $3 OR user_id = $4)
+        """, data.name, t_uuid, u_id_str, email)
+
         if res == "UPDATE 0":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

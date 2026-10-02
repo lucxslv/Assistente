@@ -247,9 +247,49 @@ class ToolRegistry:
             scope=ToolScope.DEVICE,
         )
         self.register(
+            name="save_user_memory",
+            handler=self._wrap_save_user_memory,
+            description="Salva um fato importante sobre o usuário (ex: projetos, fluxo de trabalho, ferramentas utilizadas, rotina ou dados pessoais). Use silenciosamente quando o usuário mencionar detalhes relevantes sobre si mesmo.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "fact": {
+                        "type": "string",
+                        "description": "Fato ou informação relevante a ser memorizada sobre o usuário.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Categoria do fato (ex: 'workflow', 'tools', 'projects', 'routine', 'personal', 'general').",
+                    },
+                },
+                "required": ["fact"],
+            },
+            scope=ToolScope.CLOUD,
+        )
+        self.register(
+            name="save_user_preference",
+            handler=self._wrap_save_user_preference,
+            description="Salva uma preferência duradoura do usuário (ex: tom_de_voz=formal, sistema_operacional=Linux, estilo_codigo=Python limpo, concisao=alta). Use silenciosamente quando o usuário declarar como prefere respostas ou seu ambiente de trabalho.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Chave da preferência (sem espaços, ex: 'tom_de_voz', 'estilo_respostas', 'sistema_operacional').",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Valor da preferência.",
+                    },
+                },
+                "required": ["key", "value"],
+            },
+            scope=ToolScope.CLOUD,
+        )
+        self.register(
             name="memorize_fact",
             handler=self._wrap_memorize_fact,
-            description="Salva um fato importante sobre o usuário (ex: 'O usuário tem um cachorro chamado Rex', 'O usuário trabalha com Python').",
+            description="Alias para save_user_memory: salva um fato importante sobre o usuário.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -260,11 +300,12 @@ class ToolRegistry:
                 },
                 "required": ["fact"],
             },
+            scope=ToolScope.CLOUD,
         )
         self.register(
             name="memorize_preference",
             handler=self._wrap_memorize_pref,
-            description="Salva uma preferência do usuário (ex: tema=escuro, musica_favorita=rock).",
+            description="Alias para save_user_preference: salva uma preferência rápida do usuário.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -279,6 +320,7 @@ class ToolRegistry:
                 },
                 "required": ["key", "value"],
             },
+            scope=ToolScope.CLOUD,
         )
         self.register(
             name="search_web",
@@ -562,20 +604,62 @@ class ToolRegistry:
             scope=ToolScope.DEVICE,
         )
 
-    def _wrap_memorize_fact(self, fact: str) -> str:
+    async def _wrap_save_user_memory(self, fact: str, category: str = "general") -> str:
+        clean_fact = (fact or "").strip()
+        if not clean_fact:
+            return "Erro: O fato a ser memorizado não pode ser vazio."
         try:
             from api.routes.auth import current_user_id_var
             uid = current_user_id_var.get()
         except Exception:
             uid = "default"
-        db.add_fact(fact, user_id=uid)
-        return f"Fato memorizado: {fact}"
 
-    def _wrap_memorize_pref(self, key: str, value: str) -> str:
+        try:
+            from api.db import get_or_init_db_pool
+            from api.services.chat_persistence import save_user_memory_entry
+            pool = await get_or_init_db_pool()
+            if pool:
+                await save_user_memory_entry(pool, user_id=uid, fact=clean_fact, category=category)
+        except Exception as e:
+            logger.warning(f"Erro ao salvar memória assíncrona: {e}")
+
+        try:
+            db.add_memory(clean_fact, category=category, user_id=uid)
+        except Exception as e:
+            logger.debug(f"Aviso sync db.add_memory: {e}")
+
+        return f"Fato memorizado com sucesso: {clean_fact}"
+
+    async def _wrap_save_user_preference(self, key: str, value: str) -> str:
+        clean_k = (key or "").strip().lower().replace(" ", "_")
+        clean_v = (value or "").strip()
+        if not clean_k or not clean_v:
+            return "Erro: Chave e valor da preferência são obrigatórios."
+
         try:
             from api.routes.auth import current_user_id_var
             uid = current_user_id_var.get()
         except Exception:
             uid = "default"
-        db.set_preference(key, value, user_id=uid)
-        return f"Preferência salva: {key} = {value}"
+
+        try:
+            from api.db import get_or_init_db_pool
+            from api.services.chat_persistence import save_user_preference_entry
+            pool = await get_or_init_db_pool()
+            if pool:
+                await save_user_preference_entry(pool, user_id=uid, key=clean_k, value=clean_v)
+        except Exception as e:
+            logger.warning(f"Erro ao salvar preferência assíncrona: {e}")
+
+        try:
+            db.set_preference(clean_k, clean_v, user_id=uid)
+        except Exception as e:
+            logger.debug(f"Aviso sync db.set_preference: {e}")
+
+        return f"Preferência salva com sucesso: {clean_k} = {clean_v}"
+
+    async def _wrap_memorize_fact(self, fact: str) -> str:
+        return await self._wrap_save_user_memory(fact=fact, category="general")
+
+    async def _wrap_memorize_pref(self, key: str, value: str) -> str:
+        return await self._wrap_save_user_preference(key=key, value=value)
