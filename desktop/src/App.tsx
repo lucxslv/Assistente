@@ -28,8 +28,12 @@ import {
   clearAuthSession,
 } from "./services/api";
 import { executeDeviceTool } from "./services/deviceExecutor";
+import { AgentCommandCenter } from "./components/AgentCommandCenter";
+import { useAgentRuntime, agentRuntimeStore } from "./services/agentRuntimeStore";
 
 export function App() {
+  const [activeView, setActiveView] = useState<"chat" | "agent">("chat");
+  const { session: agentSession } = useAgentRuntime();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -374,6 +378,18 @@ export function App() {
   const handleSendMessage = async (text: string, skipTts: boolean) => {
     if (!text.trim() || isLoading) return;
 
+    // Bridge Chat -> Agent Runtime (se o usuário iniciar um objetivo explícito)
+    const lower = text.trim().toLowerCase();
+    if (lower.startsWith("/agent ") || lower.startsWith("agente: ")) {
+      const goal = text.replace(/^(\/agent|agente:)\s*/i, "").trim();
+      if (goal) {
+        agentRuntimeStore.startGoal(goal, "Charlie");
+        showToast("🎯 Objetivo iniciado no Agent Command Center!");
+        setActiveView("agent");
+        return;
+      }
+    }
+
     // Adiciona otimisticamente a mensagem do usuário na tela
     const tempUserMsg: Message = {
       id: "temp-" + Date.now(),
@@ -409,6 +425,7 @@ export function App() {
               )
             );
           } else if (ev.type === "tool_start") {
+            agentRuntimeStore.addLog("TOOL", `Invocando ${ev.data.name}`, ev.data.args);
             // Executa ferramentas locais nativamente no Windows
             if (
               ev.data.scope === "device" ||
@@ -540,12 +557,18 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
-      {/* Barra Lateral com Histórico e Telemetria */}
+      {/* Barra Lateral com Histórico, Navegação e Telemetria */}
       <Sidebar
         threads={threads}
         activeThreadId={activeThreadId}
-        onSelectThread={(id) => setActiveThreadId(id)}
-        onNewThread={handleNewThread}
+        onSelectThread={(id) => {
+          setActiveThreadId(id);
+          setActiveView("chat");
+        }}
+        onNewThread={() => {
+          handleNewThread();
+          setActiveView("chat");
+        }}
         onDeleteThread={handleDeleteThread}
         onRenameThread={handleRenameThread}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -556,19 +579,29 @@ export function App() {
         isConnected={isConnected}
         systemStatus={systemStatus}
         localMetrics={localMetrics}
+        activeView={activeView}
+        onSelectView={setActiveView}
+        isAgentActive={
+          agentSession?.status === "running" ||
+          agentSession?.status === "waiting_permission"
+        }
       />
 
-      {/* Área Central de Conversa */}
+      {/* Área Central: Chat ou Agent Command Center */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <ChatArea
-          messages={messages}
-          isLoading={isLoading}
-          onSendMessage={handleSendMessage}
-          onRegenerate={handleRegenerate}
-          currentThreadName={activeThread?.name}
-          userName={currentUser?.name || "Lucas"}
-          onOpenShortcuts={() => setIsShortcutsOpen(true)}
-        />
+        {activeView === "chat" ? (
+          <ChatArea
+            messages={messages}
+            isLoading={isLoading}
+            onSendMessage={handleSendMessage}
+            onRegenerate={handleRegenerate}
+            currentThreadName={activeThread?.name}
+            userName={currentUser?.name || "Lucas"}
+            onOpenShortcuts={() => setIsShortcutsOpen(true)}
+          />
+        ) : (
+          <AgentCommandCenter />
+        )}
       </main>
 
       {/* Modal de Configurações */}

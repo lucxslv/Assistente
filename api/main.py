@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import close_db_pool, init_db_pool
-from api.routes import auth, chat, messages, settings, system, threads, tools
+from api.routes import auth, chat, messages, settings, system, threads, tools, agent
 
 logger = logging.getLogger("charlie.api")
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +57,7 @@ app.include_router(messages.router, prefix="/api")
 app.include_router(tools.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
+app.include_router(agent.router, prefix="/api")
 
 
 @app.get("/")
