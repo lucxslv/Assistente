@@ -8,6 +8,8 @@ import {
   MoreHorizontal,
   Keyboard,
   User,
+  MessageSquare,
+  Cpu,
 } from "lucide-react";
 import { Thread } from "../types";
 import { SystemStatus, LocalSystemMetrics, UserProfile } from "../services/api";
@@ -27,6 +29,9 @@ interface SidebarProps {
   isConnected: boolean;
   systemStatus: SystemStatus | null;
   localMetrics?: LocalSystemMetrics;
+  activeView?: "chat" | "agent";
+  onSelectView?: (view: "chat" | "agent") => void;
+  isAgentActive?: boolean;
 }
 
 interface ThreadGroup {
@@ -49,6 +54,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isConnected,
   systemStatus,
   localMetrics,
+  activeView = "chat",
+  onSelectView,
+  isAgentActive = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -191,7 +199,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="h-[1px] bg-[var(--border)] my-3" />
 
-      {/* 2. Ações: + Nova conversa e ⌕ Pesquisar */}
+      {/* 2. Navegação Principal: Chat vs Agent Command Center */}
+      <div className="grid grid-cols-2 gap-1 p-1 bg-[#12141A] border border-[var(--border)] rounded-lg mb-3">
+        <button
+          type="button"
+          onClick={() => onSelectView?.("chat")}
+          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-semibold transition cursor-pointer ${
+            activeView === "chat"
+              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm border border-zinc-700/60"
+              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-zinc-800/40"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>Chat</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectView?.("agent")}
+          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-semibold transition cursor-pointer relative ${
+            activeView === "agent"
+              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm border border-zinc-700/60"
+              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-zinc-800/40"
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5 text-blue-400" />
+          <span>Agent</span>
+          {isAgentActive && (
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse absolute top-1 right-1" />
+          )}
+        </button>
+      </div>
+
+      {/* 3. Ações: + Nova conversa e ⌕ Pesquisar */}
       <div className="flex flex-col gap-1 mb-2">
         <button
           type="button"
