@@ -589,6 +589,27 @@ pub fn run() {
             get_process_list
         ])
         .setup(|app| {
+            // Tenta inicializar o backend Python local (porta 8005) em background se disponível
+            std::thread::spawn(|| {
+                if std::net::TcpStream::connect("127.0.0.1:8005").is_ok() {
+                    return;
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    const CREATE_NO_WINDOW: u32 = 0x08000000;
+                    let _ = std::process::Command::new("powershell.exe")
+                        .args([
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            "if (Get-Command uv -ErrorAction SilentlyContinue) { uv run python -m api.main } elseif (Get-Command python -ErrorAction SilentlyContinue) { python -m api.main }",
+                        ])
+                        .creation_flags(CREATE_NO_WINDOW)
+                        .spawn();
+                }
+            });
+
             // Cria menu do System Tray (Bandeja)
             let open_item = MenuItem::with_id(app, "open", "Abrir Charlie Completo", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
