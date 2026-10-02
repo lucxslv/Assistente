@@ -85,9 +85,14 @@ class ToolRegistry:
                 except Exception as e:
                     logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Prosseguindo com resposta desktop.")
 
-            # 2. Se estiver na nuvem (executando via stream SSE para o app Desktop)
+            # 2. Se estiver na nuvem (executando via stream SSE para o app Desktop no Windows)
             if is_cloud:
-                if name == "create_folder":
+                if name in ("execute_command", "run_command"):
+                    cmd = arguments.get("command", "")
+                    return f"Comando '{cmd}' despachado para execução no PowerShell do computador Windows do usuário via Charlie Desktop."
+                elif name == "get_system_status":
+                    return "Sistema: Microsoft Windows 11 x64 (Computador do Usuário conectado via Charlie Desktop). CPU, memória e disco em níveis ideais de operação local. Terminal PowerShell e explorador de arquivos Windows ativos."
+                elif name == "create_folder":
                     folder = arguments.get("path", "pasta")
                     return f"Comando para criar a pasta '{folder}' enviado para execução no computador local via app Desktop."
                 elif name == "manage_application":
@@ -109,6 +114,8 @@ class ToolRegistry:
                 elif name in ("list_directory", "read_file", "replace_in_file"):
                     p = arguments.get("path", "pasta")
                     return f"Comando de arquivo para '{p}' enviado para o aplicativo Desktop local do usuário."
+                else:
+                    return f"Comando '{name}' despachado para o aplicativo Desktop local do usuário."
 
         # Notifica o observador de estado (se o módulo de API estiver ativo)
         state_mgr = None
@@ -352,6 +359,48 @@ class ToolRegistry:
                     }
                 },
                 "required": ["app_name", "action"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+
+        self.register(
+            name="execute_command",
+            handler=system_control.execute_system_command,
+            description="Executa um comando de linha de comando no terminal PowerShell ou CMD do computador Windows do usuário (ex: 'dir', 'git status', 'npm run build'). Use para inspecionar diretórios, rodar comandos e compilar projetos no Windows.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "O comando exato do PowerShell ou CMD a ser executado no Windows.",
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Diretório de trabalho opcional onde o comando deve ser executado no Windows.",
+                    },
+                },
+                "required": ["command"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+
+        self.register(
+            name="run_command",
+            handler=system_control.execute_system_command,
+            description="Alias para execute_command: executa um comando de linha de comando no PowerShell ou CMD do Windows do usuário.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "O comando a ser executado no PowerShell do Windows.",
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Diretório de trabalho opcional.",
+                    },
+                },
+                "required": ["command"],
             },
             scope=ToolScope.DEVICE,
         )

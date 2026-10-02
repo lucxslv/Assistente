@@ -162,6 +162,10 @@ def create_folder(path: str) -> str:
     Pode ser um nome simples (ex: 'teste', 'Projetos', 'Viagem') que será criado no Desktop do usuário,
     ou um caminho especificado (ex: 'Documentos/Projetos', 'Desktop/teste').
     """
+    is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_cloud:
+        return f"Comando para criar pasta '{path}' despachado para execução no Windows Desktop do usuário."
+
     try:
         target = resolve_friendly_path(path)
         blocked, reason = is_blocked_path(target)
@@ -179,6 +183,10 @@ def list_directory(path: str = "Documentos") -> str:
     """
     Lista os arquivos e subdiretórios de um diretório específico.
     """
+    is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_cloud:
+        return f"Solicitação de listagem do diretório '{path}' despachada para o Windows Desktop do usuário."
+
     try:
         target = resolve_friendly_path(path)
         blocked, reason = is_blocked_path(target)
@@ -214,6 +222,10 @@ def read_file(path: str, start_line: int = 1, end_line: int = None) -> str:
     Lê o conteúdo de um arquivo de texto, código ou configuração.
     Permite ler partes específicas passando start_line e end_line.
     """
+    is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_cloud:
+        return f"Solicitação de leitura do arquivo '{path}' despachada para o Windows Desktop do usuário."
+
     try:
         target = resolve_friendly_path(path)
         blocked, reason = is_blocked_path(target)
@@ -252,6 +264,10 @@ def write_file(path: str, content: str) -> str:
     """
     Cria um novo arquivo ou sobrescreve um arquivo existente com o conteúdo fornecido.
     """
+    is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_cloud:
+        return f"Comando para gravar no arquivo '{path}' despachado para o Windows Desktop do usuário."
+
     try:
         target = resolve_friendly_path(path)
         blocked, reason = is_blocked_path(target)
@@ -270,6 +286,10 @@ def replace_in_file(path: str, target_text: str, replacement_text: str) -> str:
     """
     Busca um texto específico dentro de um arquivo e o substitui por outro.
     """
+    is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_cloud:
+        return f"Solicitação de alteração no arquivo '{path}' despachada para o Windows Desktop do usuário."
+
     try:
         target = resolve_friendly_path(path)
         blocked, reason = is_blocked_path(target)

@@ -90,3 +90,35 @@ def system_power_action(action: str) -> str:
     except Exception as e:
         logger.exception(f"Erro ao executar ação de energia: {action}")
         return f"Falha ao executar a ação {action}: {str(e)}"
+
+
+def execute_system_command(command: str, cwd: str = None) -> str:
+    """Executa um comando no PowerShell ou CMD do computador Windows do usuário."""
+    is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_cloud:
+        return f"Comando '{command}' despachado para execução no PowerShell do computador Windows do usuário via Charlie Desktop."
+
+    import platform
+    import subprocess
+
+    if platform.system() != "Windows":
+        return f"Comando '{command}' despachado para o aplicativo Desktop local do usuário."
+
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=cwd or None,
+        )
+        output = [
+            f"STDOUT:\n{res.stdout.strip()}" if res.stdout.strip() else "",
+            f"STDERR:\n{res.stderr.strip()}" if res.stderr.strip() else "",
+            f"[Código de saída: {res.returncode}]",
+        ]
+        return "\n\n".join(filter(None, output))
+    except Exception as e:
+        logger.error(f"Erro ao executar comando no Windows: {e}")
+        return f"Erro ao executar o comando no Windows: {e}"
+

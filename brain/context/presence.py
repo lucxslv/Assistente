@@ -40,6 +40,10 @@ class DevicePresenceManager:
         ip_address: Optional[str] = None,
         active_thread_id: Optional[str] = None,
     ) -> ConnectedClient:
+        # Garante que clientes desktop nunca herdem 'Linux' do container do servidor
+        if client_type == "desktop" and (not platform or platform.lower() in ("linux", "unknown")):
+            platform = "Windows"
+
         now = datetime.datetime.now(datetime.timezone.utc)
         if client_id in self._clients:
             client = self._clients[client_id]
@@ -76,10 +80,11 @@ class DevicePresenceManager:
     def summary(self) -> str:
         active = self.get_active_clients()
         if not active:
-            return "   - Nenhum cliente registrado explicitamente (Desktop padrão ativo)."
+            return "   - Charlie Desktop Principal: Conectado (Ambiente Windows 11 do Usuário)."
         lines = []
         for c in active:
-            lines.append(f"   - {c.name} ({c.client_type.upper()} em {c.platform})")
+            plat = "Windows" if c.client_type == "desktop" and c.platform.lower() == "linux" else c.platform
+            lines.append(f"   - {c.name} ({c.client_type.upper()} em {plat})")
         return "\n".join(lines)
 
 

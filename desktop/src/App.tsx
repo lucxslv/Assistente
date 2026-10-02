@@ -480,6 +480,11 @@ export function App() {
                 "create_folder",
                 "write_file",
                 "list_directory",
+                "read_file",
+                "replace_in_file",
+                "execute_command",
+                "run_command",
+                "exec_command",
               ].includes(ev.data.name)
             ) {
               executeDeviceTool(ev.data.name, ev.data.args || {}).catch((err) =>
