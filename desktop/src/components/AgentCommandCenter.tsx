@@ -45,10 +45,17 @@ export const AgentCommandCenter: React.FC = () => {
     retryTask,
     completeTaskWithEvidence,
     resolvePermission,
+    refreshProcesses,
     clearSession,
   } = useAgentRuntime();
 
   const [activeTab, setActiveTab] = useState<AgentTab>("overview");
+
+  React.useEffect(() => {
+    if (activeTab === "processes") {
+      refreshProcesses();
+    }
+  }, [activeTab]);
   const [goalInput, setGoalInput] = useState("");
   const [projectInput, setProjectInput] = useState("Charlie");
   const [logFilter, setLogFilter] = useState<AgentLogCategory | "ALL">("ALL");
@@ -361,18 +368,26 @@ export const AgentCommandCenter: React.FC = () => {
                   <span className="text-zinc-500">Sugestões:</span>
                   <button
                     type="button"
-                    onClick={() => setGoalInput("Inspecionar pastas de Documentos e organizar arquivos de teste")}
-                    className="hover:text-blue-400 underline underline-offset-2 transition"
+                    onClick={() => setGoalInput("Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo")}
+                    className="hover:text-blue-400 underline underline-offset-2 transition cursor-pointer"
                   >
-                    Organizar pastas
+                    📁 Criar pasta & arquivo
                   </button>
                   <span>•</span>
                   <button
                     type="button"
-                    onClick={() => setGoalInput("Executar compilação do projeto e validar erros de TypeScript")}
-                    className="hover:text-blue-400 underline underline-offset-2 transition"
+                    onClick={() => setGoalInput("Inspecionar processos ativos do Windows e uso de recursos")}
+                    className="hover:text-blue-400 underline underline-offset-2 transition cursor-pointer"
                   >
-                    Compilar & Validar
+                    ⚡ Monitorar processos
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={() => setGoalInput("Executar verificação de status do Git no repositório")}
+                    className="hover:text-blue-400 underline underline-offset-2 transition cursor-pointer"
+                  >
+                    💻 Verificar Git
                   </button>
                 </div>
 
@@ -875,8 +890,17 @@ export const AgentCommandCenter: React.FC = () => {
         {activeTab === "processes" && (
           <div className="max-w-4xl mx-auto space-y-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-zinc-200">Process Monitor — Subprocessos do Agente</h2>
-              <span className="text-xs text-zinc-500">Monitoramento e isolamento operacional</span>
+              <div>
+                <h2 className="text-sm font-bold text-zinc-200">Process Monitor — Processos Ativos do Sistema</h2>
+                <span className="text-xs text-zinc-500">Monitoramento e telemetria operacional em tempo real</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => refreshProcesses()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition cursor-pointer"
+              >
+                <RotateCw className="w-3.5 h-3.5" /> Atualizar Processos
+              </button>
             </div>
 
             {processes.length === 0 ? (

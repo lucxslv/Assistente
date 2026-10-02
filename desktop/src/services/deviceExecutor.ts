@@ -1,6 +1,30 @@
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 
+export interface CommandExecutionResult {
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+  success: boolean;
+  execution_time_ms: number;
+}
+
+export interface LocalFileInfo {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified_at?: string;
+}
+
+export interface LocalProcessInfo {
+  pid: number;
+  name: string;
+  cpu: number;
+  memory_mb: number;
+  status: string;
+}
+
 // Mapeamento abrangente de aplicativos do Windows para protocolos URI ou executáveis
 const APP_PROTOCOLS: Record<string, string> = {
   spotify: "spotify:",
@@ -24,6 +48,46 @@ const APP_PROTOCOLS: Record<string, string> = {
   explorer: "explorer:",
 };
 
+export async function executeSystemCommand(
+  command: string,
+  cwd?: string
+): Promise<CommandExecutionResult> {
+  try {
+    return await invoke<CommandExecutionResult>("execute_system_command", {
+      command,
+      cwd: cwd || null,
+    });
+  } catch (err: any) {
+    return {
+      stdout: "",
+      stderr: String(err?.message || err),
+      exit_code: -1,
+      success: false,
+      execution_time_ms: 0,
+    };
+  }
+}
+
+export async function readLocalFile(path: string, maxBytes?: number): Promise<string> {
+  return await invoke<string>("read_local_file", {
+    path,
+    maxBytes: maxBytes || null,
+  });
+}
+
+export async function listLocalDirectory(path: string): Promise<LocalFileInfo[]> {
+  return await invoke<LocalFileInfo[]>("list_local_directory", { path });
+}
+
+export async function getRunningProcesses(): Promise<LocalProcessInfo[]> {
+  try {
+    return await invoke<LocalProcessInfo[]>("get_process_list");
+  } catch (err) {
+    console.warn("[DeviceExecutor] Erro ao buscar processos nativos:", err);
+    return [];
+  }
+}
+
 export async function executeDeviceTool(name: string, args: Record<string, any>): Promise<string> {
   console.log(`[DeviceExecutor] Recebido comando para executar no Windows: ${name}`, args);
 
@@ -46,7 +110,7 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
 
   // 2. Execução nativa no Windows usando capacidades do Tauri e Win32
   try {
-    if (name === "create_folder") {
+    if (name === "create_folder" || name === "create_directory") {
       const folderPath = String(args.path || "Nova Pasta");
       const res = await invoke<string>("create_local_directory", { path: folderPath });
       console.log(`[DeviceExecutor] Pasta criada nativamente:`, res);
@@ -59,6 +123,46 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
       const res = await invoke<string>("write_local_file", { path: filePath, content });
       console.log(`[DeviceExecutor] Arquivo gravado nativamente:`, res);
       return res;
+    }
+
+    if (name === "read_file" || name === "view_file" || name === "cat") {
+      const filePath = String(args.path || "");
+      const res = await readLocalFile(filePath);
+      return res;
+    }
+
+    if (name === "list_directory" || name === "file_explorer.list_directory" || name === "ls" || name === "dir") {
+      const targetPath = String(args.path || ".");
+      const files = await listLocalDirectory(targetPath);
+      const summary = files
+        .map((f) => `${f.is_dir ? "[DIR]" : "[FILE]"} ${f.name} (${f.size} B)`)
+        .join("\n");
+      return summary || "Diretório vazio.";
+    }
+
+    if (
+      name === "execute_command" ||
+      name === "run_command" ||
+      name === "shell_exec" ||
+      name === "powershell" ||
+      name === "cmd"
+    ) {
+      const command = String(args.command || args.cmd || "");
+      const cwd = args.cwd ? String(args.cwd) : undefined;
+      const res = await executeSystemCommand(command, cwd);
+      const output = [
+        res.stdout ? `STDOUT:\n${res.stdout.trim()}` : "",
+        res.stderr ? `STDERR:\n${res.stderr.trim()}` : "",
+        `[Código de saída: ${res.exit_code} | Tempo: ${res.execution_time_ms}ms]`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      return output;
+    }
+
+    if (name === "get_process_list" || name === "ps") {
+      const procs = await getRunningProcesses();
+      return procs.map((p) => `PID ${p.pid}: ${p.name} (CPU: ${p.cpu}%, MEM: ${p.memory_mb} MB)`).join("\n");
     }
 
     if (name === "manage_application") {
