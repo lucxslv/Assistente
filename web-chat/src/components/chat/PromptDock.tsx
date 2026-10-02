@@ -26,12 +26,14 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auto-resize textarea to fit text up to 180px
+  // Auto-resize textarea to fit text up to 140px on mobile, 180px on desktop
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const newHeight = Math.min(el.scrollHeight, 180);
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+    const maxHeight = isMobile ? 140 : 180;
+    const newHeight = Math.min(el.scrollHeight, maxHeight);
     el.style.height = `${Math.max(newHeight, 44)}px`;
   }, []);
 
@@ -145,12 +147,12 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const canSend = value.trim().length > 0 || attachments.length > 0;
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 pb-4 pt-1">
+    <div className="w-full max-w-4xl mx-auto px-2.5 sm:px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1">
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative flex flex-col rounded-xl bg-[#0E0F12] border transition-all duration-150 ${
+        className={`relative flex flex-col rounded-2xl sm:rounded-xl bg-[#0E0F12] border transition-all duration-150 ${
           isDragging
             ? 'border-primary shadow-glow bg-[#13151D]'
             : 'border-white/[0.08] hover:border-white/[0.12] focus-within:border-primary/50 focus-within:shadow-glow-sm'
@@ -160,16 +162,17 @@ export const PromptDock: React.FC<PromptDockProps> = ({
         <FilePreview attachments={attachments} onRemove={handleRemoveAttachment} />
 
         {/* Input Area */}
-        <div className="flex items-end gap-2 px-3 py-2.5">
+        <div className="flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2">
           {/* File Upload Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
-            className="p-2 text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.06] rounded-lg transition-colors disabled:opacity-40 cursor-pointer mb-0.5"
+            className="min-h-[44px] min-w-[44px] p-2.5 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl transition-colors disabled:opacity-40 cursor-pointer flex items-center justify-center flex-shrink-0"
             title="Anexar arquivo ou imagem"
+            aria-label="Anexar arquivo ou imagem"
           >
-            <Paperclip className="w-4 h-4" />
+            <Paperclip className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
           <input
             ref={fileInputRef}
@@ -192,7 +195,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             onPaste={handlePaste}
             disabled={disabled}
             placeholder={isStreaming ? 'Charlie está respondendo...' : 'Envie uma mensagem para o Charlie...'}
-            className="flex-1 max-h-[180px] min-h-[40px] py-2 bg-transparent text-[#F3F4F6] placeholder-[#6B7280] text-sm resize-none focus:outline-none leading-relaxed font-sans"
+            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-2.5 bg-transparent text-[#F3F4F6] placeholder-[#6B7280] text-sm resize-none focus:outline-none leading-relaxed font-sans"
           />
 
           {/* Action Button: Send Arrow [ → ] or Stop Square [ ■ ] */}
@@ -200,31 +203,33 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             <button
               type="button"
               onClick={onStop}
-              className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 flex items-center justify-center transition-all duration-150 cursor-pointer mb-1"
+              className="min-h-[44px] min-w-[44px] rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 flex items-center justify-center transition-all duration-150 cursor-pointer flex-shrink-0 active:scale-95"
               title="Interromper geração"
+              aria-label="Interromper geração"
             >
-              <Square className="w-3.5 h-3.5 fill-current" />
+              <Square className="w-4 h-4 fill-current" />
             </button>
           ) : (
             <button
               type="button"
               onClick={handleSend}
               disabled={disabled || !canSend}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 mb-1 ${
+              className={`min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-all duration-150 flex-shrink-0 ${
                 canSend
-                  ? 'bg-primary text-white hover:bg-primary-hover shadow-glow-sm cursor-pointer active:scale-95'
+                  ? 'bg-primary text-white hover:bg-primary-hover active:scale-95 shadow-glow-sm cursor-pointer'
                   : 'bg-white/[0.04] text-[#6B7280] cursor-not-allowed opacity-50'
               }`}
               title="Enviar mensagem [Enter]"
+              aria-label="Enviar mensagem"
             >
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-5 h-5 sm:w-4 sm:h-4" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Footer subtle caption */}
-      <div className="flex items-center justify-center mt-2 select-none">
+      {/* Footer subtle caption (Hidden on mobile to save vertical space) */}
+      <div className="hidden sm:flex items-center justify-center mt-2 select-none">
         <span className="text-[10px] tracking-wider text-[#6B7280] font-mono uppercase">
           ENTER PARA ENVIAR • SHIFT+ENTER PARA QUEBRA DE LINHA
         </span>

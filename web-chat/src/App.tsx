@@ -3,11 +3,9 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { MessageFeed } from './components/chat/MessageFeed';
 import { PromptDock } from './components/chat/PromptDock';
-import { SettingsModal } from './components/layout/SettingsModal';
 import { AuthGatekeeper } from './components/auth/AuthGatekeeper';
 import { useChat } from './hooks/useChat';
 import { useAuth } from './hooks/useAuth';
-import { useSettings } from './hooks/useSettings';
 import { FileAttachment } from './types/chat';
 
 export const App: React.FC = () => {
@@ -24,8 +22,6 @@ export const App: React.FC = () => {
     register,
     logout,
   } = useAuth();
-
-  const { settings, updateSettings, isSettingsOpen, setIsSettingsOpen } = useSettings();
 
   const {
     threads,
@@ -78,8 +74,8 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans">
-      {/* Sidebar Navigation */}
+    <div className="flex h-screen h-[100dvh] w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans">
+      {/* Sidebar Navigation Drawer */}
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -91,7 +87,6 @@ export const App: React.FC = () => {
         onNewThread={() => createNewThread('Nova Conversa')}
         onRenameThread={(id, newName) => renameThread(id, newName)}
         onDeleteThread={(id) => deleteThread(id)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
         onLogout={logout}
       />
 
@@ -112,7 +107,6 @@ export const App: React.FC = () => {
             if (activeThreadId) deleteThread(activeThreadId);
           }}
           onClearChat={clearCurrentChat}
-          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         {/* Message Feed */}
@@ -126,7 +120,7 @@ export const App: React.FC = () => {
             onRetryMessage={regenerateLastMessage}
           />
 
-          {/* Prompt Dock (Input) */}
+          {/* Prompt Dock (Mobile-friendly Input) */}
           <PromptDock
             value={draft}
             onChange={setDraft}
@@ -137,14 +131,6 @@ export const App: React.FC = () => {
           />
         </div>
       </main>
-
-      {/* Settings Modal (Pre-configured preferences) */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onSaveSettings={updateSettings}
-      />
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Sparkles, Terminal, Code, Cpu, Database } from 'lucide-react';
+import { Sparkles, Code, Brain, PenTool, HelpCircle } from 'lucide-react';
 import { Message, CharlieAIStatus } from '../../types/chat';
 import { MessageItem } from './MessageItem';
 import { useAutoScroll } from '../../hooks/useAutoScroll';
@@ -34,24 +34,24 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
 
   const starterPrompts = [
     {
-      icon: Terminal,
-      title: 'Diagnóstico de Sistema',
-      prompt: 'Execute um diagnóstico completo dos serviços ativos e verifique a conectividade.',
+      icon: Brain,
+      title: 'Raciocínio & Planejamento',
+      prompt: 'Analise este problema e me ajude a estruturar um plano de ação passo a passo com prós e contras.',
+    },
+    {
+      icon: PenTool,
+      title: 'Redação & Refinamento',
+      prompt: 'Ajude a revisar e aprimorar a clareza, coesão e tom profissional deste texto.',
     },
     {
       icon: Code,
-      title: 'Desenvolvimento Fullstack',
-      prompt: 'Explique a arquitetura moderna de microsserviços reativos com FastAPI e WebSockets.',
+      title: 'Geração & Revisão de Código',
+      prompt: 'Escreva uma função moderna em TypeScript com tratamento defensivo de erros e me explique a lógica.',
     },
     {
-      icon: Database,
-      title: 'Modelagem & SQL',
-      prompt: 'Como desenhar um esquema de banco de dados no PostgreSQL com índices otimizados para busca de texto?',
-    },
-    {
-      icon: Cpu,
-      title: 'Inteligência Artificial',
-      prompt: 'Quais as melhores práticas para streaming de tokens em tempo real usando Server-Sent Events?',
+      icon: HelpCircle,
+      title: 'Análise de Contexto',
+      prompt: 'Vou colar um trecho de documento aqui para você sintetizar os pontos principais e implicações.',
     },
   ];
 
@@ -59,36 +59,36 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
     <div className="relative flex-1 h-full overflow-hidden flex flex-col">
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto px-2 py-4 space-y-2 select-text"
+        className="flex-1 overflow-y-auto px-2 sm:px-4 py-3 sm:py-4 space-y-2 select-text"
       >
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center max-w-2xl mx-auto px-4 py-8 text-center animate-fade-in">
+          <div className="min-h-full flex flex-col items-center justify-center max-w-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 text-center animate-fade-in">
             {/* Center Logo Icon */}
-            <div className="w-16 h-16 rounded-2xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center text-primary shadow-glow mb-6">
-              <Sparkles className="w-8 h-8" />
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center text-primary shadow-glow mb-4 sm:mb-6">
+              <Sparkles className="w-7 h-7 sm:w-8 sm:h-8" />
             </div>
 
-            <h2 className="text-2xl font-bold tracking-tight text-[#F3F4F6] mb-2">
-              Charlie Web Chat
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#F3F4F6] mb-1.5 sm:mb-2">
+              Charlie Web
             </h2>
-            <p className="text-sm text-[#9CA3AF] max-w-md mb-8 leading-relaxed">
-              Assistente de inteligência autônomo com suporte a streaming de alta performance, execução de ferramentas e interface técnica clean.
+            <p className="text-xs sm:text-sm text-[#9CA3AF] max-w-sm mb-6 sm:mb-8 leading-relaxed">
+              Ambiente de teste e conversação para raciocínio, redação, análise de contexto e desenvolvimento em tempo real.
             </p>
 
             {/* Quick Starters Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 w-full text-left">
               {starterPrompts.map((item, idx) => {
                 const Icon = item.icon;
                 return (
                   <button
                     key={idx}
                     onClick={() => onSelectPrompt(item.prompt)}
-                    className="p-3.5 rounded-xl bg-[#0E0F12] border border-white/[0.06] hover:border-primary/40 hover:bg-[#13151A] hover:shadow-glow-sm transition-all duration-150 flex items-start gap-3 group text-left cursor-pointer"
+                    className="p-3 sm:p-3.5 rounded-xl bg-[#0E0F12] border border-white/[0.06] hover:border-primary/40 active:border-primary/50 hover:bg-[#13151A] transition-all duration-150 flex items-start gap-2.5 sm:gap-3 group text-left cursor-pointer"
                   >
-                    <div className="p-2 rounded-lg bg-white/[0.04] text-primary group-hover:bg-primary-soft transition-colors mt-0.5">
+                    <div className="p-2 rounded-lg bg-white/[0.04] text-primary group-hover:bg-primary-soft transition-colors mt-0.5 flex-shrink-0">
                       <Icon className="w-4 h-4" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs font-semibold text-[#F3F4F6] group-hover:text-primary transition-colors">
                         {item.title}
                       </div>
