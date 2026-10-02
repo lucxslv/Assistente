@@ -63,8 +63,9 @@ class Config:
     supabase_key: str = os.getenv("SUPABASE_KEY", "")
     database_url: str = os.getenv("DATABASE_URL", "")
 
-    # Autenticação
+    # Autenticação & Auditoria Secreta
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
     admin_password: str = os.getenv("ADMIN_PASSWORD", "admin")
+    admin_email: str = os.getenv("ADMIN_EMAIL", "lucassilvacosta060@gmail.com")
 
 config = Config()

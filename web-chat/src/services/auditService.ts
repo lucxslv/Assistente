@@ -1,8 +1,27 @@
 import { api } from './api';
 import { StorageService } from './storage';
-import { AuditMetrics, AuditLogsResponse, AuditFilterParams } from '../types/audit';
+import {
+  AuditMetrics,
+  AuditLogsResponse,
+  AuditFilterParams,
+  AuditUserSummary,
+  UserConversationsResponse,
+} from '../types/audit';
 
 export class AuditService {
+  /**
+   * Valida se a sessão atual é reconhecida pelo backend como Administrador.
+   * Retorna true se for admin, false caso contrário (sem lançar erros na UI).
+   */
+  public static async verifyAdmin(): Promise<boolean> {
+    try {
+      const res = await api.get<{ is_admin: boolean }>('/admin/audit/verify');
+      return Boolean(res?.is_admin);
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Obtém as métricas agregadas de telemetria, contagem de tokens e custos em USD.
    */
@@ -11,7 +30,22 @@ export class AuditService {
   }
 
   /**
-   * Obtém a lista paginada e filtrada de interações de auditoria.
+   * Obtém a lista consolidada de amigos/usuários para a visualização agrupada de conversas.
+   */
+  public static async getUsers(): Promise<AuditUserSummary[]> {
+    return api.get<AuditUserSummary[]>('/admin/audit/users');
+  }
+
+  /**
+   * Obtém as conversas agrupadas por sessões cronológicas de um usuário específico.
+   */
+  public static async getUserConversations(userEmail: string): Promise<UserConversationsResponse> {
+    const encoded = encodeURIComponent(userEmail.trim());
+    return api.get<UserConversationsResponse>(`/admin/audit/users/${encoded}/conversations`);
+  }
+
+  /**
+   * Obtém a lista paginada e filtrada de interações de auditoria brutas.
    */
   public static async getLogs(params: AuditFilterParams = {}): Promise<AuditLogsResponse> {
     const searchParams = new URLSearchParams();
@@ -31,9 +65,15 @@ export class AuditService {
   /**
    * Exporta os registros de auditoria em CSV ou JSON com download automático no navegador.
    */
-  public static async exportLogs(format: 'csv' | 'json' = 'csv'): Promise<void> {
+  public static async exportLogs(
+    format: 'csv' | 'json' = 'csv',
+    userEmail?: string
+  ): Promise<void> {
     const baseUrl = api.getBaseUrl();
-    const url = `${baseUrl}/admin/audit/export?format_type=${format}`;
+    const query = new URLSearchParams({ format_type: format });
+    if (userEmail) query.set('user_email', userEmail.trim());
+
+    const url = `${baseUrl}/admin/audit/export?${query.toString()}`;
 
     const headers: Record<string, string> = {};
     const token = StorageService.getToken();
@@ -46,13 +86,16 @@ export class AuditService {
       throw new Error(`Falha ao exportar registros de auditoria (HTTP ${response.status})`);
     }
 
+    const safeName = userEmail ? userEmail.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
     if (format === 'json') {
       const data = await response.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      this.triggerDownload(blob, `charlie_audit_logs_${new Date().toISOString().slice(0, 10)}.json`);
+      this.triggerDownload(blob, `charlie_audit_${safeName}_${dateStr}.json`);
     } else {
       const blob = await response.blob();
-      this.triggerDownload(blob, `charlie_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+      this.triggerDownload(blob, `charlie_audit_${safeName}_${dateStr}.csv`);
     }
   }
 

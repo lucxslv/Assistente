@@ -27,6 +27,7 @@ interface HeaderProps {
   onDeleteThread: () => void;
   onClearChat: () => void;
   onOpenAudit?: () => void;
+  isAdmin?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onDeleteThread,
   onClearChat,
   onOpenAudit,
+  isAdmin = false,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -208,19 +210,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden sm:inline">Nova</span>
         </button>
 
-        {/* Action: Painel de Auditoria & Custos (Desktop shortcut) */}
-        {onOpenAudit && (
-          <button
-            onClick={onOpenAudit}
-            className="hidden lg:flex min-h-[44px] px-2.5 sm:px-3 text-[#D1D5DB] hover:text-white bg-white/[0.04] hover:bg-emerald-500/10 active:bg-emerald-500/20 border border-white/[0.08] hover:border-emerald-500/30 rounded-xl items-center justify-center gap-1.5 transition-colors cursor-pointer text-xs font-medium"
-            title="Painel de Auditoria & Custos USD"
-            aria-label="Auditoria e Custos"
-          >
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Auditoria</span>
-          </button>
-        )}
-
         {/* Context Menu Dropdown */}
         <div className="relative" ref={menuRef}>
           <button
@@ -234,7 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {isMenuOpen && (
             <div className="absolute right-0 mt-2 w-52 rounded-xl bg-[#12141A] border border-white/[0.08] shadow-2xl py-1.5 z-50 animate-slide-up text-xs">
-              {onOpenAudit && (
+              {isAdmin && onOpenAudit && (
                 <>
                   <button
                     onClick={() => {
@@ -244,7 +233,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-emerald-500/10 text-left cursor-pointer"
                   >
                     <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="font-medium text-emerald-400">Auditoria & Custos USD</span>
+                    <span className="font-medium text-emerald-400">Vault de Auditoria</span>
                   </button>
                   <div className="my-1 border-t border-white/[0.06]" />
                 </>

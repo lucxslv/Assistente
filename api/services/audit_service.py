@@ -92,6 +92,7 @@ async def ensure_audit_schema(pool: asyncpg.Pool) -> None:
     CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_chat_logs(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_chat_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_model_name ON audit_chat_logs(model_name);
+    CREATE INDEX IF NOT EXISTS idx_audit_user_email ON audit_chat_logs(user_email);
     """
     try:
         async with pool.acquire() as conn:
@@ -383,3 +384,143 @@ async def get_audit_metrics() -> Dict[str, Any]:
             "top_users": top_users,
             "recent_daily": recent_daily,
         }
+
+
+async def get_audit_users_summary() -> List[Dict[str, Any]]:
+    """Retorna a lista consolidada de amigos/usuários para a visão de conversas no painel de auditoria."""
+    from api.db import get_or_init_db_pool
+
+    pool = await get_or_init_db_pool()
+    if not pool:
+        return []
+
+    async with pool.acquire() as conn:
+        query = """
+            SELECT 
+                user_id,
+                user_email,
+                COUNT(*) as total_messages,
+                COUNT(DISTINCT COALESCE(NULLIF(session_id, ''), id::text)) as total_sessions,
+                COALESCE(SUM(cost_usd), 0.0) as total_cost_usd,
+                COALESCE(SUM(total_tokens), 0) as total_tokens,
+                COALESCE(SUM(prompt_tokens), 0) as total_prompt_tokens,
+                COALESCE(SUM(completion_tokens), 0) as total_completion_tokens,
+                MAX(created_at) as last_active,
+                MAX(ip_address) as ip_address
+            FROM audit_chat_logs
+            GROUP BY user_id, user_email
+            ORDER BY last_active DESC;
+        """
+        rows = await conn.fetch(query)
+
+        return [
+            {
+                "user_id": str(r["user_id"]),
+                "user_email": r["user_email"],
+                "total_messages": r["total_messages"],
+                "total_sessions": r["total_sessions"],
+                "total_cost_usd": float(r["total_cost_usd"]),
+                "total_tokens": r["total_tokens"],
+                "total_prompt_tokens": r["total_prompt_tokens"],
+                "total_completion_tokens": r["total_completion_tokens"],
+                "last_active": r["last_active"].isoformat() if r["last_active"] else None,
+                "ip_address": r["ip_address"] or "N/A",
+            }
+            for r in rows
+        ]
+
+
+async def get_user_conversations(user_email: str) -> Dict[str, Any]:
+    """Retorna o histórico de conversas do usuário selecionado agrupado em sessões cronológicas."""
+    from api.db import get_or_init_db_pool
+
+    pool = await get_or_init_db_pool()
+    if not pool:
+        return {"user_email": user_email, "sessions": [], "total_messages": 0, "total_cost_usd": 0.0}
+
+    async with pool.acquire() as conn:
+        query = """
+            SELECT id, user_id, user_email, ip_address, session_id,
+                   user_prompt, model_response, model_name,
+                   prompt_tokens, completion_tokens, total_tokens,
+                   cost_usd, created_at
+            FROM audit_chat_logs
+            WHERE LOWER(user_email) = LOWER($1)
+            ORDER BY created_at ASC;
+        """
+        rows = await conn.fetch(query, user_email.strip())
+
+        if not rows:
+            return {"user_email": user_email, "sessions": [], "total_messages": 0, "total_cost_usd": 0.0}
+
+        # Agrupamento inteligente de mensagens em sessões
+        sessions_map: Dict[str, Dict[str, Any]] = {}
+        ordered_session_keys: List[str] = []
+
+        total_cost = 0.0
+        total_msgs = len(rows)
+        current_inferred_session_idx = 0
+        last_msg_time = None
+
+        for r in rows:
+            cost = float(r["cost_usd"])
+            total_cost += cost
+            created_at = r["created_at"]
+
+            raw_session_id = (r["session_id"] or "").strip()
+            if raw_session_id and raw_session_id.lower() not in {"default", "main", "none", "null"}:
+                session_key = raw_session_id
+            else:
+                # Cria nova sessão se houver intervalo de mais de 45 minutos entre interações
+                if last_msg_time and (created_at - last_msg_time).total_seconds() > 2700:
+                    current_inferred_session_idx += 1
+                session_key = f"sess_{created_at.strftime('%Y%m%d')}_{current_inferred_session_idx}"
+                last_msg_time = created_at
+
+            if session_key not in sessions_map:
+                ordered_session_keys.append(session_key)
+                sessions_map[session_key] = {
+                    "session_id": session_key,
+                    "started_at": created_at.isoformat() if created_at else None,
+                    "updated_at": created_at.isoformat() if created_at else None,
+                    "message_count": 0,
+                    "total_cost_usd": 0.0,
+                    "total_tokens": 0,
+                    "model_names": set(),
+                    "messages": [],
+                }
+
+            sess = sessions_map[session_key]
+            sess["message_count"] += 1
+            sess["total_cost_usd"] = round(sess["total_cost_usd"] + cost, 6)
+            sess["total_tokens"] += r["total_tokens"]
+            sess["updated_at"] = created_at.isoformat() if created_at else None
+            sess["model_names"].add(r["model_name"])
+
+            sess["messages"].append({
+                "id": str(r["id"]),
+                "created_at": created_at.isoformat() if created_at else None,
+                "ip_address": r["ip_address"] or "N/A",
+                "model_name": r["model_name"],
+                "prompt_tokens": r["prompt_tokens"],
+                "completion_tokens": r["completion_tokens"],
+                "total_tokens": r["total_tokens"],
+                "cost_usd": cost,
+                "user_prompt": r["user_prompt"],
+                "model_response": r["model_response"],
+            })
+
+        sessions_list = []
+        for key in reversed(ordered_session_keys):  # Sessões mais recentes primeiro
+            s = sessions_map[key]
+            s["model_names"] = list(s["model_names"])
+            sessions_list.append(s)
+
+        return {
+            "user_email": user_email,
+            "user_id": str(rows[0]["user_id"]) if rows else "",
+            "total_messages": total_msgs,
+            "total_cost_usd": round(total_cost, 6),
+            "sessions": sessions_list,
+        }
+
