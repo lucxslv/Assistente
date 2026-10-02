@@ -27,22 +27,13 @@ const CLOUD_API = 'https://assistente-xi.vercel.app/api';
 function resolveDefaultApi(): string {
   if (typeof window === 'undefined') return CLOUD_API;
   
-  // 1. Env variable takes precedence if provided during build
+  // 1. Variável de ambiente explícita
   if (import.meta.env.VITE_CHARLIE_API_URL) {
     return import.meta.env.VITE_CHARLIE_API_URL.replace(/\/+$/, '');
   }
 
-  const host = window.location.hostname;
-  // 2. Se estiver rodando na nuvem (Vercel ou domínio de produção)
-  if (host.includes('vercel.app')) {
-    return 'https://assistente-xi.vercel.app/api';
-  }
-
-  // 3. Se estiver rodando no Vite Dev Server (porta 3000), o proxy encaminha /api para o backend local 8005
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return '/api';
-  }
-
+  // 2. Por padrão, conecta-se diretamente à API da Nuvem (assistente-xi.vercel.app)
+  // garantindo uso 100% imediato e pré-configurado sem exigir servidor Python local ativo.
   return CLOUD_API;
 }
 
@@ -56,6 +47,31 @@ class ApiClient {
   constructor() {
     window.addEventListener('online', () => this.setOnline(true));
     window.addEventListener('offline', () => this.setOnline(false));
+
+    // Monitora opcionalmente em segundo plano se o backend local 8005 estiver disponível
+    if (typeof window !== 'undefined') {
+      this.detectBackend();
+    }
+  }
+
+  /**
+   * Checa de forma silenciosa se o backend local (porta 8005) está rodando.
+   * Se estiver, comuta automaticamente para o runtime local.
+   */
+  public async detectBackend(): Promise<string> {
+    try {
+      const res = await fetch('http://127.0.0.1:8005/api/health', {
+        signal: AbortSignal.timeout(600),
+      });
+      if (res.ok) {
+        this.activeBaseUrl = LOCAL_API;
+        return LOCAL_API;
+      }
+    } catch {
+      // Backend local inativo; mantém CLOUD_API
+    }
+    this.activeBaseUrl = CLOUD_API;
+    return CLOUD_API;
   }
 
   public subscribeConnection(listener: ConnectionListener): () => void {
@@ -132,6 +148,24 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        // Se estiver usando backend local e ocorrer erro 5xx (ex: proxy 502/500), tenta Cloud API antes de falhar
+        if (this.activeBaseUrl !== CLOUD_API && !this.hasTriedCloudFallback && response.status >= 500) {
+          console.warn(`[Charlie Web] Backend local retornou ${response.status}. Ativando fallback automático para a nuvem (${CLOUD_API})...`);
+          this.activeBaseUrl = CLOUD_API;
+          this.hasTriedCloudFallback = true;
+          const retryUrl = `${CLOUD_API}${cleanEndpoint}`;
+          try {
+            const retryResp = await fetch(retryUrl, { ...options, headers });
+            if (retryResp.ok) {
+              this.setOnline(true);
+              if (retryResp.status === 204) return {} as T;
+              return (await retryResp.json()) as T;
+            }
+          } catch {
+            // Continua para tratamento normal
+          }
+        }
+
         let errData: ApiErrorResponse = {};
         try {
           errData = await response.json();

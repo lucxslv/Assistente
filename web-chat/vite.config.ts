@@ -15,9 +15,19 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8005',
+        target: process.env.VITE_PROXY_TARGET || 'https://assistente-xi.vercel.app',
         changeOrigin: true,
+        secure: false,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            // Silently handle proxy connection issues without crashing dev server
+            if (!res.headersSent && res.writeHead) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Proxy connection failed', detail: err.message }));
+            }
+          });
+        },
       },
     },
   },
