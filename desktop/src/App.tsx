@@ -28,14 +28,17 @@ import {
   clearAuthSession,
 } from "./services/api";
 import { executeDeviceTool } from "./services/deviceExecutor";
-import { AgentWorkspace } from "./components/workspace/AgentWorkspace";
+import { AgentEnvironment } from "./components/agent/AgentEnvironment";
 import { useAgentRuntime, agentRuntimeStore } from "./services/agentRuntimeStore";
 
 export function App() {
-  const { session: agentSession, resolveChangeReview, resolvePermission } = useAgentRuntime();
-  const [isWorkspaceDrawerOpen, setIsWorkspaceDrawerOpen] = useState(false);
-  const [focusedArtifactId, setFocusedArtifactId] = useState<string | undefined>(undefined);
-  const [workspaceDrawerWidth, setWorkspaceDrawerWidth] = useState<"compact" | "wide" | "fullscreen">("compact");
+  const [activeView, setActiveView] = useState<"chat" | "agent">("chat");
+  const {
+    session: agentSession,
+    pendingPermissions,
+    resolveChangeReview,
+    resolvePermission,
+  } = useAgentRuntime();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -98,19 +101,15 @@ export function App() {
 
   const hasInitializedRef = useRef(false);
 
-  // Auto-abertura inteligente do Workspace Drawer quando o agente produz um artefato
+  // Observa artefatos produzidos pelo agente
   const prevArtifactsCountRef = useRef(agentSession?.artifacts?.length || 0);
   useEffect(() => {
     const currentCount = agentSession?.artifacts?.length || 0;
     if (currentCount > prevArtifactsCountRef.current) {
-      setIsWorkspaceDrawerOpen(true);
-      const newest = agentSession?.artifacts[currentCount - 1];
-      if (newest) {
-        setFocusedArtifactId(newest.id);
-      }
+      showToast("Novo artefato produzido pelo Agente!");
     }
     prevArtifactsCountRef.current = currentCount;
-  }, [agentSession?.artifacts]);
+  }, [agentSession?.artifacts, showToast]);
 
   // Carrega lista de conversas
   const loadThreads = useCallback(async () => {
@@ -421,7 +420,6 @@ export function App() {
     if (isAgenticTurn) {
       const cleanGoal = text.replace(/^(\/agent|agente:)\s*/i, "").trim();
       agentRuntimeStore.ensureConversationalSession(cleanGoal, "Charlie");
-      setIsWorkspaceDrawerOpen(true);
     }
 
     // Adiciona otimisticamente a mensagem do usuário na tela
@@ -460,7 +458,6 @@ export function App() {
             );
           } else if (ev.type === "tool_start") {
             agentRuntimeStore.addLog("TOOL", `Invocando ${ev.data.name}`, ev.data.args);
-            setIsWorkspaceDrawerOpen(true);
             if (ev.data.args?.path) {
               const p = String(ev.data.args.path);
               agentRuntimeStore.recordFile({
@@ -621,108 +618,54 @@ export function App() {
         isConnected={isConnected}
         systemStatus={systemStatus}
         localMetrics={localMetrics}
-        isWorkspaceOpen={isWorkspaceDrawerOpen}
-        onToggleWorkspace={() => setIsWorkspaceDrawerOpen((prev) => !prev)}
+        activeView={activeView}
+        onSelectView={setActiveView}
         isAgentActive={
           agentSession?.status === "running" ||
           agentSession?.status === "waiting_permission"
         }
+        onNewAgentMission={() => {
+          agentRuntimeStore.clearSession();
+          showToast("Nova missão do agente pronta!");
+        }}
       />
 
-      {/* Área Central: Chat Principal com Painel Lateral de Trabalho (Antigravity-Style) */}
-      <main className="flex-1 flex h-full overflow-hidden relative">
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          <ChatArea
-            messages={messages}
-            isLoading={isLoading}
-            onSendMessage={handleSendMessage}
-            onRegenerate={handleRegenerate}
-            currentThreadName={activeThread?.name}
-            userName={currentUser?.name || "Lucas"}
-            onOpenShortcuts={() => setIsShortcutsOpen(true)}
-            onToggleWorkspace={() => setIsWorkspaceDrawerOpen((prev) => !prev)}
-            isWorkspaceOpen={isWorkspaceDrawerOpen}
-            hasActiveWorkspace={Boolean(agentSession)}
-            activeArtifacts={agentSession?.artifacts || []}
-            onOpenArtifact={(artId) => {
-              setFocusedArtifactId(artId);
-              setIsWorkspaceDrawerOpen(true);
-            }}
-          />
-        </div>
-
-        {/* Painel Contextual Lateral do Agent Workspace (Antigravity-Style) */}
-        {isWorkspaceDrawerOpen && (
-          <div
-            className={`${
-              workspaceDrawerWidth === "fullscreen"
-                ? "absolute inset-0 z-30 bg-[#090A0F]"
-                : workspaceDrawerWidth === "wide"
-                ? "w-[680px] xl:w-[780px]"
-                : "w-[460px] lg:w-[500px]"
-            } border-l border-white/[0.08] flex flex-col h-full bg-[#090A0F] shadow-2xl animate-fade-in z-20 transition-all duration-200`}
-          >
-            <div className="px-4 py-2.5 border-b border-white/[0.08] bg-[#12151C] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-semibold text-zinc-200 uppercase tracking-wider">
-                  Painel de Trabalho
-                </span>
-                {agentSession?.status === "running" ? (
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-                    Executando
-                  </span>
-                ) : agentSession ? (
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Pronto
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setWorkspaceDrawerWidth((prev) =>
-                      prev === "fullscreen" ? "wide" : prev === "wide" ? "compact" : "wide"
-                    )
-                  }
-                  className="text-xs text-zinc-400 hover:text-zinc-200 font-mono transition cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/[0.04]"
-                  title={workspaceDrawerWidth === "wide" ? "Reduzir largura" : "Expandir largura"}
-                >
-                  {workspaceDrawerWidth === "wide" ? "⇸ Reduzir" : "⇹ Expandir"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setWorkspaceDrawerWidth((prev) =>
-                      prev === "fullscreen" ? "compact" : "fullscreen"
-                    )
-                  }
-                  className="text-xs text-zinc-400 hover:text-zinc-200 font-mono transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/[0.04]"
-                  title={workspaceDrawerWidth === "fullscreen" ? "Voltar ao Chat dividido" : "Expandir em tela cheia"}
-                >
-                  {workspaceDrawerWidth === "fullscreen" ? "⤡ Dividir" : "⤢ Tela Cheia"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsWorkspaceDrawerOpen(false)}
-                  className="text-zinc-400 hover:text-zinc-200 text-xs px-1.5 py-0.5 rounded transition cursor-pointer hover:bg-white/[0.04]"
-                  title="Fechar Painel Lateral"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-hidden">
-              <AgentWorkspace
-                session={agentSession}
-                selectedArtifactId={focusedArtifactId}
-                onReviewChange={resolveChangeReview}
-                onResolvePermission={(reqId) => resolvePermission(reqId, "allow_for_task")}
-              />
-            </div>
+      {/* Área Central: Aba de Chat OU Aba de Agente (Experiência Antigravity com Chat + Painel Lateral) */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {activeView === "chat" ? (
+          <div className="flex-1 flex h-full overflow-hidden">
+            <ChatArea
+              messages={messages}
+              isLoading={isLoading}
+              onSendMessage={handleSendMessage}
+              onRegenerate={handleRegenerate}
+              currentThreadName={activeThread?.name}
+              userName={currentUser?.name || "Lucas"}
+              onOpenShortcuts={() => setIsShortcutsOpen(true)}
+              onToggleWorkspace={() => setActiveView("agent")}
+              isWorkspaceOpen={false}
+              hasActiveWorkspace={Boolean(agentSession)}
+              activeArtifacts={agentSession?.artifacts || []}
+              onOpenArtifact={() => {
+                setActiveView("agent");
+              }}
+            />
           </div>
+        ) : (
+          <AgentEnvironment
+            session={agentSession}
+            pendingPermissions={pendingPermissions}
+            onResolvePermission={(reqId, decision) =>
+              resolvePermission(reqId, decision)
+            }
+            onReviewChange={resolveChangeReview}
+            onRetryTask={(taskId) => agentRuntimeStore.retryTask(taskId)}
+            onNewMission={() => {
+              agentRuntimeStore.clearSession();
+              showToast("Nova missão do agente iniciada!");
+            }}
+            userName={currentUser?.name || "Lucas"}
+          />
         )}
       </main>
 
