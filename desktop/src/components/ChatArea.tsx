@@ -23,8 +23,10 @@ import {
   ChevronDown,
   ChevronRight,
   LayoutDashboard,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
-import { Message, ToolCallInfo } from "../types";
+import { Message, ToolCallInfo, AgentArtifact } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ChatAreaProps {
@@ -38,6 +40,8 @@ interface ChatAreaProps {
   onToggleWorkspace?: () => void;
   isWorkspaceOpen?: boolean;
   hasActiveWorkspace?: boolean;
+  activeArtifacts?: AgentArtifact[];
+  onOpenArtifact?: (artifactId: string) => void;
 }
 
 // Componente para blocos de código com destaque e botão de cópia
@@ -198,6 +202,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onToggleWorkspace,
   isWorkspaceOpen,
   hasActiveWorkspace,
+  activeArtifacts = [],
+  onOpenArtifact,
 }) => {
   const [input, setInput] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
@@ -725,6 +731,44 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                             {m.streaming && m.content && (
                               <span className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--accent)] animate-pulse align-middle rounded-full" />
+                            )}
+                            {/* Cartão de Artefato Conectado ao Workspace */}
+                            {activeArtifacts && activeArtifacts.length > 0 && !isUser && (idx === messages.length - 1 || m.content?.toLowerCase().includes("workspace") || m.content?.toLowerCase().includes("relatório") || m.content?.toLowerCase().includes(".md")) && (
+                              <div className="mt-3 pt-3 border-t border-white/[0.08] space-y-2">
+                                <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                                  <span>Trabalho Produzido no Workspace</span>
+                                </div>
+                                {activeArtifacts.slice(-2).map((art) => (
+                                  <div
+                                    key={art.id}
+                                    onClick={() => {
+                                      if (!isWorkspaceOpen && onToggleWorkspace) onToggleWorkspace();
+                                      if (onOpenArtifact) onOpenArtifact(art.id);
+                                    }}
+                                    className="p-2.5 rounded-lg bg-[#0C0D12] border border-indigo-500/25 hover:border-indigo-400/50 flex items-center justify-between gap-3 cursor-pointer transition group shadow-sm"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <span className="text-base">📄</span>
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-mono font-medium text-zinc-200 group-hover:text-white transition truncate">
+                                          {art.name}
+                                        </div>
+                                        <div className="text-[10px] text-zinc-400">
+                                          {Math.round((art.sizeBytes || 0) / 1024) || 1} KB • Disponível para consulta no painel lateral
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 group-hover:bg-indigo-500 group-hover:text-white text-xs font-mono transition flex items-center gap-1 shrink-0"
+                                    >
+                                      <span>Abrir</span>
+                                      <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>

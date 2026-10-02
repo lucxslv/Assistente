@@ -17,7 +17,11 @@ import {
 } from "lucide-react";
 import { AgentWorkspace } from "./workspace/AgentWorkspace";
 
-export const AgentCommandCenter: React.FC = () => {
+export interface AgentCommandCenterProps {
+  selectedArtifactId?: string;
+}
+
+export const AgentCommandCenter: React.FC<AgentCommandCenterProps> = ({ selectedArtifactId }) => {
   const {
     session,
     permissions,
@@ -220,6 +224,7 @@ export const AgentCommandCenter: React.FC = () => {
             logs={logs}
             permissions={permissions}
             pendingPermissions={pendingPermissions}
+            selectedArtifactId={selectedArtifactId}
             onReviewChange={resolveChangeReview}
             onResolvePermission={(reqId, decision) => resolvePermission(reqId, decision)}
             onRetryTask={retryTask}

@@ -24,6 +24,8 @@ export type WorkspaceTab =
 interface AgentWorkspaceProps {
   session: AgentSession;
   initialTab?: WorkspaceTab;
+  initialSubTab?: string;
+  selectedArtifactId?: string;
   logs?: AgentLogEntry[];
   permissions?: PermissionRequest[];
   pendingPermissions?: PermissionRequest[];
@@ -37,7 +39,9 @@ interface AgentWorkspaceProps {
 
 export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
   session,
-  initialTab = "live",
+  initialTab,
+  initialSubTab,
+  selectedArtifactId,
   logs = [],
   permissions = [],
   pendingPermissions = [],
@@ -45,8 +49,17 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
   onResolvePermission,
   onRetryTask,
 }) => {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
-  const [subTabHint, setSubTabHint] = useState<string | undefined>();
+  // Se houver um artefato selecionado, ou artefatos recém gerados, inicializa em files_artifacts
+  const defaultTab: WorkspaceTab =
+    initialTab ||
+    (selectedArtifactId || (session.artifacts?.length || 0) > 0
+      ? "files_artifacts"
+      : "live");
+
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(defaultTab);
+  const [subTabHint, setSubTabHint] = useState<string | undefined>(
+    initialSubTab || (selectedArtifactId ? "artifacts" : undefined)
+  );
 
   const artifactsCount = session.artifacts?.length || 0;
   const filesCount = session.files?.length || 0;
@@ -181,6 +194,7 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
             session={session}
             onReviewChange={onReviewChange}
             defaultSubTab={subTabHint as any}
+            selectedArtifactId={selectedArtifactId}
           />
         )}
 

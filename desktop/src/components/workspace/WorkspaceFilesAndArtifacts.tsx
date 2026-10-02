@@ -9,12 +9,14 @@ interface WorkspaceFilesAndArtifactsProps {
   session: AgentSession;
   onReviewChange?: (changeId: string, decision: "accept" | "revert") => void;
   defaultSubTab?: "files" | "changes" | "artifacts";
+  selectedArtifactId?: string;
 }
 
 export const WorkspaceFilesAndArtifacts: React.FC<WorkspaceFilesAndArtifactsProps> = ({
   session,
   onReviewChange,
   defaultSubTab,
+  selectedArtifactId,
 }) => {
   const filesCount = session.files?.length || 0;
   const changesCount = session.changes?.length || 0;
@@ -22,6 +24,7 @@ export const WorkspaceFilesAndArtifacts: React.FC<WorkspaceFilesAndArtifactsProp
 
   // Seleciona inteligentemente a sub-aba que tem conteúdo ou o default informado
   const [subTab, setSubTab] = useState<"files" | "changes" | "artifacts">(() => {
+    if (selectedArtifactId || defaultSubTab === "artifacts") return "artifacts";
     if (defaultSubTab) return defaultSubTab;
     if (changesCount > 0) return "changes";
     if (artifactsCount > 0) return "artifacts";
@@ -105,7 +108,10 @@ export const WorkspaceFilesAndArtifacts: React.FC<WorkspaceFilesAndArtifactsProp
           />
         )}
         {subTab === "artifacts" && (
-          <WorkspaceArtifacts artifacts={session.artifacts || []} />
+          <WorkspaceArtifacts
+            artifacts={session.artifacts || []}
+            initialArtifactId={selectedArtifactId}
+          />
         )}
       </div>
     </div>
