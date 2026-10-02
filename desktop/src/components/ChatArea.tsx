@@ -22,6 +22,7 @@ import {
   Pencil,
   ChevronDown,
   ChevronRight,
+  LayoutDashboard,
 } from "lucide-react";
 import { Message, ToolCallInfo } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -34,6 +35,9 @@ interface ChatAreaProps {
   currentThreadName?: string;
   userName?: string;
   onOpenShortcuts?: () => void;
+  onToggleWorkspace?: () => void;
+  isWorkspaceOpen?: boolean;
+  hasActiveWorkspace?: boolean;
 }
 
 // Componente para blocos de código com destaque e botão de cópia
@@ -191,6 +195,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   currentThreadName,
   userName = "Lucas",
   onOpenShortcuts,
+  onToggleWorkspace,
+  isWorkspaceOpen,
+  hasActiveWorkspace,
 }) => {
   const [input, setInput] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
@@ -370,6 +377,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
         {/* Controles de Janela Sutis */}
         <div className="flex items-center gap-1">
+          {onToggleWorkspace && (
+            <button
+              type="button"
+              onClick={onToggleWorkspace}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-mono transition cursor-pointer mr-1.5 border ${
+                isWorkspaceOpen
+                  ? "bg-white/[0.14] text-zinc-100 border-white/[0.24] shadow-sm"
+                  : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200 border-white/[0.06] hover:bg-white/[0.08]"
+              }`}
+              title="Alternar visualização do Agent Workspace operacional"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Workspace</span>
+              {hasActiveWorkspace && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+              )}
+            </button>
+          )}
+
           {onOpenShortcuts && (
             <button
               type="button"

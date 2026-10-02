@@ -29,11 +29,13 @@ import {
 } from "./services/api";
 import { executeDeviceTool } from "./services/deviceExecutor";
 import { AgentCommandCenter } from "./components/AgentCommandCenter";
+import { AgentWorkspace } from "./components/workspace/AgentWorkspace";
 import { useAgentRuntime, agentRuntimeStore } from "./services/agentRuntimeStore";
 
 export function App() {
   const [activeView, setActiveView] = useState<"chat" | "agent">("chat");
-  const { session: agentSession } = useAgentRuntime();
+  const { session: agentSession, resolveChangeReview, resolvePermission } = useAgentRuntime();
+  const [isWorkspaceDrawerOpen, setIsWorkspaceDrawerOpen] = useState(false);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -597,18 +599,82 @@ export function App() {
         }
       />
 
-      {/* Área Central: Chat ou Agent Command Center */}
+      {/* Área Central: Chat com Workspace Contextual OU Agent Command Center */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         {activeView === "chat" ? (
-          <ChatArea
-            messages={messages}
-            isLoading={isLoading}
-            onSendMessage={handleSendMessage}
-            onRegenerate={handleRegenerate}
-            currentThreadName={activeThread?.name}
-            userName={currentUser?.name || "Lucas"}
-            onOpenShortcuts={() => setIsShortcutsOpen(true)}
-          />
+          <div className="flex-1 flex h-full overflow-hidden">
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              <ChatArea
+                messages={messages}
+                isLoading={isLoading}
+                onSendMessage={handleSendMessage}
+                onRegenerate={handleRegenerate}
+                currentThreadName={activeThread?.name}
+                userName={currentUser?.name || "Lucas"}
+                onOpenShortcuts={() => setIsShortcutsOpen(true)}
+                onToggleWorkspace={() => setIsWorkspaceDrawerOpen((prev) => !prev)}
+                isWorkspaceOpen={isWorkspaceDrawerOpen}
+                hasActiveWorkspace={Boolean(agentSession)}
+              />
+            </div>
+
+            {/* Painel Contextual Lateral do Agent Workspace (Especificação Seção 4: SIDEBAR | CHAT | WORKSPACE) */}
+            {isWorkspaceDrawerOpen && (
+              <div className="w-[420px] lg:w-[480px] border-l border-white/[0.08] flex flex-col h-full bg-[#090A0F] shadow-2xl animate-fade-in z-20">
+                <div className="px-4 py-2.5 border-b border-white/[0.08] bg-[#12151C] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-semibold text-zinc-200 uppercase tracking-wider">
+                      Agent Workspace
+                    </span>
+                    {agentSession && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        Ativo
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("agent")}
+                      className="text-xs text-zinc-400 hover:text-zinc-200 font-mono transition cursor-pointer"
+                      title="Expandir tela cheia"
+                    >
+                      ⤢ Tela Cheia
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsWorkspaceDrawerOpen(false)}
+                      className="text-zinc-400 hover:text-zinc-200 text-xs px-1.5 py-0.5 rounded transition cursor-pointer"
+                      title="Fechar Workspace Lateral"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-hidden">
+                  {agentSession ? (
+                    <AgentWorkspace
+                      session={agentSession}
+                      onReviewChange={resolveChangeReview}
+                      onResolvePermission={(reqId) => resolvePermission(reqId, "allow_for_task")}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-6 text-center text-zinc-500 space-y-3">
+                      <p className="text-xs">Nenhuma sessão ativa do agente no momento.</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView("agent")}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition"
+                      >
+                        Abrir Cockpit do Agente
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <AgentCommandCenter />
         )}
