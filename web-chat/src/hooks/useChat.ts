@@ -54,7 +54,10 @@ export function useChat() {
       const list = await refreshThreads();
       if (isFirstLoadRef.current) {
         isFirstLoadRef.current = false;
-        if (list.length > 0) {
+        const savedThreadId = StorageService.getActiveThreadId();
+        if (savedThreadId && list.some((t) => t.id === savedThreadId)) {
+          setActiveThreadId(savedThreadId);
+        } else if (list.length > 0) {
           setActiveThreadId(list[0].id);
         }
       }
@@ -72,6 +75,9 @@ export function useChat() {
         setDraftState('');
         return;
       }
+
+      // Persist active thread selection
+      StorageService.setActiveThreadId(activeThreadId);
 
       // Load draft for this thread
       const savedDraft = StorageService.getDraft(activeThreadId);
@@ -234,11 +240,18 @@ export function useChat() {
 
       let accumulatedReply = '';
 
+      // Extrai histórico recente da conversa para garantir continuidade contextual
+      const conversationHistory = messages
+        .filter((m) => m.content && m.content.trim())
+        .slice(-20)
+        .map((m) => ({ role: m.role, content: m.content }));
+
       try {
         await chatStream.send({
           message: finalPrompt,
           threadId: targetThreadId,
           skipTts: true,
+          history: conversationHistory,
           signal: abortController.signal,
           onToken: (token) => {
             setCharlieStatus('speaking');

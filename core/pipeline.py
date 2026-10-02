@@ -84,6 +84,7 @@ class AssistantPipeline:
         user_id: str | None = None,
         user_name: str | None = None,
         tool_results: list[dict] | None = None,
+        history: list[dict] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
         import os
@@ -107,17 +108,35 @@ class AssistantPipeline:
 
         yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias..."})
 
-        # Registra resultados de ferramentas enviadas pelo cliente Desktop se houver
+        # Inicializa memória da conversa isolada para esta requisição/thread
+        req_memory = ConversationMemory(max_messages=config.max_history_messages)
+
+        # 1. Hidrata o histórico persistido do banco de dados (ou payload) se fornecido
+        if history:
+            for item in history:
+                role = item.get("role", "")
+                content = item.get("content", "")
+                if not content:
+                    continue
+                if role == "user":
+                    req_memory.add_user(content)
+                elif role == "assistant":
+                    req_memory.add_assistant(content)
+
+        # 2. Garante que a mensagem atual do usuário esteja presente no final do histórico
+        existing_msgs = req_memory.get_messages()
+        if user_text and user_text.strip():
+            # Se o histórico carregado do banco já continha a mensagem atual no final, não duplica
+            if not existing_msgs or existing_msgs[-1].get("content") != user_text:
+                req_memory.add_user(user_text)
+
+        # 3. Registra resultados de ferramentas enviadas pelo cliente Desktop se houver
         if tool_results:
             for tr in tool_results:
                 t_name = tr.get("name", "tool")
                 t_res = tr.get("result", "")
                 t_cid = tr.get("call_id")
-                self.memory.add_tool_result(t_name, t_res, tool_call_id=t_cid)
-
-        # Registra mensagem de usuário se houver texto
-        if user_text and user_text.strip():
-            self.memory.add_user(user_text)
+                req_memory.add_tool_result(t_name, t_res, tool_call_id=t_cid)
 
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
         route_decision = self.router.route(user_text or "continuar análise do sistema")
@@ -157,7 +176,7 @@ class AssistantPipeline:
             try:
                 async for chunk in self.llm.chat_stream(
                     system_prompt=system_prompt,
-                    messages=self.memory.get_messages(),
+                    messages=req_memory.get_messages(),
                     tools=active_tools,
                     model_override=route_decision.model_name,
                 ):
@@ -174,7 +193,7 @@ class AssistantPipeline:
                 if fallback_model != route_decision.model_name:
                     async for chunk in self.llm.chat_stream(
                         system_prompt=system_prompt,
-                        messages=self.memory.get_messages(),
+                        messages=req_memory.get_messages(),
                         tools=active_tools,
                         model_override=fallback_model,
                     ):
@@ -192,7 +211,7 @@ class AssistantPipeline:
                 final_reply = iteration_reply or "Ação concluída."
                 break
 
-            self.memory.add_assistant_tool_calls(tool_calls)
+            req_memory.add_assistant_tool_calls(tool_calls)
 
             # Notifica início das ferramentas
             client_tools_to_exec = []
@@ -231,7 +250,7 @@ class AssistantPipeline:
                 scope_enum = self.tools.get_scope(call.name)
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
                 res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id)
-                self.memory.add_tool_result(call.name, res, tool_call_id=c_id)
+                req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
                 yield StreamEvent(
                     type="tool_end",
                     data={
@@ -258,7 +277,8 @@ class AssistantPipeline:
         if not self.planner.validate_response(final_reply):
             final_reply = "Desculpe, ocorreu um erro ao gerar a resposta."
 
-        self.memory.add_assistant(final_reply)
+        req_memory.add_assistant(final_reply)
+        self.memory = req_memory
 
         if not emitted_any_token and final_reply and final_reply.strip():
             yield StreamEvent(type="token", data={"token": final_reply})
@@ -286,6 +306,7 @@ class AssistantPipeline:
         thread_id: str | None = None,
         user_id: str | None = None,
         user_name: str | None = None,
+        history: list[dict] | None = None,
     ) -> str:
         """Executa o pipeline completo e retorna a resposta montada."""
         full_text = ""
@@ -294,6 +315,7 @@ class AssistantPipeline:
             thread_id=thread_id,
             user_id=user_id,
             user_name=user_name,
+            history=history,
         ):
             if event.type == "done":
                 full_text = event.data.get("reply", "")

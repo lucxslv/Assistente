@@ -38,6 +38,37 @@ class ChatRequest(BaseModel):
     thread_id: Optional[str] = None
     skip_tts: bool = True
     tool_results: Optional[list[dict]] = None
+    history: Optional[list[dict]] = None
+
+
+async def _load_thread_history(thread_id: str, limit: int = 30) -> list[dict]:
+    """Carrega o histórico real de mensagens da conversa (Thread) persistido no Supabase/PostgreSQL."""
+    pool = await get_or_init_db_pool()
+    if not pool or not thread_id:
+        return []
+    try:
+        t_uuid = uuid.UUID(thread_id)
+    except ValueError:
+        return []
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT type, output, "createdAt"
+                FROM "Step"
+                WHERE "threadId" = $1 AND type IN ('user_message', 'assistant_message')
+                ORDER BY "createdAt" ASC
+            """, t_uuid)
+            history = []
+            for r in rows:
+                role = "user" if r["type"] == "user_message" else "assistant"
+                content = r["output"] or ""
+                if content.strip():
+                    history.append({"role": role, "content": content})
+            return history[-limit:]
+    except Exception as e:
+        logger.warning(f"Erro ao carregar histórico persistido da thread {thread_id}: {e}")
+        return []
+
 
 
 async def _prepare_thread_and_store_user_message(
@@ -143,6 +174,10 @@ async def chat_post(req: ChatRequest, request: Request, user: dict = Depends(get
     pipeline = get_pipeline()
     thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
 
+    thread_history = await _load_thread_history(thread_id)
+    if not thread_history and req.history:
+        thread_history = req.history
+
     state.set_status(CharlieStatus.THINKING)
     try:
         reply = await pipeline.run_pipeline(
@@ -151,6 +186,7 @@ async def chat_post(req: ChatRequest, request: Request, user: dict = Depends(get
             thread_id=thread_id,
             user_id=str(user["id"]),
             user_name=user.get("name"),
+            history=thread_history,
         )
     except Exception as e:
         logger.exception("Erro no pipeline")
@@ -191,6 +227,10 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
     thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
     client_ip = _extract_ip(request)
 
+    thread_history = await _load_thread_history(thread_id)
+    if not thread_history and req.history:
+        thread_history = req.history
+
     async def event_generator():
         final_reply = ""
         state.set_status(CharlieStatus.THINKING)
@@ -202,6 +242,7 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
                 user_id=str(user["id"]),
                 user_name=user.get("name"),
                 tool_results=req.tool_results,
+                history=thread_history,
             ):
                 if ev.type == "token":
                     final_reply += ev.data.get("token", "")
