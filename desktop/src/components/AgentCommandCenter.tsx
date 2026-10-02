@@ -27,9 +27,11 @@ import {
   ChevronRight,
   Layers,
   Sparkles,
+  Trash2,
+  FolderOpen,
 } from "lucide-react";
 
-type AgentTab = "overview" | "tasks" | "permissions" | "evidence" | "logs" | "processes";
+type AgentTab = "overview" | "tasks" | "permissions" | "evidence" | "logs" | "processes" | "history";
 
 export const AgentCommandCenter: React.FC = () => {
   const {
@@ -38,6 +40,8 @@ export const AgentCommandCenter: React.FC = () => {
     pendingPermissions,
     logs,
     processes,
+    history,
+    historyMetrics,
     startGoal,
     pauseAgent,
     resumeAgent,
@@ -46,10 +50,14 @@ export const AgentCommandCenter: React.FC = () => {
     completeTaskWithEvidence,
     resolvePermission,
     refreshProcesses,
+    loadSession,
+    deleteHistorySession,
+    clearHistory,
     clearSession,
   } = useAgentRuntime();
 
   const [activeTab, setActiveTab] = useState<AgentTab>("overview");
+  const [historyFilter, setHistoryFilter] = useState<"ALL" | "completed" | "failed">("ALL");
 
   React.useEffect(() => {
     if (activeTab === "processes") {
@@ -305,6 +313,22 @@ export const AgentCommandCenter: React.FC = () => {
             {processes.length > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
                 {processes.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+              activeTab === "history"
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" /> Histórico
+            {history.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
+                {history.length}
               </span>
             )}
           </button>
@@ -937,6 +961,179 @@ export const AgentCommandCenter: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= TAB 7: HISTORY ================= */}
+        {activeTab === "history" && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-zinc-200">Histórico de Missões do Agente</h2>
+                <span className="text-xs text-zinc-500">
+                  Registro persistente em disco (SQLite/Local) de todas as sessões executadas
+                </span>
+              </div>
+              {history.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm("Deseja realmente limpar todo o histórico de missões?")) {
+                      clearHistory();
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/50 transition cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Limpar Histórico
+                </button>
+              )}
+            </div>
+
+            {/* Cartões de Métricas Agregadas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Total de Missões</span>
+                <p className="text-xl font-bold text-zinc-100 mt-1">{historyMetrics.totalSessions}</p>
+              </div>
+
+              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Taxa de Sucesso</span>
+                <p className="text-xl font-bold text-emerald-400 mt-1">{historyMetrics.successRate}%</p>
+              </div>
+
+              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Missões Concluídas</span>
+                <p className="text-xl font-bold text-blue-400 mt-1">{historyMetrics.completedSessions}</p>
+              </div>
+
+              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Tarefas Verificadas</span>
+                <p className="text-xl font-bold text-indigo-400 mt-1">
+                  {historyMetrics.completedTasks} / {historyMetrics.totalTasks}
+                </p>
+              </div>
+            </div>
+
+            {/* Filtros */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setHistoryFilter("ALL")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  historyFilter === "ALL"
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Todas ({history.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryFilter("completed")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  historyFilter === "completed"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Concluídas ({history.filter((s) => s.status === "completed").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryFilter("failed")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  historyFilter === "failed"
+                    ? "bg-rose-600 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Falhas ({history.filter((s) => s.status === "failed").length})
+              </button>
+            </div>
+
+            {/* Lista de Sessões */}
+            {history.filter((s) => historyFilter === "ALL" || s.status === historyFilter).length === 0 ? (
+              <div className="p-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-[#14161E]">
+                <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm font-medium">Nenhuma missão no histórico.</p>
+                <p className="text-xs text-zinc-600 mt-1">
+                  Inicie um objetivo no Command Center e as missões concluídas serão salvas automaticamente aqui.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {history
+                  .filter((s) => historyFilter === "ALL" || s.status === historyFilter)
+                  .map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 bg-[#14161E] border border-[#23262D] rounded-xl hover:border-zinc-700 transition space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-zinc-100">{item.goal}</span>
+                            {getStatusBadge(item.status)}
+                          </div>
+                          <div className="text-[11px] text-zinc-500 flex items-center gap-3">
+                            <span>Sessão: {item.id}</span>
+                            <span>•</span>
+                            <span>Projeto: {item.project || "Charlie"}</span>
+                            <span>•</span>
+                            <span>{new Date(item.startedAt).toLocaleString("pt-BR")}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              loadSession(item);
+                              setActiveTab("overview");
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-zinc-800 hover:bg-zinc-700 text-blue-400 transition cursor-pointer"
+                            title="Carregar esta missão no Command Center"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5" /> Carregar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteHistorySession(item.id)}
+                            className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 transition cursor-pointer"
+                            title="Excluir do histórico"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {item.summary && (
+                        <p className="text-xs text-zinc-400 bg-[#0E0F12] p-2.5 rounded-lg border border-[#1E2028]">
+                          {item.summary}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-zinc-800/40">
+                        <span>
+                          {item.tasks?.filter((t) => t.status === "success").length || 0} de {item.tasks?.length || 0} tarefas concluídas
+                        </span>
+                        <div className="w-36 bg-[#0E0F12] rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full ${
+                              item.status === "completed"
+                                ? "bg-emerald-500"
+                                : item.status === "failed"
+                                ? "bg-rose-500"
+                                : "bg-blue-500"
+                            }`}
+                            style={{ width: `${item.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </div>

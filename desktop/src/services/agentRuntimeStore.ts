@@ -18,6 +18,7 @@ import {
   listLocalDirectory,
   readLocalFile,
 } from "./deviceExecutor";
+import { agentHistoryStore } from "./agentHistoryStore";
 
 const STORAGE_KEY_SESSION = "charlie_agent_session_v1_2";
 const STORAGE_KEY_LOGS = "charlie_agent_logs_v1_2";
@@ -47,6 +48,9 @@ class AgentRuntimeStore {
 
   private notify() {
     this.saveToStorage();
+    if (this.session) {
+      agentHistoryStore.saveSession(this.session);
+    }
     this.listeners.forEach((listener) => {
       try {
         listener();
@@ -925,6 +929,12 @@ class AgentRuntimeStore {
     }
     this.notify();
   }
+
+  public loadSession(session: AgentSession) {
+    this.session = { ...session };
+    this.addLog("SYSTEM", `Sessão [${session.id}] carregada do histórico.`);
+    this.notify();
+  }
 }
 
 // Instância singleton global do Runtime Store
@@ -935,10 +945,12 @@ export function useAgentRuntime() {
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = agentRuntimeStore.subscribe(() => {
-      setTick((prev) => prev + 1);
-    });
-    return unsubscribe;
+    const unsub1 = agentRuntimeStore.subscribe(() => setTick((prev) => prev + 1));
+    const unsub2 = agentHistoryStore.subscribe(() => setTick((prev) => prev + 1));
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }, []);
 
   return {
@@ -948,6 +960,8 @@ export function useAgentRuntime() {
     logs: agentRuntimeStore.getLogs(),
     processes: agentRuntimeStore.getProcesses(),
     events: agentRuntimeStore.getEvents(),
+    history: agentHistoryStore.getHistory(),
+    historyMetrics: agentHistoryStore.getMetrics(),
 
     // Ações
     startGoal: (goal: string, project?: string) => agentRuntimeStore.startGoal(goal, project),
@@ -966,6 +980,9 @@ export function useAgentRuntime() {
     addLog: (category: AgentLogCategory, message: string, details?: any) =>
       agentRuntimeStore.addLog(category, message, details),
     refreshProcesses: () => agentRuntimeStore.refreshProcesses(),
+    loadSession: (sess: AgentSession) => agentRuntimeStore.loadSession(sess),
+    deleteHistorySession: (id: string) => agentHistoryStore.deleteSession(id),
+    clearHistory: () => agentHistoryStore.clearHistory(),
     clearSession: () => agentRuntimeStore.clearSession(),
   };
 }
