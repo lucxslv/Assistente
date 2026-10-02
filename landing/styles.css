@@ -1,0 +1,481 @@
+/* ==========================================================================
+   Charlie Desktop — Official Landing Page Stylesheet
+   Theme: Clean Technical / Dark Titanium / Electric Violet
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Surface & Background */
+  --bg-main: #0A0B0E;
+  --bg-canvas: #0E0F12;
+  --surface-base: #15171C;
+  --surface-hover: #1B1E24;
+  --surface-elevated: #20232A;
+  --surface-active: #252932;
+  --border-subtle: #22262E;
+  --border-strong: #292D35;
+  --border-highlight: rgba(255, 255, 255, 0.12);
+
+  /* Typography */
+  --text-primary: #F2F3F5;
+  --text-secondary: #A4A8B2;
+  --text-muted: #6F7480;
+  --text-dim: #4B505C;
+
+  /* Accent & Electric Violet */
+  --accent: #8B7CFF;
+  --accent-hover: #9E91FF;
+  --accent-light: #B4A9FF;
+  --accent-dark: #6857DE;
+  --accent-soft-bg: rgba(139, 124, 255, 0.08);
+  --accent-soft-border: rgba(139, 124, 255, 0.28);
+  --accent-glow: rgba(139, 124, 255, 0.18);
+  --accent-glow-strong: rgba(139, 124, 255, 0.35);
+
+  /* Functional Accents */
+  --success: #34D399;
+  --success-soft: rgba(52, 211, 153, 0.12);
+  --success-border: rgba(52, 211, 153, 0.25);
+  
+  --warning: #FBBF24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --warning-border: rgba(251, 191, 36, 0.28);
+
+  --danger: #F87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --danger-border: rgba(248, 113, 113, 0.28);
+
+  --info: #38BDF8;
+  --info-soft: rgba(56, 189, 248, 0.12);
+
+  /* Radii & Shadows */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  --shadow-subtle: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  --shadow-glass: 0 20px 50px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-glow: 0 0 60px -15px var(--accent-glow);
+
+  /* Typography Stacks */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, "Cascadia Code", "Fira Code", monospace;
+}
+
+/* Base Reset & Core */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Technical Grid & Ambient Glows */
+.bg-grid-pattern {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, #000 30%, transparent 80%);
+}
+
+.hero-glow-sphere {
+  position: absolute;
+  width: 680px;
+  height: 480px;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at center, rgba(139, 124, 255, 0.22) 0%, rgba(56, 189, 248, 0.1) 45%, transparent 70%);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.section-glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(139, 124, 255, 0.12) 0%, transparent 70%);
+  filter: blur(100px);
+  pointer-events: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Container & Layout */
+.container-custom {
+  max-width: 1240px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/* Typography Helpers */
+.font-mono-tech {
+  font-family: var(--font-mono);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #FFFFFF 0%, #E2E8F0 50%, #94A3B8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-accent {
+  background: linear-gradient(135deg, #FFFFFF 20%, #C4B5FD 60%, #8B7CFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  background: linear-gradient(180deg, #9B8EFF 0%, #7A69FA 100%);
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -4px rgba(139, 124, 255, 0.45);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, #A89BFF 0%, #8B7CFF 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px -4px rgba(139, 124, 255, 0.6);
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-subtle);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-secondary:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-highlight);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.btn-outline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: rgba(139, 124, 255, 0.08);
+  border: 1px solid var(--accent-soft-border);
+  color: #D8D2FF;
+  backdrop-filter: blur(8px);
+}
+
+/* Glass & Card Containers */
+.card-tech {
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+.card-tech:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.card-glow {
+  position: relative;
+}
+.card-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(139, 124, 255, 0.3), rgba(255, 255, 255, 0.03));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Top Navigation Bar */
+.navbar-blur {
+  background: rgba(10, 11, 14, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  transition: all 0.2s ease;
+}
+
+/* Mockup Windows Frame */
+.window-frame {
+  background: #0E0F12;
+  border: 1px solid #292D35;
+  border-radius: var(--radius-lg);
+  box-shadow: 
+    0 30px 100px -20px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 60px -10px rgba(139, 124, 255, 0.15);
+  overflow: hidden;
+}
+
+.window-titlebar {
+  background: #15171C;
+  border-bottom: 1px solid #22262E;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  user-select: none;
+}
+
+.window-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.window-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.dot-close { background: #FF5F56; }
+.dot-minimize { background: #FFBD2E; }
+.dot-maximize { background: #27C93F; }
+
+/* Mockup Subcomponents */
+.mock-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.mock-sidebar-item:hover, .mock-sidebar-item.active {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+.mock-sidebar-item.active {
+  background: var(--accent-soft-bg);
+  color: var(--accent-light);
+  border: 1px solid var(--accent-soft-border);
+}
+
+.drawer-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.drawer-tab-btn:hover {
+  color: var(--text-secondary);
+}
+.drawer-tab-btn.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+  background: rgba(139, 124, 255, 0.04);
+}
+
+/* Diff Viewer Styling */
+.diff-line {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 2px 8px;
+}
+.diff-added {
+  background: rgba(52, 211, 153, 0.12);
+  color: #A7F3D0;
+  border-left: 2px solid var(--success);
+}
+.diff-removed {
+  background: rgba(248, 113, 113, 0.12);
+  color: #FECACA;
+  border-left: 2px solid var(--danger);
+}
+.diff-context {
+  color: #94A3B8;
+}
+
+/* Terminal Screen */
+.terminal-window {
+  background: #090A0D;
+  font-family: var(--font-mono);
+  color: #E2E8F0;
+  font-size: 12px;
+  line-height: 1.6;
+  border-radius: var(--radius-sm);
+  border: 1px solid #1E222B;
+}
+
+/* Pulse & Animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.97); }
+}
+.pulse-indicator {
+  animation: pulse-subtle 2.5s infinite ease-in-out;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+.float-element {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+/* FAQ Accordion */
+.faq-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.faq-trigger:hover {
+  color: var(--accent-light);
+}
+.faq-chevron {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-muted);
+}
+.faq-item.open .faq-chevron {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+.faq-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease;
+  padding: 0 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+.faq-item.open .faq-content {
+  max-height: 400px;
+  padding: 0 1.5rem 1.25rem 1.5rem;
+}
+
+/* Spotlight Demo Window */
+.spotlight-card {
+  background: rgba(21, 23, 28, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 25px 80px -15px rgba(0, 0, 0, 0.9), 0 0 50px -10px rgba(139, 124, 255, 0.3);
+}
+
+/* Permission Modal Demo */
+.permission-dialog {
+  background: #15171C;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.8);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .hero-glow-sphere {
+    width: 90%;
+    height: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  .window-titlebar {
+    padding: 0 10px;
+  }
+}

@@ -233,6 +233,12 @@ async def chat_ws(websocket: WebSocket):
     state.subscribe(on_state_change)
     pipeline = get_pipeline()
 
+    ws_user = None
+    token = websocket.query_params.get("token")
+    if token:
+        from api.routes.auth import verify_supabase_token
+        ws_user = await verify_supabase_token(token)
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -241,14 +247,23 @@ async def chat_ws(websocket: WebSocket):
             if msg_type == "ping":
                 presence_manager.register_or_heartbeat(client_id=client_id)
                 await websocket.send_json({"type": "pong"})
+            elif msg_type == "auth":
+                auth_tok = data.get("token")
+                if auth_tok:
+                    from api.routes.auth import verify_supabase_token
+                    ws_user = await verify_supabase_token(auth_tok)
+                    await websocket.send_json({"type": "auth_status", "authenticated": ws_user is not None})
             elif msg_type == "device_tool_result":
                 call_id = data.get("call_id")
                 res = data.get("result")
                 device_broker.resolve_tool_result(call_id, res)
             elif msg_type == "chat":
+                if not ws_user:
+                    await websocket.send_json({"type": "error", "data": {"error": "Autenticação obrigatória para enviar mensagens."}})
+                    continue
                 text = data.get("message", "")
                 thread_id_in = data.get("thread_id")
-                thread_id = await _prepare_thread_and_store_user_message(text, thread_id_in)
+                thread_id = await _prepare_thread_and_store_user_message(text, thread_id_in, user=ws_user)
                 presence_manager.register_or_heartbeat(client_id=client_id, active_thread_id=thread_id)
 
                 final_reply = ""

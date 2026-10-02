@@ -8,7 +8,6 @@ import {
   MoreHorizontal,
   Keyboard,
   User,
-  Sparkles,
   Plus,
 } from "lucide-react";
 import { Thread } from "../types";
@@ -179,8 +178,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               alt="Charlie"
               className="w-5 h-5 object-contain drop-shadow-[0_0_10px_rgba(139,124,255,0.4)]"
             />
-            <span className="text-[15px] font-semibold tracking-[-0.3px] text-[var(--text-primary)]">
-              Charlie
+            <span className="text-[13px] font-mono font-bold tracking-wider text-zinc-100 uppercase">
+              CHARLIE_OS
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] pl-7">
@@ -245,10 +244,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onNewThread}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 transition-colors shadow-sm cursor-pointer w-full mb-2.5"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/60 transition-colors shadow-sm cursor-pointer w-full mb-2.5 group"
           >
-            <Sparkles className="w-3.5 h-3.5 text-zinc-900" />
-            <span>+ Nova Conversa</span>
+            <span className="flex items-center gap-2">
+              <Plus className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-200" />
+              <span>Nova Conversa</span>
+            </span>
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 group-hover:text-zinc-200">
+              N
+            </kbd>
           </button>
 
           {/* Pesquisa e Paleta rápida */}
@@ -338,8 +342,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onClick={() => !isEditing && onSelectThread(t.id)}
                           className={`group relative flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[13px] cursor-pointer transition-colors border ${
                             isActive
-                              ? "bg-[var(--accent-soft-bg)] border-[var(--accent-soft-border)] text-[var(--accent-hover)] font-medium"
-                              : "border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                              ? "bg-zinc-800/90 border-zinc-700/80 text-zinc-100 font-medium"
+                              : "border-transparent text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
                           }`}
                         >
                           {isEditing ? (
@@ -408,10 +412,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onNewAgentMission}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-sm cursor-pointer w-full mb-3"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/60 transition-colors shadow-sm cursor-pointer w-full mb-3 group"
           >
-            <Plus className="w-3.5 h-3.5 text-white" />
-            <span>+ Nova Missão do Agente</span>
+            <span className="flex items-center gap-2">
+              <Plus className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-200" />
+              <span>Nova Missão</span>
+            </span>
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 group-hover:text-zinc-200">
+              N
+            </kbd>
           </button>
 
           <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 px-1 pb-1.5 uppercase tracking-wider">
@@ -438,7 +447,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onClick={() => loadSession(sess)}
                     className={`group p-2.5 rounded-lg border transition cursor-pointer text-left ${
                       isActive
-                        ? "bg-[#1C202A] border-indigo-500/40 shadow-sm"
+                        ? "bg-zinc-800/90 border-zinc-700/80 shadow-sm"
                         : "bg-[#12151C]/60 hover:bg-[#181C26] border-white/[0.04] hover:border-white/[0.08]"
                     }`}
                   >
@@ -482,51 +491,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* 4. Perfil do Usuário */}
-      <div className="mt-auto pt-3 border-t border-[var(--border)] mb-2">
-        {user ? (
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex items-center gap-2.5 w-full p-2 rounded-[var(--radius-md)] bg-[var(--surface-elevated)]/50 hover:bg-[var(--surface-hover)] border border-[var(--border)]/70 hover:border-[var(--accent)]/50 transition-all text-left cursor-pointer group shadow-sm"
-            title="Abrir Configurações e Perfil (Ctrl+,)"
-          >
-            <div className="w-8 h-8 rounded-full bg-[var(--accent-soft-bg)] border-2 border-[var(--accent)] text-[var(--accent)] flex items-center justify-center text-[13px] font-bold shrink-0 shadow-[0_0_12px_rgba(139,124,255,0.25)]">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] font-semibold text-[var(--text-primary)] truncate group-hover:text-[var(--accent-hover)] transition-colors">
-                {user.name}
-              </div>
-              <div className="flex items-center gap-1.5 text-[10.5px] text-[var(--text-muted)] truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] shrink-0" />
-                <span className="truncate">Conectado</span>
-              </div>
-            </div>
-            <div className="p-1 rounded text-[var(--text-muted)] group-hover:text-[var(--text-primary)] group-hover:bg-[var(--surface-hover)] transition-colors">
-              <MoreHorizontal className="w-4 h-4" />
-            </div>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpenAuth}
-            className="flex items-center justify-between w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-all text-[12px] font-medium cursor-pointer shadow-sm group"
-            title="Entrar na sua conta ou criar cadastro"
-          >
-            <span className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-[var(--accent)]/20 text-[var(--accent)] group-hover:bg-white/20 group-hover:text-white flex items-center justify-center">
-                <User className="w-3.5 h-3.5" />
-              </div>
-              <span>Entrar / Criar Conta</span>
-            </span>
-            <span className="text-[13px] font-bold group-hover:translate-x-0.5 transition-transform">→</span>
-          </button>
-        )}
-      </div>
-
-      {/* 5. Telemetria de Hardware */}
-      <div className="pt-2 pb-0.5 border-t border-white/[0.06] space-y-1.5">
+      {/* 4. Telemetria de Hardware (Posicionada acima do perfil) */}
+      <div className="mt-auto pt-2.5 pb-2 border-t border-white/[0.06] space-y-1.5">
         <div>
           <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono mb-0.5">
             <span>CPU</span>
@@ -552,6 +518,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
         </div>
+      </div>
+
+      {/* 5. Perfil do Usuário (Base fixa da barra lateral) */}
+      <div className="pt-2 border-t border-white/[0.06]">
+        {user ? (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex items-center gap-2.5 w-full p-2 rounded-[var(--radius-md)] bg-[#12151C] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] transition-all text-left cursor-pointer group shadow-sm"
+            title="Abrir Configurações e Perfil (Ctrl+,)"
+          >
+            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-200 flex items-center justify-center text-[12px] font-bold shrink-0">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-semibold text-zinc-200 truncate group-hover:text-white transition-colors">
+                {user.name}
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span className="truncate">Conectado</span>
+              </div>
+            </div>
+            <div className="p-1 rounded text-zinc-500 group-hover:text-zinc-300 transition-colors">
+              <MoreHorizontal className="w-4 h-4" />
+            </div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="flex items-center justify-between w-full px-3 py-2 rounded-[var(--radius-md)] bg-zinc-900 border border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all text-[12px] font-medium cursor-pointer shadow-sm group"
+            title="Entrar na sua conta ou criar cadastro"
+          >
+            <span className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-300 group-hover:bg-zinc-700 flex items-center justify-center">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span>Entrar / Criar Conta</span>
+            </span>
+            <span className="text-[13px] font-bold group-hover:translate-x-0.5 transition-transform">→</span>
+          </button>
+        )}
       </div>
     </aside>
   );

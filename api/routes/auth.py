@@ -83,28 +83,8 @@ async def verify_supabase_token(token: str) -> Optional[dict]:
             _TOKEN_CACHE[clean_token] = (now, user_info)
             return user_info
     except Exception as e:
-        logger.warning(f"Falha ao validar token na rede do Supabase ({e}), tentando decodificação segura local...")
-
-    # 3. Fallback rápido: decodifica payload do JWT não expirado emitido pelo Supabase
-    try:
-        parts = clean_token.split(".")
-        if len(parts) == 3:
-            padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
-            payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
-            exp = payload.get("exp", 0)
-            sub = payload.get("sub")
-            if exp > now and sub:
-                user_info = {
-                    "id": str(sub),
-                    "email": payload.get("email") or "",
-                    "name": payload.get("user_metadata", {}).get("name") or (payload.get("email") or "").split("@")[0],
-                }
-                _TOKEN_CACHE[clean_token] = (now, user_info)
-                return user_info
-    except Exception as err:
-        logger.debug(f"Falha ao decodificar payload JWT localmente: {err}")
-
-    return None
+        logger.warning(f"Falha na validação do token com o Supabase Auth ({e}). Acesso negado por segurança.")
+        return None
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:

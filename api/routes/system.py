@@ -38,6 +38,7 @@ async def system_status():
             pass
 
     active_devices = presence_manager.get_active_clients()
+    pool = get_db_pool()
 
     return {
         "assistant_name": config.assistant_name,

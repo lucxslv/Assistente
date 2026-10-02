@@ -154,21 +154,8 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
   const files: AgentFile[] = session?.files || [];
   const subagents: AgentSubagent[] = session?.subagents || [];
   const artifacts: AgentArtifact[] = useMemo(() => {
-    if (session?.artifacts && session.artifacts.length > 0) {
-      return session.artifacts;
-    }
-    // Artefato inicial padrão com as diretrizes da sessão se estiver vazio
-    return [
-      {
-        id: "art-initial-walkthrough",
-        sessionId: session?.id || "default",
-        name: "walkthrough.md",
-        type: "markdown",
-        createdAt: session?.startedAt || new Date().toISOString(),
-        content: `# Charlie Agent Workspace — Visão Geral Operacional\n\nEste painel lateral funciona como o **Context Drawer & Hub Operacional** (estilo Antigravity / Cursor) integrado ao computador Windows do usuário.\n\n### Capacidades Ativas:\n- **Hub de Ativos:** Lista organizada de subagentes, arquivos inspecionados, alterações pendentes e terminais.\n- **Modo Review (Diffs):** Revisão visual de arquivos com opções de aceitar ou reverter alterações.\n- **Modo Terminal:** Inspeção de comandos locais PowerShell/CMD com buffer de saída em tempo real.\n- **Modo Leitura:** Visualizador rico de documentos Markdown com busca e exportação.\n`,
-      },
-    ];
-  }, [session?.artifacts, session?.id, session?.startedAt]);
+    return session?.artifacts || [];
+  }, [session?.artifacts]);
 
   const activeArtifact = useMemo(() => {
     if (!selectedArtifactId) return null;
@@ -339,8 +326,8 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
           )}
         </div>
 
-        {/* Lado Direito: Ações do Painel */}
-        <div className="flex items-center gap-1 shrink-0 text-zinc-400">
+        {/* Lado Direito: Ações do Painel com z-index garantido */}
+        <div className="flex items-center gap-1 shrink-0 text-zinc-400 relative z-30">
           <button
             type="button"
             onClick={() => {
@@ -445,44 +432,50 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Subagents</span>
-                  <span className="text-zinc-500">({subagents.length})</span>
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="font-semibold uppercase text-zinc-200">SUBAGENTS</span>
+                  <span className="text-zinc-500">({String(subagents.length).padStart(2, "0")})</span>
                 </div>
                 {subagents.some((s) => s.status === "running") && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                 )}
               </button>
 
-              {openAccordions.subagents && subagents.length > 0 && (
+              {openAccordions.subagents && (
                 <div className="p-2 border-t border-white/[0.04] bg-[#0A0B0E] space-y-1.5">
-                  {subagents.slice(0, expandedSections.subagents ? subagents.length : 5).map((sub) => (
-                    <div
-                      key={sub.id}
-                      className="p-2 rounded bg-[#12151C]/70 border border-white/[0.04] flex items-center justify-between font-mono text-[11px]"
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        <div className="font-semibold text-zinc-200 truncate">{sub.role}</div>
-                        <div className="text-zinc-500 text-[10px] truncate">{sub.goal}</div>
-                      </div>
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-                          sub.status === "completed"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : sub.status === "running"
-                            ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse"
-                            : "bg-zinc-800 text-zinc-400"
-                        }`}
-                      >
-                        {sub.status}
-                      </span>
+                  {subagents.length === 0 ? (
+                    <div className="text-[11px] font-mono text-zinc-500 px-1 py-0.5">
+                      Nenhum subagente ativo
                     </div>
-                  ))}
+                  ) : (
+                    subagents.slice(0, expandedSections.subagents ? subagents.length : 5).map((sub) => (
+                      <div
+                        key={sub.id}
+                        className="p-2 rounded bg-[#12151C]/70 border border-white/[0.04] flex items-center justify-between font-mono text-[11px]"
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="font-semibold text-zinc-200 truncate">{sub.role}</div>
+                          <div className="text-zinc-500 text-[10px] truncate">{sub.goal}</div>
+                        </div>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                            sub.status === "completed"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : sub.status === "running"
+                              ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          {sub.status}
+                        </span>
+                      </div>
+                    ))
+                  )}
                   {subagents.length > 5 && (
                     <button
                       type="button"
                       onClick={() => toggleSeeAll("subagents")}
-                      className="text-[10px] font-mono text-indigo-400 hover:underline pt-1 block"
+                      className="text-[10px] font-mono text-blue-400 hover:underline pt-1 block"
                     >
                       {expandedSections.subagents ? "Mostrar menos" : `Ver todos (${subagents.length})`}
                     </button>
@@ -505,8 +498,8 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <GitPullRequest className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Files Changed</span>
-                  <span className="text-zinc-500">({changes.length})</span>
+                  <span className="font-semibold uppercase text-zinc-200">FILES CHANGED</span>
+                  <span className="text-zinc-500">({String(changes.length).padStart(2, "0")})</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
@@ -515,41 +508,47 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                 </div>
               </button>
 
-              {openAccordions.changes && changes.length > 0 && (
+              {openAccordions.changes && (
                 <div className="p-2 border-t border-white/[0.04] bg-[#0A0B0E] space-y-1">
-                  {changes.slice(0, expandedSections.changes ? changes.length : 5).map((change) => (
-                    <div
-                      key={change.id}
-                      onClick={() => {
-                        setSelectedChangeId(change.id);
-                        setActiveTab("review");
-                      }}
-                      className="p-1.5 rounded hover:bg-[#1F2430] transition cursor-pointer flex items-center justify-between font-mono text-[11px]"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-3.5 h-3.5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 ${
-                            change.type === "A"
-                              ? "bg-emerald-500/20 text-emerald-400"
-                              : change.type === "D"
-                              ? "bg-rose-500/20 text-rose-400"
-                              : "bg-amber-500/20 text-amber-400"
-                          }`}
-                        >
-                          {change.type}
-                        </span>
-                        <span className="text-zinc-200 truncate">{change.path}</span>
-                      </div>
-                      <span className="text-[10px] text-zinc-500 shrink-0 pl-2">
-                        {change.status}
-                      </span>
+                  {changes.length === 0 ? (
+                    <div className="text-[11px] font-mono text-zinc-500 px-1 py-0.5">
+                      Nenhum arquivo alterado
                     </div>
-                  ))}
+                  ) : (
+                    changes.slice(0, expandedSections.changes ? changes.length : 5).map((change) => (
+                      <div
+                        key={change.id}
+                        onClick={() => {
+                          setSelectedChangeId(change.id);
+                          setActiveTab("review");
+                        }}
+                        className="p-1.5 rounded hover:bg-[#1F2430] transition cursor-pointer flex items-center justify-between font-mono text-[11px]"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`w-3.5 h-3.5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 ${
+                              change.type === "A"
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : change.type === "D"
+                                ? "bg-rose-500/20 text-rose-400"
+                                : "bg-amber-500/20 text-amber-400"
+                            }`}
+                          >
+                            {change.type}
+                          </span>
+                          <span className="text-zinc-200 truncate">{change.path}</span>
+                        </div>
+                        <span className="text-[10px] text-zinc-500 shrink-0 pl-2">
+                          {change.status}
+                        </span>
+                      </div>
+                    ))
+                  )}
                   {changes.length > 5 && (
                     <button
                       type="button"
                       onClick={() => toggleSeeAll("changes")}
-                      className="text-[10px] font-mono text-indigo-400 hover:underline pt-1 block"
+                      className="text-[10px] font-mono text-blue-400 hover:underline pt-1 block"
                     >
                       {expandedSections.changes ? "Mostrar menos" : `Ver todos (${changes.length})`}
                     </button>
@@ -558,57 +557,59 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               )}
             </div>
 
-            {/* 3. Artifacts (com abertura imediata no Modo C) */}
-            <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => toggleAccordion("artifacts")}
-                className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
-              >
-                <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
-                  {openAccordions.artifacts ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
-                  )}
-                  <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Artifacts</span>
-                  <span className="text-zinc-500">({artifacts.length})</span>
-                </div>
-                <span className="text-[9px] font-mono text-zinc-500">docs / code</span>
-              </button>
+            {/* 3. Artifacts (Renderiza apenas quando houver dados para evitar poluição visual de estados vazios rígidos) */}
+            {artifacts.length > 0 && (
+              <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleAccordion("artifacts")}
+                  className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                    {openAccordions.artifacts ? (
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+                    )}
+                    <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="font-semibold uppercase text-zinc-200">ARTIFACTS</span>
+                    <span className="text-zinc-500">({String(artifacts.length).padStart(2, "0")})</span>
+                  </div>
+                  <span className="text-[9px] font-mono text-zinc-500">docs / code</span>
+                </button>
 
-              {openAccordions.artifacts && artifacts.length > 0 && (
-                <div className="p-2 border-t border-white/[0.04] bg-[#0A0B0E] space-y-1">
-                  {artifacts.slice(0, expandedSections.artifacts ? artifacts.length : 5).map((art) => (
-                    <div
-                      key={art.id}
-                      onClick={() => handleOpenArtifact(art.id)}
-                      className="p-1.5 rounded hover:bg-[#1F2430] transition cursor-pointer flex items-center justify-between font-mono text-[11px] group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="w-3.5 h-3.5 text-zinc-400 group-hover:text-indigo-300 shrink-0" />
-                        <span className="text-zinc-200 group-hover:text-white truncate">
-                          {art.name}
+                {openAccordions.artifacts && (
+                  <div className="p-2 border-t border-white/[0.04] bg-[#0A0B0E] space-y-1">
+                    {artifacts.slice(0, expandedSections.artifacts ? artifacts.length : 5).map((art) => (
+                      <div
+                        key={art.id}
+                        onClick={() => handleOpenArtifact(art.id)}
+                        className="p-1.5 rounded hover:bg-[#1F2430] transition cursor-pointer flex items-center justify-between font-mono text-[11px] group"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="w-3.5 h-3.5 text-zinc-400 group-hover:text-blue-300 shrink-0" />
+                          <span className="text-zinc-200 group-hover:text-white truncate">
+                            {art.name}
+                          </span>
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 shrink-0">
+                          {art.type}
                         </span>
                       </div>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 shrink-0">
-                        {art.type}
-                      </span>
-                    </div>
-                  ))}
-                  {artifacts.length > 5 && (
-                    <button
-                      type="button"
-                      onClick={() => toggleSeeAll("artifacts")}
-                      className="text-[10px] font-mono text-indigo-400 hover:underline pt-1 block"
-                    >
-                      {expandedSections.artifacts ? "Mostrar menos" : `Ver todos (${artifacts.length})`}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                    ))}
+                    {artifacts.length > 5 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSeeAll("artifacts")}
+                        className="text-[10px] font-mono text-blue-400 hover:underline pt-1 block"
+                      >
+                        {expandedSections.artifacts ? "Mostrar menos" : `Ver todos (${artifacts.length})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 4. Uploads & Files Analyzed */}
             <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
@@ -624,34 +625,40 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Files Analyzed & Uploads</span>
-                  <span className="text-zinc-500">({files.length})</span>
+                  <span className="font-semibold uppercase text-zinc-200">FILES ANALYZED</span>
+                  <span className="text-zinc-500 font-mono">({String(files.length).padStart(2, "0")})</span>
                 </div>
               </button>
 
-              {openAccordions.files && files.length > 0 && (
+              {openAccordions.files && (
                 <div className="p-2 border-t border-white/[0.04] bg-[#0A0B0E] space-y-1">
-                  {files.slice(0, expandedSections.files ? files.length : 5).map((file) => (
-                    <div
-                      key={file.id}
-                      className="p-1.5 rounded hover:bg-white/[0.02] transition flex items-center justify-between font-mono text-[11px]"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileCode className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="text-zinc-300 truncate" title={file.path}>
-                          {file.name}
+                  {files.length === 0 ? (
+                    <div className="text-[11px] font-mono text-zinc-500 px-1 py-0.5">
+                      Nenhum arquivo inspecionado
+                    </div>
+                  ) : (
+                    files.slice(0, expandedSections.files ? files.length : 5).map((file) => (
+                      <div
+                        key={file.id}
+                        className="p-1.5 rounded hover:bg-white/[0.02] transition flex items-center justify-between font-mono text-[11px]"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileCode className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                          <span className="text-zinc-300 truncate" title={file.path}>
+                            {file.name}
+                          </span>
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-500 shrink-0">
+                          {file.category}
                         </span>
                       </div>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-500 shrink-0">
-                        {file.category}
-                      </span>
-                    </div>
-                  ))}
+                    ))
+                  )}
                   {files.length > 5 && (
                     <button
                       type="button"
                       onClick={() => toggleSeeAll("files")}
-                      className="text-[10px] font-mono text-indigo-400 hover:underline pt-1 block"
+                      className="text-[10px] font-mono text-blue-400 hover:underline pt-1 block"
                     >
                       {expandedSections.files ? "Mostrar menos" : `Ver todos (${files.length})`}
                     </button>
@@ -674,9 +681,9 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>Tasks & Pipeline</span>
-                  <span className="text-zinc-500">
-                    ({completedTasks}/{tasks.length})
+                  <span className="font-semibold uppercase text-zinc-200">PIPELINE</span>
+                  <span className="text-zinc-400 font-mono">
+                    {completedTasks}/{tasks.length}
                   </span>
                 </div>
               </button>
@@ -697,7 +704,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                           {isSuccess ? (
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                           ) : isRunning ? (
-                            <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+                            <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
                           ) : isFailed ? (
                             <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                           ) : (
@@ -746,11 +753,13 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
-                  <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Terminals</span>
-                  <span className="text-zinc-500">({terminals.length})</span>
+                  <Terminal className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="font-semibold uppercase text-zinc-200">TERMINALS</span>
+                  <span className="text-zinc-500 font-mono">({String(terminals.length).padStart(2, "0")})</span>
                 </div>
-                <span className="text-[10px] font-mono text-zinc-500">powershell.exe</span>
+                <span className="text-[9.5px] font-mono uppercase px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
+                  POWERSHELL.EXE
+                </span>
               </button>
 
               {openAccordions.terminals && terminals.length > 0 && (
