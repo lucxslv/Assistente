@@ -1,7 +1,8 @@
 from typing import Any, Dict
 from pydantic import BaseModel
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from api.state import state
+from api.routes.auth import get_current_user
 from tools.registry import ToolRegistry
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
@@ -23,8 +24,8 @@ async def list_tools():
 
 
 @router.post("/execute")
-async def execute_tool(req: ToolExecuteRequest):
-    """Executa uma ferramenta diretamente na máquina local."""
+async def execute_tool(req: ToolExecuteRequest, user: dict = Depends(get_current_user)):
+    """Executa uma ferramenta diretamente na máquina local com autenticação obrigatória."""
     result = await _tools.execute(req.name, req.arguments, prefer_remote=False)
     return {"status": "ok", "name": req.name, "result": result}
 

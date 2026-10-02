@@ -536,7 +536,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 type="button"
                 onClick={() => handleSend()}
                 disabled={!input.trim() || isLoading}
-                className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:hover:bg-[var(--accent)] cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-zinc-100 hover:bg-white text-zinc-950 transition-colors disabled:opacity-30 disabled:hover:bg-zinc-100 shadow-sm cursor-pointer"
                 title="Enviar mensagem"
               >
                 <ArrowUp className="w-4 h-4 stroke-[2.5]" />
@@ -954,7 +954,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   type="button"
                   onClick={() => handleSend()}
                   disabled={!input.trim() || isLoading}
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40 disabled:hover:bg-[var(--accent)] cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-zinc-100 hover:bg-white text-zinc-950 transition-colors disabled:opacity-30 disabled:hover:bg-zinc-100 shadow-sm cursor-pointer"
                   title="Enviar mensagem"
                 >
                   <ArrowUp className="w-4 h-4 stroke-[2.5]" />

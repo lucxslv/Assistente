@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Charlie Desktop — Seu Assistente Pessoal & Agent Workspace para Windows</title>
+  <meta name="description" content="Charlie Desktop é o Agent Workspace operacional nativo para Windows 10 e 11. Execução local com zero latência, arquitetura Zero-Trust, Context Drawer e IA com Gemini Flash.">
+  <link rel="icon" type="image/svg+xml" href="assets/charlie-logo.svg">
+
+  <!-- Tailwind CSS CDN para flexibilidade moderna -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            charlie: {
+              bg: '#0A0B0E',
+              canvas: '#0E0F12',
+              surface: '#15171C',
+              hover: '#1B1E24',
+              elevated: '#20232A',
+              border: '#292D35',
+              accent: '#8B7CFF',
+              accentHover: '#9E91FF',
+              accentGlow: 'rgba(139, 124, 255, 0.25)',
+              success: '#34D399',
+              warning: '#FBBF24',
+              danger: '#F87171'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Custom Stylesheet with tokens and mockups -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-[#0A0B0E] text-[#F2F3F5] antialiased selection:bg-[#8B7CFF]/30 selection:text-white relative min-h-screen">
+
+  <!-- Ambient Glow Backgrounds -->
+  <div class="fixed inset-0 bg-grid-pattern pointer-events-none z-0"></div>
+  <div class="hero-glow-sphere"></div>
+
+  <!-- ======================================================================
+       HEADER / NAVIGATION
+       ====================================================================== -->
+  <header class="navbar-blur">
+    <div class="container-custom h-16 flex items-center justify-between">
+      <!-- Logo & Brand -->
+      <a href="#" class="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8B7CFF] rounded-lg">
+        <div class="w-9 h-9 rounded-lg bg-[#15171C] border border-[#292D35] flex items-center justify-center p-1.5 shadow-sm group-hover:border-[#8B7CFF]/50 transition">
+          <img src="assets/charlie-logo.svg" alt="Charlie Logo" class="w-full h-full object-contain">
+        </div>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-base tracking-tight text-white group-hover:text-[#B4A9FF] transition">Charlie</span>
+            <span class="px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-[#8B7CFF]/15 text-[#B4A9FF] border border-[#8B7CFF]/30">DESKTOP</span>
+          </div>
+          <span class="text-[11px] text-zinc-500 font-mono -mt-0.5">Local Agent Runtime</span>
+        </div>
+      </a>
+
+      <!-- Desktop Nav Links -->
+      <nav class="hidden md:flex items-center gap-7 text-sm font-medium text-zinc-400">
+        <a href="#features" class="hover:text-zinc-100 transition">Recursos</a>
+        <a href="#workspace" class="hover:text-zinc-100 transition">Agent Workspace</a>
+        <a href="#security" class="hover:text-zinc-100 transition">Segurança Zero-Trust</a>
+        <a href="#architecture" class="hover:text-zinc-100 transition">Arquitetura</a>
+        <a href="#faq" class="hover:text-zinc-100 transition">FAQ</a>
+      </nav>
+
+      <!-- Action Button Group -->
+      <div class="hidden sm:flex items-center gap-3">
+        <button id="spotlight-demo-trigger" type="button" class="btn-secondary !py-2 !px-3.5 text-xs font-mono flex items-center gap-2 group cursor-pointer" title="Simular atalho global do Spotlight">
+          <span class="w-2 h-2 rounded-full bg-[#8B7CFF] animate-pulse"></span>
+          <span>Spotlight</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-[10px] text-zinc-300">Ctrl+Space</kbd>
+        </button>
+        <a href="#download" class="btn-primary !py-2 !px-4 text-xs font-semibold">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Baixar v1.0.0</span>
+        </a>
+      </div>
+
+      <!-- Mobile Hamburger Button -->
+      <button id="mobile-menu-btn" type="button" class="md:hidden p-2 rounded-lg bg-[#15171C] border border-[#292D35] text-zinc-400 hover:text-white" aria-label="Abrir Menu">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile Dropdown -->
+    <div id="mobile-menu" class="hidden md:hidden bg-[#0E0F12]/95 backdrop-blur-xl border-b border-[#292D35] px-6 py-4 space-y-3">
+      <a href="#features" class="block text-sm text-zinc-300 hover:text-white py-1.5">Recursos</a>
+      <a href="#workspace" class="block text-sm text-zinc-300 hover:text-white py-1.5">Agent Workspace</a>
+      <a href="#security" class="block text-sm text-zinc-300 hover:text-white py-1.5">Segurança Zero-Trust</a>
+      <a href="#architecture" class="block text-sm text-zinc-300 hover:text-white py-1.5">Arquitetura</a>
+      <a href="#faq" class="block text-sm text-zinc-300 hover:text-white py-1.5">FAQ</a>
+      <div class="pt-3 border-t border-white/10 flex flex-col gap-2.5">
+        <a href="#download" class="btn-primary w-full text-center text-xs">Baixar para Windows (x64)</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================================
+       HERO SECTION
+       ====================================================================== -->
+  <section class="relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden z-10">
+    <div class="container-custom text-center">
+      <!-- Release Announcement Pill -->
+      <div class="inline-flex items-center gap-2 mb-6">
+        <span class="btn-outline-badge">
+          <span class="flex h-2 w-2 relative">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8B7CFF] opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-[#8B7CFF]"></span>
+          </span>
+          <span class="text-zinc-300">Charlie Desktop 1.0.0 Stable</span>
+          <span class="text-zinc-500">|</span>
+          <span class="text-[#B4A9FF] font-semibold">Windows 10 & 11 x64</span>
+        </span>
+      </div>
+
+      <!-- Main Headline -->
+      <h1 class="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight max-w-5xl mx-auto leading-[1.12]">
+        Seu Assistente Pessoal &amp; <br class="hidden sm:inline">
+        <span class="text-gradient-accent">Agent Workspace Operacional</span> <br class="hidden sm:inline">
+        para Windows.
+      </h1>
+
+      <!-- Subheadline -->
+      <p class="mt-6 text-base sm:text-lg md:text-xl text-zinc-400 max-w-3xl mx-auto leading-relaxed font-normal">
+        Execução nativa no dispositivo com <strong class="text-zinc-200 font-semibold">zero latência</strong>, automação profunda em PowerShell &amp; Win32, arquitetura <strong class="text-zinc-200 font-semibold">Zero-Trust</strong> com aprovação atômica do usuário e IA de ponta com <strong class="text-zinc-200 font-semibold">Gemini 2.0 Flash</strong>.
+      </p>
+
+      <!-- Primary Action Buttons -->
+      <div class="mt-9 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="#download" class="btn-primary w-full sm:w-auto text-sm sm:text-base px-7 py-3.5 shadow-lg group">
+          <svg class="w-5 h-5 text-white group-hover:translate-y-0.5 transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Baixar Instalador Windows (.exe)</span>
+        </a>
+
+        <a href="#workspace" class="btn-secondary w-full sm:w-auto text-sm sm:text-base px-6 py-3.5">
+          <svg class="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>Explorar Workspace Interativo</span>
+        </a>
+      </div>
+
+      <!-- Quick Specs Indicators -->
+      <div class="mt-12 pt-8 border-t border-white/[0.06] max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
+        <div class="p-3 rounded-lg bg-[#15171C]/60 border border-[#292D35]/50">
+          <div class="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">Runtime Nativo</div>
+          <div class="text-sm font-semibold text-zinc-200 mt-0.5 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Tauri v2 + Rust Core
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-[#15171C]/60 border border-[#292D35]/50">
+          <div class="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">Segurança</div>
+          <div class="text-sm font-semibold text-zinc-200 mt-0.5 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+            Zero-Trust Gatekeeper
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-[#15171C]/60 border border-[#292D35]/50">
+          <div class="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">Privacidade</div>
+          <div class="text-sm font-semibold text-zinc-200 mt-0.5 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+            100% Memória Local
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-[#15171C]/60 border border-[#292D35]/50">
+          <div class="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">Modelos Suportados</div>
+          <div class="text-sm font-semibold text-zinc-200 mt-0.5 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            Gemini Flash + Ollama
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       INTERACTIVE WORKSPACE & MOCKUP DEMO
+       ====================================================================== -->
+  <section id="workspace" class="relative py-12 md:py-20 z-10">
+    <div class="container-custom">
+      <div class="text-center max-w-3xl mx-auto mb-10">
+        <span class="text-xs font-mono uppercase tracking-widest text-[#8B7CFF] font-semibold">DEMONSTRAÇÃO INTERATIVA DO CHARLIE</span>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2 text-white">
+          Agent Workspace &amp; Context Drawer
+        </h2>
+        <p class="text-zinc-400 mt-3 text-sm sm:text-base">
+          Alterne entre o <strong>Modo Chat</strong> e o <strong>Modo Agente</strong>, e clique nas abas do <strong>Context Drawer</strong> (Hub de Ativos, Git Review, Terminais e Artefatos) para ver o Charlie em ação.
+        </p>
+      </div>
+
+      <!-- Charlie Desktop Window Mockup Frame -->
+      <div class="window-frame max-w-6xl mx-auto">
+        <!-- Windows Titlebar -->
+        <div class="window-titlebar">
+          <div class="flex items-center gap-3">
+            <div class="window-dots">
+              <span class="window-dot dot-close"></span>
+              <span class="window-dot dot-minimize"></span>
+              <span class="window-dot dot-maximize"></span>
+            </div>
+            <div class="h-4 w-[1px] bg-white/10 hidden sm:block"></div>
+            <div class="flex items-center gap-2">
+              <img src="assets/charlie-logo.svg" alt="Charlie Icon" class="w-4 h-4">
+              <span class="text-xs font-mono text-zinc-300 font-medium">Charlie Desktop — Assistente Workspace</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 text-xs">
+            <span id="mockup-mode-badge" class="px-2 py-0.5 rounded text-[11px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/20">
+              Modo Agente Autônomo
+            </span>
+            <div class="hidden sm:flex items-center gap-1.5 text-zinc-400 font-mono text-[11px]">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Local Engine v2.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Window Inner Layout: 3 Columns (Sidebar, Main Area, Context Drawer) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 min-h-[580px] bg-[#0E0F12]">
+          
+          <!-- Column 1: Sidebar (Left, 2 cols on lg) -->
+          <div class="hidden lg:flex lg:col-span-3 flex-col justify-between border-r border-[#22262E] bg-[#12141A] p-3 text-xs">
+            <div class="space-y-4">
+              <!-- Workspace Folder Switcher -->
+              <div class="p-2.5 rounded-lg bg-[#181B22] border border-[#292D35] flex items-center justify-between">
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <div class="w-7 h-7 rounded bg-[#8B7CFF]/15 border border-[#8B7CFF]/30 flex items-center justify-center text-[#B4A9FF] shrink-0">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                  </div>
+                  <div class="truncate">
+                    <div class="font-semibold text-white truncate">lucxslv/Assistente</div>
+                    <div class="text-[10px] text-zinc-500 font-mono">C:\Projects\Assistente</div>
+                  </div>
+                </div>
+                <svg class="w-4 h-4 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+
+              <!-- Navigation Menu -->
+              <div class="space-y-1">
+                <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500 px-2 py-1 font-semibold">Workspace Principal</div>
+                <div class="mock-sidebar-item active">
+                  <svg class="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  <span>Centro de Comando</span>
+                </div>
+                <div class="mock-sidebar-item">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  <span>Chat com Gemini</span>
+                </div>
+                <div class="mock-sidebar-item">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                  <span>Histórico de Sessões</span>
+                </div>
+                <div class="mock-sidebar-item">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                  <span>Memória Vetorial &amp; RAG</span>
+                </div>
+              </div>
+
+              <!-- Recentes -->
+              <div class="space-y-1 pt-2 border-t border-white/[0.06]">
+                <div class="text-[10px] font-mono uppercase tracking-wider text-zinc-500 px-2 py-1 font-semibold">Tarefas Recentes</div>
+                <div class="mock-sidebar-item">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span class="truncate">Auditar JWT e Endpoints</span>
+                </div>
+                <div class="mock-sidebar-item">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span class="truncate">Criar Landing Page Estática</span>
+                </div>
+                <div class="mock-sidebar-item">
+                  <span class="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
+                  <span class="truncate">Compilar Installer NSIS x64</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- System Telemetry / Resource Monitor -->
+            <div class="p-2.5 rounded-lg bg-[#181B22] border border-[#292D35] space-y-2 mt-4">
+              <div class="flex items-center justify-between text-[11px] font-mono">
+                <span class="text-zinc-400">Hardware Local</span>
+                <span class="text-emerald-400 font-semibold">Estável</span>
+              </div>
+              <div class="space-y-1.5 text-[10px] font-mono text-zinc-400">
+                <div class="flex justify-between">
+                  <span>CPU (Win32)</span>
+                  <span class="text-zinc-200">4.8%</span>
+                </div>
+                <div class="w-full bg-black/40 h-1 rounded-full overflow-hidden">
+                  <div class="bg-purple-500 h-full w-[5%]"></div>
+                </div>
+                <div class="flex justify-between">
+                  <span>RAM (App + Core)</span>
+                  <span class="text-zinc-200">76 MB</span>
+                </div>
+                <div class="w-full bg-black/40 h-1 rounded-full overflow-hidden">
+                  <div class="bg-emerald-500 h-full w-[12%]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2: Main Area (Center, 5 cols on lg) -->
+          <div class="lg:col-span-5 flex flex-col border-r border-[#22262E] bg-[#0E0F12]">
+            <!-- Mode Switcher Toolbar -->
+            <div class="px-4 py-2.5 border-b border-[#22262E] flex items-center justify-between bg-[#15171C]/50">
+              <div class="flex items-center gap-1 p-0.5 rounded-lg bg-black/40 border border-white/[0.08] text-xs">
+                <button id="mode-btn-agent" class="px-2.5 py-1 rounded font-medium bg-white/10 text-white transition cursor-pointer">
+                  Modo Agente
+                </button>
+                <button id="mode-btn-chat" class="px-2.5 py-1 rounded font-medium text-zinc-400 hover:text-white transition cursor-pointer">
+                  Modo Chat
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] font-mono text-zinc-400">Modelo:</span>
+                <span class="text-[11px] font-mono text-purple-300 font-semibold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                  Gemini 2.0 Flash
+                </span>
+              </div>
+            </div>
+
+            <!-- Content View 1: Agent Mode View (Default Active) -->
+            <div id="mockup-agent-view" class="p-4 space-y-4 flex-1 overflow-y-auto">
+              <!-- Active Goal Box -->
+              <div class="p-3.5 rounded-lg bg-[#15171C] border border-[#292D35] space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+                    <span class="text-xs font-semibold text-white">Meta Autônoma Ativa</span>
+                  </div>
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                    2/3 Passos
+                  </span>
+                </div>
+                <p class="text-xs text-zinc-300 font-medium">
+                  "Auditar arquitetura de segurança, validar assinaturas JWT e criar Landing Page para lançamento do Charlie Desktop."
+                </p>
+              </div>
+
+              <!-- Execution Steps & Verification Evidence -->
+              <div class="space-y-2">
+                <div class="text-[11px] font-mono uppercase text-zinc-500 font-semibold">Passos do Planejador &amp; Verifier</div>
+
+                <!-- Step 1: Done -->
+                <div class="p-2.5 rounded-lg bg-[#15171C]/70 border border-emerald-500/20 flex items-start gap-2.5 text-xs">
+                  <svg class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <div class="space-y-1">
+                    <div class="font-medium text-zinc-200">Revisar isolamento multi-tenant e bypass de JWT</div>
+                    <div class="text-[11px] text-zinc-400 font-mono">Evidência: Validação de chave pública jwks.json e remoção do bypass local.</div>
+                  </div>
+                </div>
+
+                <!-- Step 2: Waiting Atomic Permission (Interactive Prompt) -->
+                <div class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-2 text-xs">
+                  <div class="flex items-center justify-between text-amber-300 font-semibold">
+                    <div class="flex items-center gap-1.5">
+                      <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                      <span>Aprovação Atômica Necessária</span>
+                    </div>
+                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200">Zero-Trust</span>
+                  </div>
+                  <div class="text-zinc-300 text-[11px] leading-relaxed">
+                    O agente solicita execução de ferramenta no sistema local:
+                    <code class="px-1.5 py-0.5 rounded bg-black/40 text-amber-200 font-mono block mt-1">execute_command -> New-Item -Path "landing\index.html"</code>
+                  </div>
+                  <div class="flex items-center gap-2 pt-1">
+                    <button type="button" class="px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
+                      Permitir Uma Vez
+                    </button>
+                    <button type="button" class="px-2.5 py-1 rounded text-[11px] font-semibold bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer">
+                      Permitir para Tarefa
+                    </button>
+                    <button type="button" class="px-2.5 py-1 rounded text-[11px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/10 transition cursor-pointer">
+                      Recusar
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Step 3: Pending -->
+                <div class="p-2.5 rounded-lg bg-[#15171C]/40 border border-[#22262E] flex items-center gap-2.5 text-xs text-zinc-500">
+                  <span class="w-3.5 h-3.5 rounded-full border border-zinc-600 shrink-0"></span>
+                  <span>Compilar e verificar integridade estática da Landing Page</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Content View 2: Chat View (Hidden by default, toggled via JS) -->
+            <div id="mockup-chat-view" class="hidden p-4 space-y-3 flex-1 overflow-y-auto text-xs">
+              <!-- User Message -->
+              <div class="flex items-start gap-2.5 justify-end">
+                <div class="bg-[#8B7CFF]/15 border border-[#8B7CFF]/30 text-zinc-100 p-2.5 rounded-lg rounded-tr-none max-w-[85%]">
+                  Charlie, analise os tempos de resposta do runtime local e mostre o consumo de memória no Windows 11.
+                </div>
+                <div class="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] text-zinc-200 font-bold shrink-0">
+                  EU
+                </div>
+              </div>
+
+              <!-- Assistant Message -->
+              <div class="flex items-start gap-2.5">
+                <div class="w-6 h-6 rounded-full bg-[#8B7CFF] flex items-center justify-center p-1 shrink-0">
+                  <img src="assets/charlie-logo.svg" alt="Charlie" class="w-full h-full">
+                </div>
+                <div class="bg-[#15171C] border border-[#292D35] text-zinc-200 p-3 rounded-lg rounded-tl-none max-w-[90%] space-y-2">
+                  <p>Aqui está o diagnóstico do <strong>Local Agent Runtime 2.0</strong> em tempo real:</p>
+                  <div class="p-2 rounded bg-black/50 border border-white/[0.06] font-mono text-[11px] text-emerald-400 space-y-1">
+                    <div>• Latência de IPC (Tauri v2): <strong>0.4ms</strong></div>
+                    <div>• Memória Working Set: <strong>76.2 MB</strong></div>
+                    <div>• Chamadas Win32 / PowerShell: <strong>Sandboxed</strong></div>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px] text-zinc-500 font-mono pt-1">
+                    <span>Gemini 2.0 Flash</span> • <span>142 tokens</span> • <span>180ms</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mockup Input Prompt Bar -->
+            <div class="p-3 border-t border-[#22262E] bg-[#12141A]">
+              <div class="relative flex items-center">
+                <input type="text" readonly value="Auditar dependências e compilar Landing Page..." class="w-full bg-[#181B22] border border-[#292D35] rounded-lg py-2 pl-3 pr-20 text-xs text-zinc-300 font-mono focus:outline-none select-none">
+                <div class="absolute right-2 flex items-center gap-1.5">
+                  <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-mono">Pronto</span>
+                  <button type="button" class="w-6 h-6 rounded bg-[#8B7CFF] text-white flex items-center justify-center">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 3: Context Drawer & Inspector (Right, 4 cols on lg) -->
+          <div class="lg:col-span-4 flex flex-col bg-[#12141A]">
+            <!-- Drawer Tab Selector Header -->
+            <div class="border-b border-[#22262E] bg-[#15171C] flex items-center justify-between px-2 overflow-x-auto">
+              <div class="flex items-center">
+                <button type="button" data-drawer-tab="hub" class="drawer-tab-btn active">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                  <span>Ativos</span>
+                </button>
+                <button type="button" data-drawer-tab="review" class="drawer-tab-btn">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
+                  <span>Git Diff</span>
+                </button>
+                <button type="button" data-drawer-tab="terminal" class="drawer-tab-btn">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                  <span>Terminais</span>
+                </button>
+                <button type="button" data-drawer-tab="artifact" class="drawer-tab-btn">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                  <span>Artefatos</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Drawer Body Pane 1: Hub de Ativos (Active) -->
+            <div data-drawer-pane="hub" class="p-3 space-y-3 flex-1 overflow-y-auto text-xs">
+              <div class="flex items-center justify-between text-zinc-400 font-mono text-[11px]">
+                <span>ARQUIVOS &amp; ARTEFATOS</span>
+                <span class="text-zinc-500">4 itens gerados</span>
+              </div>
+
+              <!-- List of Assets in Workspace -->
+              <div class="space-y-1.5 font-mono text-[11px]">
+                <div class="p-2 rounded bg-[#181B22] border border-[#292D35] flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-zinc-200 truncate">
+                    <svg class="w-3.5 h-3.5 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path></svg>
+                    <span class="truncate">landing/index.html</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-400 font-sans">Novo</span>
+                </div>
+
+                <div class="p-2 rounded bg-[#181B22] border border-[#292D35] flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-zinc-200 truncate">
+                    <svg class="w-3.5 h-3.5 text-purple-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path></svg>
+                    <span class="truncate">landing/styles.css</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-400 font-sans">Novo</span>
+                </div>
+
+                <div class="p-2 rounded bg-[#181B22] border border-[#292D35] flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-zinc-200 truncate">
+                    <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path></svg>
+                    <span class="truncate">landing/main.js</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-400 font-sans">Novo</span>
+                </div>
+
+                <div class="p-2 rounded bg-[#181B22] border border-[#292D35] flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-zinc-200 truncate">
+                    <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+                    <span class="truncate">Charlie_1.0.0_setup.exe</span>
+                  </div>
+                  <span class="text-[10px] text-purple-300 font-sans">2.87 MB</span>
+                </div>
+              </div>
+
+              <!-- Subagents active badge -->
+              <div class="pt-3 border-t border-white/[0.06] space-y-1.5">
+                <div class="text-[11px] font-mono text-zinc-400 flex items-center justify-between">
+                  <span>SUBAGENTES EM EXECUÇÃO</span>
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                </div>
+                <div class="p-2 rounded bg-black/40 border border-white/[0.04] text-[11px] flex items-center justify-between">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-purple-400 font-bold">#1</span>
+                    <span class="text-zinc-300">Codebase Researcher</span>
+                  </div>
+                  <span class="text-zinc-500 font-mono">Idle (Pronto)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Drawer Body Pane 2: Git Diff Review (Hidden by default) -->
+            <div data-drawer-pane="review" class="hidden p-3 space-y-3 flex-1 overflow-y-auto text-xs">
+              <div class="flex items-center justify-between">
+                <div class="text-[11px] font-mono text-zinc-300 font-semibold truncate">auth.py (+12, -4)</div>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Aceitar</button>
+                  <button type="button" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40">Reverter</button>
+                </div>
+              </div>
+
+              <!-- Unified Diff Visualizer -->
+              <div class="rounded border border-[#22262E] bg-black/60 overflow-hidden font-mono text-[10px]">
+                <div class="diff-line diff-context">@@ -88,6 +88,14 @@ def verify_supabase_token</div>
+                <div class="diff-line diff-removed">- # Bypass inseguro: decodificava sem verificar assinatura</div>
+                <div class="diff-line diff-removed">- payload = json.loads(base64.b64decode(parts[1]))</div>
+                <div class="diff-line diff-added">+ # Verificação criptográfica estrita via JWKS do Supabase</div>
+                <div class="diff-line diff-added">+ jwks = await fetch_supabase_jwks(settings.PROJECT_REF)</div>
+                <div class="diff-line diff-added">+ decoded = jwt.decode(clean_token, key=jwks, algorithms=['RS256'])</div>
+                <div class="diff-line diff-added">+ logger.info(f"Token autenticado com sucesso para: {decoded['sub']}")</div>
+              </div>
+            </div>
+
+            <!-- Drawer Body Pane 3: Terminais & Logs (Hidden by default) -->
+            <div data-drawer-pane="terminal" class="hidden p-3 space-y-3 flex-1 overflow-y-auto text-xs font-mono">
+              <div class="flex items-center justify-between text-[11px] text-zinc-400">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  PowerShell 7.4.5 (PID 14208)
+                </span>
+                <span class="text-zinc-500">Live Stdout</span>
+              </div>
+              <div class="terminal-window p-2.5 space-y-1.5 text-[11px]">
+                <div class="text-zinc-500">PS C:\Projects\Assistente&gt; Get-ChildItem -Path "landing"</div>
+                <div class="text-zinc-300">    Directory: C:\Projects\Assistente\landing</div>
+                <div class="text-zinc-400">Mode      Length Name</div>
+                <div class="text-zinc-400">----      ------ ----</div>
+                <div class="text-emerald-400">-a---       14KB index.html</div>
+                <div class="text-emerald-400">-a---        8KB styles.css</div>
+                <div class="text-emerald-400">-a---        9KB main.js</div>
+                <div class="text-purple-400 mt-2">[Charlie Execution Verifier]: ExitCode 0 (OK)</div>
+              </div>
+            </div>
+
+            <!-- Drawer Body Pane 4: Artefatos & Markdown (Hidden by default) -->
+            <div data-drawer-pane="artifact" class="hidden p-3 space-y-3 flex-1 overflow-y-auto text-xs">
+              <div class="text-[11px] font-mono text-zinc-400 flex items-center justify-between">
+                <span>RELATÓRIO DE AUDITORIA</span>
+                <span class="text-emerald-400 font-semibold">Resolvido</span>
+              </div>
+              <div class="p-3 rounded-lg bg-[#181B22] border border-[#292D35] space-y-2 text-zinc-300">
+                <div class="text-xs font-bold text-white flex items-center gap-2">
+                  <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">C-1 &amp; C-2</span>
+                  <span>Hardening de RCE e Assinaturas JWT</span>
+                </div>
+                <p class="text-[11px] text-zinc-400 leading-relaxed">
+                  Todos os comandos PowerShell agora exigem hash SHA-256 e aprovação manual do usuário através do Permission Engine atômico.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       HIGHLIGHTS & CORE CAPABILITIES
+       ====================================================================== -->
+  <section id="features" class="py-16 md:py-24 relative z-10 border-t border-white/[0.06] bg-[#0A0B0E]/60">
+    <div class="container-custom">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <span class="text-xs font-mono uppercase tracking-widest text-[#8B7CFF] font-semibold">ARQUITETURA DE NOVA GERAÇÃO</span>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2 text-white">
+          Poder Operacional no seu Desktop.
+        </h2>
+        <p class="text-zinc-400 mt-3 text-base">
+          Projetado especialmente para desenvolvedores, engenheiros e usuários que precisam de autonomia real no sistema operacional sem abrir mão da segurança.
+        </p>
+      </div>
+
+      <!-- Features Grid (6 Core Cards) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        <!-- Card 1: Local Agent Runtime 2.0 -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-[#8B7CFF]/10 border border-[#8B7CFF]/30 flex items-center justify-center text-[#B4A9FF]">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Local Agent Runtime 2.0</h3>
+            <p class="text-sm text-zinc-400 mt-2 leading-relaxed">
+              Execução nativa no Windows com zero latência. Bridge de alta performance via Tauri v2 para PowerShell 7, APIs Win32, automação de janelas e processos em segundo plano.
+            </p>
+          </div>
+          <div class="pt-3 border-t border-white/[0.06] text-xs font-mono text-[#B4A9FF] flex items-center gap-1.5">
+            <span>PowerShell Core</span> • <span>Win32 Native</span> • <span>Zero Cloud Lag</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Context Drawer & Inspector -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Context Drawer &amp; Inspector</h3>
+            <p class="text-sm text-zinc-400 mt-2 leading-relaxed">
+              Gaveta lateral unificada: Hub de Ativos, Git Diff Review com aprovação de patches linha a linha, terminais com streaming ao vivo e renderizador de artefatos Markdown.
+            </p>
+          </div>
+          <div class="pt-3 border-t border-white/[0.06] text-xs font-mono text-blue-300 flex items-center gap-1.5">
+            <span>Git Diff Viewer</span> • <span>Terminais</span> • <span>Hub de Ativos</span>
+          </div>
+        </div>
+
+        <!-- Card 3: Zero-Trust Permission Engine -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Arquitetura Zero-Trust</h3>
+            <p class="text-sm text-zinc-400 mt-2 leading-relaxed">
+              O agente nunca executa comandos destrutivos sem a sua autorização expressa. Três níveis atômicos: <em>Permitir Uma Vez</em>, <em>Permitir para Tarefa</em> ou <em>Recusar</em>.
+            </p>
+          </div>
+          <div class="pt-3 border-t border-white/[0.06] text-xs font-mono text-emerald-300 flex items-center gap-1.5">
+            <span>Aprovação Atômica</span> • <span>Ledger Imutável</span> • <span>Sem RCE</span>
+          </div>
+        </div>
+
+        <!-- Card 4: Dual-Mode Operacional -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Dual-Mode Operacional</h3>
+            <p class="text-sm text-zinc-400 mt-2 leading-relaxed">
+              Trabalhe do seu jeito: use o <strong>Chat Fluido</strong> para ideação e respostas rápidas, ou acione o <strong>Modo Agente Autônomo</strong> com planejador multi-passo e Verifier de Evidências.
+            </p>
+          </div>
+          <div class="pt-3 border-t border-white/[0.06] text-xs font-mono text-purple-300 flex items-center gap-1.5">
+            <span>Conversacional</span> • <span>Planejador</span> • <span>Verifier</span>
+          </div>
+        </div>
+
+        <!-- Card 5: Hybrid & Offline Ready -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Híbrido &amp; Suporte Offline</h3>
+            <p class="text-sm text-zinc-400 mt-2 leading-relaxed">
+              Conecte com Google Gemini 2.0 Flash / Pro Reasoning para tarefas complexas, ou chaveie instantaneamente para Ollama local e Faster-Whisper para operação 100% desconectada.
+            </p>
+          </div>
+          <div class="pt-3 border-t border-white/[0.06] text-xs font-mono text-amber-300 flex items-center gap-1.5">
+            <span>Gemini 2.0</span> • <span>Ollama Local</span> • <span>Faster-Whisper</span>
+          </div>
+        </div>
+
+        <!-- Card 6: Charlie Spotlight -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Charlie Spotlight Global</h3>
+            <p class="text-sm text-zinc-400 mt-2 leading-relaxed">
+              Invoque o Charlie de qualquer lugar no Windows através do atalho global <kbd class="px-1.5 py-0.5 rounded bg-black/50 text-[11px] font-mono border border-white/10 text-cyan-200">Ctrl + Space</kbd>. Dispare ações e busque na memória instantaneamente.
+            </p>
+          </div>
+          <div class="pt-3 border-t border-white/[0.06] text-xs font-mono text-cyan-300 flex items-center gap-1.5">
+            <span>Atalho Global</span> • <span>Launcher Rápido</span> • <span>Win10/11</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       INTERACTIVE ZERO-TRUST PERMISSION SIMULATOR
+       ====================================================================== -->
+  <section id="security" class="py-16 md:py-24 relative z-10">
+    <div class="container-custom">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+        <!-- Left explanation -->
+        <div class="lg:col-span-6 space-y-5">
+          <span class="text-xs font-mono uppercase tracking-widest text-[#34D399] font-semibold">SEGURANÇA POR DESIGN</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Nenhum comando roda às cegas no seu Windows.
+          </h2>
+          <p class="text-zinc-400 text-sm sm:text-base leading-relaxed">
+            Diferente de scripts desgovernados ou assistentes na nuvem que tentam executar comandos remotos de forma opaca, o Charlie opera com <strong>Aprovação Atômica</strong>. O Permission Engine intercepta cada chamada Win32/PowerShell antes de tocar o sistema.
+          </p>
+
+          <div class="space-y-3 pt-2">
+            <div class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">✓</div>
+              <div class="text-xs text-zinc-300 leading-relaxed">
+                <strong class="text-white">Auditoria Criptográfica Indelével:</strong> Cada comando autorizado gera uma entrada com timestamp, parâmetro original e hash de validação no banco local.
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">✓</div>
+              <div class="text-xs text-zinc-300 leading-relaxed">
+                <strong class="text-white">Isolamento de Memória SQLite:</strong> Suas mensagens, histórico e embeddings vetoriais residem localmente na sua máquina, sem telemetria em servidores externos.
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">✓</div>
+              <div class="text-xs text-zinc-300 leading-relaxed">
+                <strong class="text-white">Proteção contra Injeção de Prompt:</strong> Verificador semântico bloqueia tentativas de jailbreak e execução de código fora do workspace selecionado.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Interactive Permission Engine Widget -->
+        <div class="lg:col-span-6">
+          <div class="card-tech card-glow p-5 space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+              <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></div>
+                <span class="text-xs font-mono font-bold text-white uppercase tracking-wider">Simulador de Permissão</span>
+              </div>
+              <span class="text-[11px] font-mono text-zinc-500">Live Interactive</span>
+            </div>
+
+            <!-- Simulated Prompt Modal -->
+            <div class="p-4 rounded-lg bg-[#0E0F12] border border-[#292D35] space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                  <span>Pedido de Execução no Host</span>
+                </span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-white/[0.06] text-zinc-400">PID 18492</span>
+              </div>
+
+              <div class="bg-black/50 p-2.5 rounded border border-white/[0.04] text-xs font-mono space-y-1">
+                <div class="text-zinc-500 text-[10px]">TOOL: execute_command (PowerShell)</div>
+                <div class="text-purple-300">git push origin main --force-with-lease</div>
+                <div class="text-zinc-400 text-[10px]">CWD: C:\Users\lucas\OneDrive\Documentos\assistente</div>
+              </div>
+
+              <!-- Interactive Decision Buttons -->
+              <div class="flex flex-wrap gap-2 pt-1">
+                <button id="perm-btn-allow-once" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
+                  Permitir Uma Vez
+                </button>
+                <button id="perm-btn-allow-task" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer">
+                  Permitir para Tarefa
+                </button>
+                <button id="perm-btn-deny" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer">
+                  Bloquear Ação
+                </button>
+              </div>
+            </div>
+
+            <!-- Dynamic Decision Status Banner -->
+            <div id="perm-demo-status" class="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] text-xs text-zinc-400 flex items-center justify-between">
+              <span>Clique em um dos botões acima para ver a reação do Permission Engine.</span>
+            </div>
+
+            <!-- Audit Log Ledger Output -->
+            <div class="space-y-1">
+              <div class="text-[10px] font-mono uppercase text-zinc-500 font-semibold">Ledger de Auditoria em Tempo Real</div>
+              <div id="perm-demo-audit-log" class="max-h-28 overflow-y-auto space-y-1 pr-1">
+                <div class="py-1 border-b border-white/[0.04] text-[11px] font-mono flex items-start gap-2">
+                  <span class="text-zinc-500">[13:20:14]</span>
+                  <span class="text-emerald-400 font-semibold">ALLOW:</span>
+                  <span class="text-zinc-300">Tool: 'file_explorer' — Leitura de pasta 'desktop\src' autorizada</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       ARCHITECTURE & TECHNICAL DEEP DIVE
+       ====================================================================== -->
+  <section id="architecture" class="py-16 md:py-24 relative z-10 border-t border-white/[0.06] bg-[#0A0B0E]/60">
+    <div class="container-custom">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <span class="text-xs font-mono uppercase tracking-widest text-[#8B7CFF] font-semibold">COMO O CHARLIE FUNCIONA</span>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2 text-white">
+          Arquitetura Desacoplada e Resiliente
+        </h2>
+        <p class="text-zinc-400 mt-3 text-base">
+          A inteligência dos modelos generativos encontra o poder dos binários nativos do Windows através de uma arquitetura em três camadas fundamentais.
+        </p>
+      </div>
+
+      <!-- Architecture 3-Tiers Diagram Cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Tier 1: Cloud & Intelligence Brain -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="text-[11px] font-mono text-purple-400 font-semibold uppercase tracking-wider">Camada 1 — Inteligência</div>
+          <h3 class="text-xl font-bold text-white">Cloud Brain &amp; Roteamento</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Recebe as intenções do usuário e projeta o plano de ação utilizando os modelos mais velozes do mercado. Integração oficial com Google Gemini Flash, Pro Reasoning e Supabase Auth.
+          </p>
+          <ul class="space-y-2 text-xs font-mono text-zinc-300 pt-2 border-t border-white/[0.06]">
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+              Gemini 2.0 Flash (Streaming ultra-rápido)
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+              Intent Classifier Heurístico + LLM
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+              Validação Criptográfica de Tokens
+            </li>
+          </ul>
+        </div>
+
+        <!-- Tier 2: Zero-Trust Gatekeeper -->
+        <div class="card-tech p-6 space-y-4 border-[#8B7CFF]/40 bg-[#15171C]">
+          <div class="text-[11px] font-mono text-[#34D399] font-semibold uppercase tracking-wider">Camada 2 — Controle</div>
+          <h3 class="text-xl font-bold text-white">Zero-Trust Gatekeeper</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            O coração de segurança do Charlie Desktop. Intercepta, desinfeta e analisa os parâmetros de cada ferramenta antes de permitir que o comando chegue à camada de execução física.
+          </p>
+          <ul class="space-y-2 text-xs font-mono text-zinc-300 pt-2 border-t border-white/[0.06]">
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Aprovação Atômica do Usuário
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Allowlist Restrita de Diretórios
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Evidence Verifier de Sucesso
+            </li>
+          </ul>
+        </div>
+
+        <!-- Tier 3: Local Device Runtime -->
+        <div class="card-tech p-6 space-y-4">
+          <div class="text-[11px] font-mono text-blue-400 font-semibold uppercase tracking-wider">Camada 3 — Execução Física</div>
+          <h3 class="text-xl font-bold text-white">Windows Device Engine</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Processos compilados em Rust e Tauri v2 rodando na sua máquina. Acesso direto a PowerShell, manipulação de arquivos, inicialização de aplicativos e atalhos globais do Windows.
+          </p>
+          <ul class="space-y-2 text-xs font-mono text-zinc-300 pt-2 border-t border-white/[0.06]">
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              PowerShell 7 e Comandos Win32
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              Context Drawer &amp; Terminais Interativos
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              Spotlight Popup (Transparente e fluido)
+            </li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Terminal Simulator Section -->
+      <div class="mt-14 card-tech p-6 max-w-4xl mx-auto space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs font-mono text-zinc-300">
+            <span class="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse"></span>
+            <span>Console Interativo do Charlie CLI &amp; Runtime</span>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" data-term-cmd="charlie doctor" class="px-2 py-1 rounded bg-[#1C1F28] hover:bg-[#252934] text-[11px] font-mono text-purple-300 border border-white/10 transition cursor-pointer">
+              charlie doctor
+            </button>
+            <button type="button" data-term-cmd="charlie agent run" class="px-2 py-1 rounded bg-[#1C1F28] hover:bg-[#252934] text-[11px] font-mono text-emerald-300 border border-white/10 transition cursor-pointer">
+              charlie agent run
+            </button>
+            <button type="button" data-term-cmd="charlie status" class="px-2 py-1 rounded bg-[#1C1F28] hover:bg-[#252934] text-[11px] font-mono text-blue-300 border border-white/10 transition cursor-pointer">
+              charlie status
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal Output Screen -->
+        <div id="terminal-interactive-output" class="terminal-window p-4 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+          <div class="text-zinc-500 font-mono text-xs">
+            # Digite um comando ou clique em um dos atalhos acima para testar o Charlie CLI.
+          </div>
+          <div class="text-xs text-zinc-300 font-mono">
+            PS C:\Users\Charlie&gt; <span class="text-emerald-400">charlie doctor</span>
+          </div>
+          <pre class="text-xs text-zinc-400 font-mono my-1 whitespace-pre-wrap leading-relaxed">[OK] Windows OS Version: Windows 11 Build 22631 (x64)
+[OK] Local Agent Runtime 2.0: Active &amp; Listening (named pipe ready)
+[OK] PowerShell Host: Core 7.4.5 &amp; Win32 Security Layer Verified
+[OK] Zero-Trust Engine: Enforced (Atomic approval enabled)
+[OK] SQLite Encrypted Store: 100% Local (0 Cloud Telemetry Leaks)
+[OK] Active LLM Pipeline: Google Gemini 2.0 Flash / Pro Reasoning
+-> All systems operational. Zero critical vulnerabilities detected.</pre>
+        </div>
+
+        <!-- Terminal Input Prompt -->
+        <div class="flex items-center gap-2 pt-2 border-t border-white/[0.08]">
+          <span class="text-purple-400 font-mono text-xs font-bold">PS &gt;</span>
+          <input id="terminal-interactive-input" type="text" placeholder="Digite um comando (ex: 'charlie doctor', 'charlie status', 'clear')..." class="w-full bg-transparent text-xs font-mono text-white placeholder-zinc-500 focus:outline-none">
+          <span class="text-[10px] font-mono text-zinc-500 shrink-0">Pressione Enter ↵</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       SPOTLIGHT PREVIEW SECTION
+       ====================================================================== -->
+  <section class="py-16 md:py-20 relative z-10">
+    <div class="container-custom">
+      <div class="card-tech card-glow p-8 md:p-12 relative overflow-hidden bg-gradient-to-br from-[#15171C] via-[#0E0F12] to-[#12141A]">
+        <div class="max-w-3xl space-y-4">
+          <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+            <span>Charlie Spotlight Window</span>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Seu assistente a uma tecla de distância.
+          </h2>
+          <p class="text-zinc-400 text-sm sm:text-base leading-relaxed">
+            Precisa pausar a música, abrir o VS Code no repositório certo, verificar o status do build ou fazer uma pergunta técnica rápida? Pressione <kbd class="px-2 py-0.5 rounded bg-black/60 border border-white/15 text-xs text-white font-mono shadow-sm">Ctrl + Space</kbd> em qualquer aplicativo do Windows.
+          </p>
+
+          <div class="pt-4 flex flex-wrap gap-4">
+            <button id="spotlight-demo-trigger-2" onclick="document.getElementById('spotlight-demo-trigger').click()" class="btn-primary !py-2.5 !px-5 text-xs font-semibold cursor-pointer">
+              Testar Janela do Spotlight Agora
+            </button>
+            <div class="flex items-center gap-2 text-xs font-mono text-zinc-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>Janela transparente nativa Win32</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       DOWNLOAD & GET STARTED SECTION
+       ====================================================================== -->
+  <section id="download" class="py-16 md:py-24 relative z-10 border-t border-white/[0.06] bg-[#0E0F12]">
+    <div class="container-custom">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <span class="text-xs font-mono uppercase tracking-widest text-[#8B7CFF] font-semibold">COMECE AGORA</span>
+        <h2 class="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mt-2 text-white">
+          Baixe o Charlie Desktop para Windows
+        </h2>
+        <p class="text-zinc-400 mt-3 text-base">
+          Instalador oficial standalone empacotado com WebView2 e inicialização instantânea.
+        </p>
+      </div>
+
+      <!-- Main Download Card -->
+      <div class="max-w-2xl mx-auto card-tech card-glow p-8 space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/[0.08]">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-[#8B7CFF]/15 border border-[#8B7CFF]/30 flex items-center justify-center p-2.5 shrink-0 shadow-lg">
+              <img src="assets/charlie-logo.svg" alt="Charlie Logo" class="w-full h-full object-contain">
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-xl font-bold text-white">Charlie_1.0.0_x64-setup.exe</h3>
+              </div>
+              <p class="text-xs text-zinc-400 font-mono mt-0.5">Versão 1.0.0 Stable • 2.75 MB • Windows 10/11 x64</p>
+            </div>
+          </div>
+
+          <a href="downloads/Charlie_1.0.0_x64-setup.exe" download="Charlie_1.0.0_x64-setup.exe" class="btn-primary !py-3 !px-6 text-sm shrink-0 shadow-xl group">
+            <svg class="w-4 h-4 text-white group-hover:translate-y-0.5 transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Baixar Agora</span>
+          </a>
+        </div>
+
+        <!-- Verification Checksum -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-zinc-400">Checksum SHA-256 (Verificado):</span>
+            <button type="button" data-copy-target="sha256-hash" class="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copiar Hash</span>
+            </button>
+          </div>
+          <div id="sha256-hash" class="p-2.5 rounded bg-black/50 border border-white/[0.06] text-[11px] font-mono text-zinc-300 break-all select-all">
+            0710DE74D9DBEC9ACEDB33E933FAFFB2081FD1A5BCB7D2AC541FAEA00D902426
+          </div>
+        </div>
+
+        <!-- System Requirements Specs -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs font-mono text-zinc-400">
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-400">✓</span>
+            <span>Windows 10 (21H2+) ou Windows 11</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-400">✓</span>
+            <span>Arquitetura x64 (AMD64 / Intel 64)</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-400">✓</span>
+            <span>Memória RAM Mínima: 4 GB</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-400">✓</span>
+            <span>Microsoft Edge WebView2 Runtime</span>
+          </div>
+        </div>
+
+        <!-- Quick Start via Command Line -->
+        <div class="pt-4 border-t border-white/[0.06] space-y-2">
+          <div class="flex items-center justify-between text-xs font-mono text-zinc-400">
+            <span>Ou instale via PowerShell / Winget:</span>
+            <button type="button" data-copy-target="winget-cmd" class="text-purple-400 hover:text-purple-300 transition cursor-pointer">
+              Copiar
+            </button>
+          </div>
+          <div id="winget-cmd" class="p-2.5 rounded bg-black/60 border border-white/[0.06] text-xs font-mono text-purple-300 flex items-center justify-between select-all">
+            <span>winget install Charlie.Desktop -s winget</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       FREQUENTLY ASKED QUESTIONS (FAQ ACCORDION)
+       ====================================================================== -->
+  <section id="faq" class="py-16 md:py-24 relative z-10 border-t border-white/[0.06] bg-[#0A0B0E]/60">
+    <div class="container-custom max-w-4xl">
+      <div class="text-center mb-16">
+        <span class="text-xs font-mono uppercase tracking-widest text-[#8B7CFF] font-semibold">DÚVIDAS FREQUENTES</span>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-2 text-white">
+          Perguntas &amp; Respostas Técnicas
+        </h2>
+      </div>
+
+      <div class="space-y-4">
+        <!-- FAQ 1 -->
+        <div class="card-tech faq-item open">
+          <button type="button" class="faq-trigger" aria-expanded="true">
+            <span>Como o Charlie executa comandos no meu Windows com segurança?</span>
+            <svg class="w-5 h-5 faq-chevron shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="faq-content">
+            O Charlie utiliza o <strong>Permission Engine Zero-Trust</strong>. Nenhuma tool de escrita em disco, manipulação de processos ou comando PowerShell é executada automaticamente sem que um card de aprovação atômica apareça na tela para o usuário. Você pode permitir uma única execução, aprovar a meta inteira ou recusar a qualquer momento.
+          </div>
+        </div>
+
+        <!-- FAQ 2 -->
+        <div class="card-tech faq-item">
+          <button type="button" class="faq-trigger" aria-expanded="false">
+            <span>O que é o Context Drawer &amp; Inspector?</span>
+            <svg class="w-5 h-5 faq-chevron shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="faq-content">
+            O Context Drawer é o painel lateral retrátil integrado ao Charlie Desktop. Ele centraliza quatro módulos cruciais em abas: o <strong>Hub de Ativos</strong> (arquivos e subagentes ativos), o <strong>Git Diff Review</strong> (onde você revisa e aceita ou reverte alterações no código), os <strong>Terminais e Logs</strong> em tempo real, e a visualização de <strong>Artefatos</strong> gerados pela IA.
+          </div>
+        </div>
+
+        <!-- FAQ 3 -->
+        <div class="card-tech faq-item">
+          <button type="button" class="faq-trigger" aria-expanded="false">
+            <span>Meus dados e código-fonte são enviados para servidores externos?</span>
+            <svg class="w-5 h-5 faq-chevron shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="faq-content">
+            Não. A base de dados do Charlie (memória histórica, threads, indexação semântica e configurações) é armazenada localmente em um banco <strong>SQLite criptografado no seu próprio disco</strong>. Apenas as mensagens explícitas de prompts enviadas durante o chat transitam pela API do modelo de linguagem configurado (Google Gemini), com suporte total para rodar 100% offline via Ollama.
+          </div>
+        </div>
+
+        <!-- FAQ 4 -->
+        <div class="card-tech faq-item">
+          <button type="button" class="faq-trigger" aria-expanded="false">
+            <span>Qual a diferença entre o Modo Chat e o Modo Agente?</span>
+            <svg class="w-5 h-5 faq-chevron shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="faq-content">
+            O <strong>Modo Chat</strong> funciona como um diálogo de texto rápido com streaming fluido para dúvidas de programação, resumos e brainstorming. Já o <strong>Modo Agente Autônomo</strong> projeta uma árvore de tarefas, cria planos com checkpoints de validação, coordena subagentes e executa passos concretos com verificação de evidências até atingir a meta.
+          </div>
+        </div>
+
+        <!-- FAQ 5 -->
+        <div class="card-tech faq-item">
+          <button type="button" class="faq-trigger" aria-expanded="false">
+            <span>Como funciona o Charlie Spotlight no Windows?</span>
+            <svg class="w-5 h-5 faq-chevron shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <div class="faq-content">
+            O Spotlight é uma janela ultraleve e transparente registrada com o atalho global <kbd class="px-1.5 py-0.5 rounded bg-black/40 text-xs font-mono">Ctrl + Space</kbd>. Ela surge sobre qualquer jogo ou aplicativo ativo sem roubar foco permanente, permitindo que você comande seu computador por voz ou texto instantaneamente.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       FOOTER
+       ====================================================================== -->
+  <footer class="border-t border-white/[0.08] bg-[#0A0B0E] py-12 relative z-10 text-xs">
+    <div class="container-custom">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/[0.06]">
+        <!-- Brand Info -->
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-[#15171C] border border-[#292D35] flex items-center justify-center p-1.5">
+            <img src="assets/charlie-logo.svg" alt="Charlie Logo" class="w-full h-full">
+          </div>
+          <div>
+            <div class="font-bold text-white text-sm">Charlie Desktop</div>
+            <div class="text-zinc-500 font-mono text-[11px]">Personal Assistant &amp; Agent Workspace for Windows</div>
+          </div>
+        </div>
+
+        <!-- Live Status Pill -->
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-mono text-[11px]">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Todos os sistemas operacionais • v1.0.0</span>
+        </div>
+      </div>
+
+      <div class="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-zinc-500 font-mono text-[11px]">
+        <div>
+          © 2026 Charlie Desktop. Desenvolvido para a plataforma Windows.
+        </div>
+        <div class="flex items-center gap-5">
+          <a href="#features" class="hover:text-zinc-300 transition">Recursos</a>
+          <a href="#workspace" class="hover:text-zinc-300 transition">Workspace</a>
+          <a href="#security" class="hover:text-zinc-300 transition">Segurança</a>
+          <a href="#download" class="hover:text-zinc-300 transition">Download</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ======================================================================
+       SPOTLIGHT INTERACTIVE MODAL PREVIEW
+       ====================================================================== -->
+  <div id="spotlight-demo-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden items-center justify-center z-50 p-4 transition-all">
+    <div class="spotlight-card w-full max-w-xl p-4 space-y-3 relative shadow-2xl">
+      <!-- Search Input Header -->
+      <div class="flex items-center gap-3 px-2 py-1">
+        <svg class="w-5 h-5 text-purple-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input id="spotlight-search-input" type="text" placeholder="Pergunte ao Charlie ou digite uma ação..." class="w-full bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none font-sans">
+        <button id="spotlight-demo-close" class="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Quick Action Suggestions -->
+      <div class="pt-2 border-t border-white/[0.08] space-y-1 text-xs">
+        <div class="text-[10px] font-mono uppercase text-zinc-500 px-2 py-0.5">Sugestões e Comandos Rápidos</div>
+        <div class="spotlight-search-item p-2 rounded-lg hover:bg-white/[0.06] flex items-center justify-between cursor-pointer transition">
+          <div class="flex items-center gap-2.5 text-zinc-200">
+            <span class="w-6 h-6 rounded bg-purple-500/20 text-purple-300 flex items-center justify-center text-xs">⚡</span>
+            <span>Iniciar nova Meta no Agent Workspace</span>
+          </div>
+          <span class="text-[10px] font-mono text-zinc-500">Ação</span>
+        </div>
+        <div class="spotlight-search-item p-2 rounded-lg hover:bg-white/[0.06] flex items-center justify-between cursor-pointer transition">
+          <div class="flex items-center gap-2.5 text-zinc-200">
+            <span class="w-6 h-6 rounded bg-blue-500/20 text-blue-300 flex items-center justify-center text-xs">📁</span>
+            <span>Abrir pasta de projeto no VS Code</span>
+          </div>
+          <span class="text-[10px] font-mono text-zinc-500">PowerShell</span>
+        </div>
+        <div class="spotlight-search-item p-2 rounded-lg hover:bg-white/[0.06] flex items-center justify-between cursor-pointer transition">
+          <div class="flex items-center gap-2.5 text-zinc-200">
+            <span class="w-6 h-6 rounded bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-xs">🔍</span>
+            <span>Consultar histórico de decisões e memória vetorial</span>
+          </div>
+          <span class="text-[10px] font-mono text-zinc-500">RAG Local</span>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-zinc-500 px-1">
+        <span>Atalho configurado: <kbd class="px-1 py-0.5 rounded bg-black/40 text-zinc-300">Ctrl + Space</kbd></span>
+        <span>ESC para fechar</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript File -->
+  <script src="main.js"></script>
+</body>
+</html>

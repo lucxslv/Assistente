@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import {
-  ArrowUp,
+  ArrowRight,
   Loader2,
   Copy,
   Check,
@@ -12,6 +12,7 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
+  FileCode,
 } from "lucide-react";
 import {
   AgentSession,
@@ -351,7 +352,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
         {/* Header do Chat do Agente */}
         <header className="px-6 py-2.5 border-b border-white/[0.08] bg-[#12151C]/70 backdrop-blur-md flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-xs">
+            <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-200 font-bold text-xs">
               ⚡
             </div>
             <div className="truncate">
@@ -359,12 +360,12 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                 <h1 className="text-xs font-semibold text-zinc-100 uppercase tracking-wider font-mono">
                   Charlie Agente
                 </h1>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
                   Modo Autônomo
                 </span>
                 {session?.status === "running" ? (
-                  <span className="text-[10px] font-mono text-indigo-400 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                  <span className="text-[10px] font-mono text-blue-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                     Trabalhando ao vivo
                   </span>
                 ) : (
@@ -385,7 +386,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
               <button
                 type="button"
                 onClick={onNewMission}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/60 transition cursor-pointer"
                 title="Limpar e iniciar nova missão"
               >
                 <Plus className="w-3.5 h-3.5 text-zinc-400" />
@@ -397,7 +398,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
               <button
                 type="button"
                 onClick={() => setIsSidePanelOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-[#1C202A] hover:bg-[#252A38] text-indigo-300 border border-indigo-500/30 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/60 transition cursor-pointer"
                 title="Abrir painel lateral de trabalho"
               >
                 <PanelRight className="w-3.5 h-3.5" />
@@ -406,6 +407,58 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
             )}
           </div>
         </header>
+
+        {/* Active Mission Card (Clean Technical - Padrão Imagem 2) */}
+        {session && (
+          <div className="mx-6 mt-4 p-3.5 rounded-xl bg-[#12151C] border border-white/[0.08] shadow-sm shrink-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 mt-0.5">
+                  <FileCode className="w-4 h-4 text-blue-400" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-semibold text-zinc-100 uppercase tracking-wide">
+                      {session.goal || "Missão Operacional Ativa"}
+                    </span>
+                    <span
+                      className={`text-[9.5px] font-mono px-1.5 py-0.2 rounded ${
+                        session.status === "running"
+                          ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse"
+                          : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      }`}
+                    >
+                      {session.status === "running" ? "EM EXECUÇÃO" : "PRONTO"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-1">
+                    {session.tasks && session.tasks.length > 0
+                      ? `Pipeline ${session.tasks.filter((t) => t.status === "success").length}/${session.tasks.length} etapas concluídas • ${session.files?.length || 0} arquivos inspecionados`
+                      : "Sessão interativa do agente conectada ao workspace local"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* SYSTEM LOGS com barra de destaque vertical azul à esquerda */}
+            <div className="mt-2.5 pt-2 border-t border-white/[0.04]">
+              <div className="flex items-center justify-between text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
+                <span>SYSTEM LOGS</span>
+                <span>{session.status === "running" ? "LIVE STREAM" : "IDLE"}</span>
+              </div>
+              <div className="border-l-2 border-blue-500 bg-[#0A0B0E] px-3 py-1.5 rounded-r font-mono text-[11px] text-zinc-300">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span className="truncate">
+                    $ {session.terminals?.[session.terminals.length - 1]?.command || "charlie agent --status active"}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 shrink-0 ml-2">
+                    {new Date(session.startedAt || Date.now()).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Área de Mensagens do Chat */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
@@ -573,7 +626,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
 
         {/* Input Bar do Chat do Agente */}
         <div className="p-4 border-t border-white/[0.08] bg-[#090A0F]">
-          <div className="max-w-3xl mx-auto relative rounded-xl border border-white/[0.12] bg-[#12151C] focus-within:border-indigo-500/60 shadow-lg transition">
+          <div className="max-w-3xl mx-auto relative rounded-xl border border-white/[0.12] bg-[#12151C] focus-within:border-zinc-500/80 shadow-lg transition">
             <textarea
               ref={textareaRef}
               value={inputPrompt}
@@ -585,21 +638,21 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
               className="w-full bg-transparent px-4 py-3 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none resize-none font-sans"
             />
             <div className="px-3 pb-2 flex items-center justify-between text-[11px] text-zinc-500">
-              <span className="font-mono text-[10px]">
-                Enter para enviar · Shift+Enter para quebra de linha
+              <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-wider">
+                ENTER PARA ENVIAR • SHIFT+ENTER PARA QUEBRA DE LINHA
               </span>
               <button
                 type="button"
                 onClick={() => handleSendMessage(inputPrompt)}
                 disabled={!inputPrompt.trim() || isLoading}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:hover:bg-indigo-600 text-white font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white disabled:opacity-30 disabled:hover:bg-zinc-100 text-zinc-950 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer shadow-sm"
               >
                 {isLoading ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <>
                     <span>Enviar</span>
-                    <ArrowUp className="w-3.5 h-3.5" />
+                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                   </>
                 )}
               </button>

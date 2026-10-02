@@ -116,16 +116,15 @@ export function App() {
     try {
       const data = await fetchThreads();
       setThreads(data);
-      if (!hasInitializedRef.current || !activeThreadId) {
-        if (data.length > 0) {
-          hasInitializedRef.current = true;
-          setActiveThreadId((prev) => prev ?? data[0].id);
-        }
+      if (!hasInitializedRef.current) {
+        hasInitializedRef.current = true;
+        // Sessão limpa e vazia por padrão ao inicializar. As conversas anteriores
+        // ficam preservadas no histórico da barra lateral para seleção manual.
       }
     } catch (err) {
       console.error("Erro ao carregar conversas:", err);
     }
-  }, [activeThreadId]);
+  }, []);
 
   // Carrega status da API e telemetria do sistema
   const loadStatus = useCallback(async () => {
