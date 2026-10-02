@@ -61,8 +61,8 @@ if (typeof window !== "undefined") {
   }
 }
 
-// Inicializa priorizando LOCAL_API no ambiente Desktop
-let activeApiBase: string = LOCAL_API;
+// Inicializa com CLOUD_API como base segura para conexão imediata ao Supabase
+let activeApiBase: string = CLOUD_API;
 
 /**
  * Checa de forma ativa se o backend local (porta 8005) está respondendo.
@@ -79,7 +79,7 @@ export async function detectApiBase(): Promise<string> {
 
   try {
     const res = await fetch("http://127.0.0.1:8005/api/health", {
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(1000),
     });
     if (res.ok) {
       activeApiBase = LOCAL_API;
@@ -183,7 +183,12 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   const url = `${currentBase}${fullPath}`;
 
   try {
-    const res = await fetch(url, options);
+    let fetchOptions = options;
+    if (currentBase === LOCAL_API && !options.signal) {
+      // Evita bloqueio indefinido caso o backend local 8005 não esteja rodando
+      fetchOptions = { ...options, signal: AbortSignal.timeout(1800) };
+    }
+    const res = await fetch(url, fetchOptions);
     if (!res.ok && currentBase === LOCAL_API && [502, 503, 504].includes(res.status)) {
       throw new Error(`Local status ${res.status}`);
     }
@@ -294,11 +299,23 @@ export async function fetchToolsStatus(): Promise<ToolsStatus> {
 }
 
 export async function fetchThreads(): Promise<Thread[]> {
-  const res = await apiFetch("/threads", {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error("Falha ao buscar conversas");
-  return res.json();
+  try {
+    const res = await apiFetch("/threads", {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        console.warn("[Charlie API] Não autorizado ao buscar conversas (401).");
+        clearAuthSession();
+        return [];
+      }
+      throw new Error(`Falha ao buscar conversas: HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.error("[Charlie API] Erro ao carregar conversas:", err);
+    return [];
+  }
 }
 
 export async function createThread(name: string = "Novo Chat"): Promise<Thread> {
