@@ -10,9 +10,17 @@ import {
   User,
   MessageSquare,
   Cpu,
+  Folder,
+  Shield,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Activity,
 } from "lucide-react";
 import { Thread } from "../types";
 import { SystemStatus, LocalSystemMetrics, UserProfile } from "../services/api";
+import { useAgentRuntime } from "../services/agentRuntimeStore";
 
 interface SidebarProps {
   threads: Thread[];
@@ -62,6 +70,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+
+  const {
+    session: agentSession,
+    history: agentHistory,
+    loadSession,
+    clearSession,
+    deleteHistorySession,
+    pendingPermissions,
+  } = useAgentRuntime();
 
   // Status de conexão e atividade
   const getStatusText = () => {
@@ -231,165 +248,292 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* 3. Ações: + Nova conversa e ⌕ Pesquisar */}
-      <div className="flex flex-col gap-1 mb-2">
-        <button
-          type="button"
-          onClick={onNewThread}
-          className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-sm)] text-[var(--text-primary)] font-medium bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[13px] w-full text-left cursor-pointer"
-        >
-          <span>+</span> Nova conversa
-        </button>
-
-        {/* Campo de Pesquisa Expansível */}
-        {isSearching ? (
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] border border-[var(--border)]">
-            <Search className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
-            <input
-              type="text"
-              autoFocus
-              placeholder="Pesquisar..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setIsSearching(false);
-                  setSearchQuery("");
-                }
-              }}
-              className="w-full bg-transparent text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
-            />
+      {activeView === "agent" ? (
+        /* ================= SEÇÃO EXCLUSIVA DO AGENTE & AMBIENTE ================= */
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Botão de Nova Missão */}
+          <div className="mb-2">
             <button
               type="button"
-              onClick={() => {
-                setIsSearching(false);
-                setSearchQuery("");
-              }}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              onClick={() => clearSession()}
+              className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-zinc-100 hover:bg-white text-zinc-950 transition-colors shadow-sm cursor-pointer w-full"
             >
-              <X className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 text-zinc-900" />
+              <span>+ Novo Objetivo</span>
             </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setIsSearching(true)}
-            className="flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[13px] w-full text-left cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <span>⌕</span> Pesquisar
-            </span>
-            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
-              Ctrl+F
-            </kbd>
-          </button>
-        )}
 
-        {onOpenCommandPalette && (
-          <button
-            type="button"
-            onClick={onOpenCommandPalette}
-            className="flex items-center justify-between px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors text-[12px] w-full text-left cursor-pointer"
-            title="Paleta de Comandos Rápidos (Ctrl+K)"
-          >
-            <span className="flex items-center gap-2">
-              <span className="text-[11px]">⌘</span> Paleta rápida
-            </span>
-            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
-              Ctrl+K
-            </kbd>
-          </button>
-        )}
-      </div>
+          {/* Card de Contexto do Ambiente Local */}
+          <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-3 mb-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3 h-3 text-slate-400" />
+                Ambiente Local
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">
+                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                Online
+              </span>
+            </div>
 
-      <div className="h-[1px] bg-[var(--border)] my-3" />
-
-      {/* 3. Lista de Conversas com Agrupamento Temporal */}
-      <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 pr-1 -mr-2">
-        {groupedThreads.length === 0 ? (
-          <div className="py-8 text-center text-[12px] text-[var(--text-muted)]">
-            {searchQuery ? "Nenhuma conversa encontrada" : "Nenhuma conversa"}
-          </div>
-        ) : (
-          groupedThreads.map((group) => (
-            <div key={group.title} className="mb-2">
-              <div className="text-[11px] font-medium text-[var(--text-muted)] px-2.5 pt-2 pb-1.5 uppercase tracking-[0.5px]">
-                {group.title}
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center gap-2 text-zinc-300">
+                <Folder className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-medium text-zinc-200 truncate">assistente</div>
+                  <div className="text-[9.5px] text-zinc-500 font-mono truncate">~/OneDrive/Documentos/assistente</div>
+                </div>
               </div>
-              <div className="flex flex-col gap-0.5">
-                {group.threads.map((t) => {
-                  const isActive = t.id === activeThreadId;
-                  const isEditing = editingThreadId === t.id;
 
-                  return (
-                    <div
-                      key={t.id}
-                      onClick={() => !isEditing && onSelectThread(t.id)}
-                      className={`group relative flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[13px] cursor-pointer transition-colors border ${
-                        isActive
-                          ? "bg-[var(--accent-soft-bg)] border-[var(--accent-soft-border)] text-[var(--accent-hover)] font-medium"
-                          : "border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                      }`}
-                    >
-                      {isEditing ? (
-                        <form
-                          onSubmit={(e) => handleSaveRename(t.id, e)}
-                          className="flex items-center gap-1.5 w-full"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            type="text"
-                            autoFocus
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            onBlur={() => handleSaveRename(t.id)}
-                            className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)] px-1.5 py-0.5 rounded text-[12px] outline-none"
-                          />
-                          <button
-                            type="submit"
-                            className="p-1 hover:text-[var(--success)]"
-                            title="Salvar"
-                          >
-                            <Check className="w-3 h-3" />
-                          </button>
-                        </form>
-                      ) : (
-                        <>
-                          <span className="truncate flex-1 pr-2">
-                            {t.name || "Conversa sem título"}
-                          </span>
-
-                          {/* Ações de Hover (Renomear / Excluir) */}
-                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
-                            {onRenameThread && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleStartRename(t, e)}
-                                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] rounded"
-                                title="Renomear conversa"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => onDeleteThread(t.id, e)}
-                              className="p-1 text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--surface-elevated)] rounded"
-                              title="Excluir conversa"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1.5 border-t border-white/[0.06]">
+                <span className="flex items-center gap-1 text-[10.5px]">
+                  <Shield className="w-3 h-3 text-zinc-500" />
+                  Segurança
+                </span>
+                {pendingPermissions.length > 0 ? (
+                  <span className="text-amber-400 font-medium font-mono text-[10px] bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                    {pendingPermissions.length} pendente(s)
+                  </span>
+                ) : (
+                  <span className="text-zinc-500 font-mono text-[10px]">Zero-Trust</span>
+                )}
               </div>
             </div>
-          ))
-        )}
-      </div>
+          </div>
+
+          <div className="h-[1px] bg-white/[0.06] my-1.5" />
+
+          {/* Lista de Missões do Agente (Independente do Chat) */}
+          <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1 -mr-2">
+            <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 px-2 pt-1 pb-1 uppercase tracking-wider">
+              <span>Missões do Agente</span>
+              <span className="text-[10px] font-mono bg-white/[0.06] text-zinc-400 px-1.5 py-0.2 rounded-full">
+                {agentHistory.length}
+              </span>
+            </div>
+
+            {agentHistory.length === 0 ? (
+              <div className="py-8 text-center text-[12px] text-zinc-500 px-4">
+                Nenhum objetivo registrado ainda.
+              </div>
+            ) : (
+              agentHistory.map((m) => {
+                const isSelected = agentSession?.id === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => loadSession(m)}
+                    className={`group relative flex items-center justify-between px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-colors border ${
+                      isSelected
+                        ? "bg-[#1C202A] border-white/[0.12] text-zinc-100 font-medium"
+                        : "border-transparent text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2 min-w-0 flex-1 pr-1">
+                      <div className="mt-0.5 shrink-0">
+                        {m.status === "completed" ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : m.status === "failed" ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                        ) : m.status === "running" ? (
+                          <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs text-zinc-200 font-medium">
+                          {m.goal}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono mt-0.5">
+                          <span>{m.progress}%</span>
+                          <span>•</span>
+                          <span>{m.tasks ? m.tasks.length : 0} etapas</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteHistorySession(m.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-rose-400 rounded transition cursor-pointer"
+                      title="Excluir missão do histórico"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : (
+        /* ================= SEÇÃO EXCLUSIVA DO CHAT CONVERSACIONAL ================= */
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* 3. Ações: + Nova conversa e ⌕ Pesquisar */}
+          <div className="flex flex-col gap-1 mb-2">
+            <button
+              type="button"
+              onClick={onNewThread}
+              className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-sm)] text-[var(--text-primary)] font-medium bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[13px] w-full text-left cursor-pointer"
+            >
+              <span>+</span> Nova conversa
+            </button>
+
+            {/* Campo de Pesquisa Expansível */}
+            {isSearching ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] border border-[var(--border)]">
+                <Search className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Pesquisar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setIsSearching(false);
+                      setSearchQuery("");
+                    }
+                  }}
+                  className="w-full bg-transparent text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSearching(false);
+                    setSearchQuery("");
+                  }}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsSearching(true)}
+                className="flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[13px] w-full text-left cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <span>⌕</span> Pesquisar
+                </span>
+                <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
+                  Ctrl+F
+                </kbd>
+              </button>
+            )}
+
+            {onOpenCommandPalette && (
+              <button
+                type="button"
+                onClick={onOpenCommandPalette}
+                className="flex items-center justify-between px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors text-[12px] w-full text-left cursor-pointer"
+                title="Paleta de Comandos Rápidos (Ctrl+K)"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-[11px]">⌘</span> Paleta rápida
+                </span>
+                <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
+                  Ctrl+K
+                </kbd>
+              </button>
+            )}
+          </div>
+
+          <div className="h-[1px] bg-[var(--border)] my-3" />
+
+          {/* 3. Lista de Conversas com Agrupamento Temporal */}
+          <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 pr-1 -mr-2">
+            {groupedThreads.length === 0 ? (
+              <div className="py-8 text-center text-[12px] text-[var(--text-muted)]">
+                {searchQuery ? "Nenhuma conversa encontrada" : "Nenhuma conversa"}
+              </div>
+            ) : (
+              groupedThreads.map((group) => (
+                <div key={group.title} className="mb-2">
+                  <div className="text-[11px] font-medium text-[var(--text-muted)] px-2.5 pt-2 pb-1.5 uppercase tracking-[0.5px]">
+                    {group.title}
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {group.threads.map((t) => {
+                      const isActive = t.id === activeThreadId;
+                      const isEditing = editingThreadId === t.id;
+
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => !isEditing && onSelectThread(t.id)}
+                          className={`group relative flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[13px] cursor-pointer transition-colors border ${
+                            isActive
+                              ? "bg-[var(--accent-soft-bg)] border-[var(--accent-soft-border)] text-[var(--accent-hover)] font-medium"
+                              : "border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                          }`}
+                        >
+                          {isEditing ? (
+                            <form
+                              onSubmit={(e) => handleSaveRename(t.id, e)}
+                              className="flex items-center gap-1.5 w-full"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onBlur={() => handleSaveRename(t.id)}
+                                className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)] px-1.5 py-0.5 rounded text-[12px] outline-none"
+                              />
+                              <button
+                                type="submit"
+                                className="p-1 hover:text-[var(--success)]"
+                                title="Salvar"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                            </form>
+                          ) : (
+                            <>
+                              <span className="truncate flex-1 pr-2">
+                                {t.name || "Conversa sem título"}
+                              </span>
+
+                              {/* Ações de Hover (Renomear / Excluir) */}
+                              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
+                                {onRenameThread && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleStartRename(t, e)}
+                                    className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] rounded"
+                                    title="Renomear conversa"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => onDeleteThread(t.id, e)}
+                                  className="p-1 text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--surface-elevated)] rounded"
+                                  title="Excluir conversa"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 4. Perfil do Usuário com Indicador (···) e Borda Lilás (#8B7CFF) */}
       <div className="mt-auto pt-3 border-t border-[var(--border)] mb-3">

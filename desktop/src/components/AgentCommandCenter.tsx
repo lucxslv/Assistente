@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trash2,
   FolderOpen,
+  Folder,
   ArrowRight,
   Search,
 } from "lucide-react";
@@ -346,87 +347,234 @@ export const AgentCommandCenter: React.FC = () => {
 
       {/* ================= Conteúdo Principal ================= */}
       <main className="flex-1 overflow-y-auto p-6">
-        {/* Caso não haja sessão ativa: Prompt de Inicialização de Objetivo */}
+        {/* Caso não haja sessão ativa: Cockpit do Ambiente & Inicializador de Missão */}
         {!session && (
-          <div className="max-w-2xl mx-auto mt-8 bg-[#12151C] border border-white/[0.08] rounded-2xl p-7 shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-zinc-300">
-                <Sparkles className="w-5 h-5" />
-              </div>
+          <div className="max-w-4xl mx-auto space-y-6 py-2">
+            {/* 1. Header do Cockpit do Ambiente */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/[0.08]">
               <div>
-                <h2 className="text-base font-medium text-zinc-100">Iniciar Novo Objetivo do Agente</h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  O Charlie planeja a sequência em grafo (DAG), executa ferramentas locais com autorização e comprova o resultado com o Verifier.
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-semibold text-zinc-100 tracking-tight">
+                    Cockpit do Agente Autônomo
+                  </h1>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Ambiente Local Ativo
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Execução autônoma supervisionada no sistema operacional local com grafo de tarefas (DAG) e verificação multi-modal.
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+                <span className="px-2 py-1 rounded bg-[#12151C] border border-white/[0.08]">
+                  Windows x64
+                </span>
+                <span className="px-2 py-1 rounded bg-[#12151C] border border-white/[0.08]">
+                  Zero-Trust
+                </span>
               </div>
             </div>
 
-            <form onSubmit={handleStartGoal} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                  Objetivo ou Instrução de Execução
-                </label>
-                <textarea
-                  value={goalInput}
-                  onChange={(e) => setGoalInput(e.target.value)}
-                  placeholder="Ex: Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo..."
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 bg-[#0C0D12] border border-white/[0.08] rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition resize-none font-normal"
-                />
+            {/* 2. Grid de Diagnóstico do Ambiente do Computador (3 Cards #12151C) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {/* Card 1: Workspace & Disco */}
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500 text-xs flex items-center gap-1.5 font-medium">
+                    <Folder className="w-3.5 h-3.5 text-zinc-400" />
+                    Espaço de Trabalho
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono">Leitura & Escrita</span>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-zinc-200">assistente</div>
+                  <div className="text-[10px] text-zinc-500 font-mono truncate mt-0.5" title="c:\Users\lucas\OneDrive\Documentos\assistente">
+                    c:\Users\lucas\OneDrive\Documentos\assistente
+                  </div>
+                </div>
+                <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-zinc-400 flex items-center justify-between font-mono">
+                  <span>Acesso ao Disco Local:</span>
+                  <span className="text-emerald-400">Habilitado</span>
+                </div>
               </div>
 
-              <div className="flex gap-4">
-                <div className="flex-1">
+              {/* Card 2: Ferramentas do SO */}
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500 text-xs flex items-center gap-1.5 font-medium">
+                    <Terminal className="w-3.5 h-3.5 text-zinc-400" />
+                    Drivers de Execução
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Win32 Native</span>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-zinc-200">PowerShell & Shell Local</div>
+                  <div className="text-[10px] text-zinc-500 font-mono truncate mt-0.5">
+                    Arquivos, Pastas, Processos, Janelas
+                  </div>
+                </div>
+                <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-zinc-400 flex items-center justify-between font-mono">
+                  <span>Ferramentas Prontas:</span>
+                  <span className="text-zinc-200">9 Ferramentas</span>
+                </div>
+              </div>
+
+              {/* Card 3: Verifier & Sandbox */}
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500 text-xs flex items-center gap-1.5 font-medium">
+                    <Shield className="w-3.5 h-3.5 text-zinc-400" />
+                    Motor de Verificação
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-mono">Zero-Trust</span>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-zinc-200">Auditoria & Evidências</div>
+                  <div className="text-[10px] text-zinc-500 font-mono truncate mt-0.5">
+                    Inspeção Multi-Modal pós-tarefa
+                  </div>
+                </div>
+                <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-zinc-400 flex items-center justify-between font-mono">
+                  <span>Permissões Pendentes:</span>
+                  <span className={pendingPermissions.length > 0 ? "text-amber-400 font-bold" : "text-zinc-400"}>
+                    {pendingPermissions.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Card Principal de Início de Missão */}
+            <div className="bg-[#12151C] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/[0.04] border border-white/[0.08] rounded-xl text-zinc-200">
+                  <Sparkles className="w-4 h-4 text-zinc-300" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-100">Definir Novo Objetivo do Agente</h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    O Charlie analisará o objetivo, construirá um grafo de tarefas e executará ações no seu computador com validação passo a passo.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleStartGoal} className="space-y-4">
+                <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                    Projeto / Contexto
+                    Instrução ou Objetivo de Execução
                   </label>
-                  <input
-                    type="text"
-                    value={projectInput}
-                    onChange={(e) => setProjectInput(e.target.value)}
-                    placeholder="Charlie"
-                    className="w-full px-3 py-2 bg-[#0C0D12] border border-white/[0.08] rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition"
+                  <textarea
+                    value={goalInput}
+                    onChange={(e) => setGoalInput(e.target.value)}
+                    placeholder="Descreva o que o agente deve fazer (ex: Criar pasta Teste no Desktop e criar notas.txt com Olá Mundo...)"
+                    rows={3}
+                    className="w-full px-3.5 py-2.5 bg-[#0C0D12] border border-white/[0.08] rounded-xl text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition resize-none font-mono"
                   />
                 </div>
-              </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400">
-                  <span className="text-zinc-500">Sugestões:</span>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                      Projeto / Contexto de Execução
+                    </label>
+                    <input
+                      type="text"
+                      value={projectInput}
+                      onChange={(e) => setProjectInput(e.target.value)}
+                      placeholder="Charlie"
+                      className="w-full px-3 py-2 bg-[#0C0D12] border border-white/[0.08] rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Sugestões Práticas de Ações no Ambiente */}
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400">
+                    <span className="text-zinc-500">Sugestões de teste:</span>
+                    <button
+                      type="button"
+                      onClick={() => setGoalInput("Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo")}
+                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
+                    >
+                      📁 Criar pasta & arquivo
+                    </button>
+                    <span>•</span>
+                    <button
+                      type="button"
+                      onClick={() => setGoalInput("Inspecionar processos ativos do Windows e uso de recursos de CPU")}
+                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
+                    >
+                      ⚡ Inspecionar processos
+                    </button>
+                    <span>•</span>
+                    <button
+                      type="button"
+                      onClick={() => setGoalInput("Executar verificação de status do Git no repositório")}
+                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
+                    >
+                      💻 Verificar Git
+                    </button>
+                  </div>
+
                   <button
-                    type="button"
-                    onClick={() => setGoalInput("Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo")}
-                    className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
+                    type="submit"
+                    disabled={!goalInput.trim()}
+                    className="px-4 py-2 rounded-lg font-medium text-xs bg-zinc-100 hover:bg-white disabled:opacity-40 disabled:hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
                   >
-                    📁 Criar pasta & arquivo
+                    <Play className="w-3.5 h-3.5 fill-current" /> Iniciar Missão
                   </button>
-                  <span>•</span>
+                </div>
+              </form>
+            </div>
+
+            {/* 4. Missões Recentes do Histórico (se houver) */}
+            {history.length > 0 && (
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider font-mono">
+                    Missões Anteriores Executadas no Ambiente
+                  </h3>
                   <button
                     type="button"
-                    onClick={() => setGoalInput("Inspecionar processos ativos do Windows e uso de recursos")}
-                    className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
+                    onClick={() => setActiveTab("history")}
+                    className="text-xs text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1 cursor-pointer"
                   >
-                    ⚡ Monitorar processos
-                  </button>
-                  <span>•</span>
-                  <button
-                    type="button"
-                    onClick={() => setGoalInput("Executar verificação de status do Git no repositório")}
-                    className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
-                  >
-                    💻 Verificar Git
+                    Ver todas ({history.length}) <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={!goalInput.trim()}
-                  className="px-4 py-2 rounded-lg font-medium text-xs bg-zinc-100 hover:bg-white disabled:opacity-40 disabled:hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
-                >
-                  <Play className="w-3.5 h-3.5" /> Iniciar Missão
-                </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {history.slice(0, 4).map((h) => (
+                    <div
+                      key={h.id}
+                      onClick={() => loadSession(h)}
+                      className="bg-[#0C0D12] border border-white/[0.06] hover:border-white/[0.12] rounded-lg p-3 transition cursor-pointer flex items-center justify-between group"
+                    >
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="text-xs font-medium text-zinc-200 truncate group-hover:text-white transition">
+                          {h.goal}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 font-mono mt-1 flex items-center gap-2">
+                          <span>{h.progress}% concluído</span>
+                          <span>•</span>
+                          <span>{h.tasks ? h.tasks.length : 0} tarefas</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        {h.status === "completed" ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        ) : h.status === "failed" ? (
+                          <AlertCircle className="w-4 h-4 text-rose-400" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-zinc-500" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </form>
+            )}
           </div>
         )}
 
