@@ -22,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             className={cn(
-              'w-full bg-[#111317] border border-white/[0.08] rounded-lg px-3.5 py-2 text-sm text-[#F3F4F6] placeholder-[#6B7280]',
+              'w-full bg-[#111317] border border-white/[0.08] rounded-lg px-3.5 py-2 text-base sm:text-sm text-[#F3F4F6] placeholder-[#6B7280]',
               'focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40 transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               leftIcon && 'pl-9',

@@ -7,6 +7,7 @@ import { AuthGatekeeper } from './components/auth/AuthGatekeeper';
 import { AuditDashboard } from './components/admin/AuditDashboard';
 import { useChat } from './hooks/useChat';
 import { useAuth } from './hooks/useAuth';
+import { useMobileViewport } from './hooks/useMobileViewport';
 import { FileAttachment } from './types/chat';
 import { checkIsAdmin } from './utils/admin';
 
@@ -30,6 +31,7 @@ function isSecretRoute(): boolean {
 }
 
 export const App: React.FC = () => {
+  const { isKeyboardOpen } = useMobileViewport();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'audit'>(() =>
     isSecretRoute() ? 'audit' : 'chat'
@@ -147,7 +149,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen h-[100dvh] w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans">
+    <div className="flex h-full h-[var(--app-height,100dvh)] w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans">
       {/* Sidebar Navigation Drawer */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -175,7 +177,7 @@ export const App: React.FC = () => {
       {currentView === 'audit' && isAdmin ? (
         <AuditDashboard onBackToChat={() => navigateTo('chat')} />
       ) : (
-        <main className="flex-1 flex flex-col min-w-0 h-full relative bg-[#0A0B0E]">
+        <main className="flex-1 flex flex-col min-w-0 h-full relative bg-[#0A0B0E] overflow-hidden">
           {/* Top Header */}
           <Header
             activeThread={activeThread}
@@ -214,6 +216,7 @@ export const App: React.FC = () => {
               isStreaming={isStreaming}
               onStop={stopStreaming}
               disabled={isLoadingMessages}
+              isKeyboardOpen={isKeyboardOpen}
             />
           </div>
         </main>

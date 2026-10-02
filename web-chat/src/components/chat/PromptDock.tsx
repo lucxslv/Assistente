@@ -3,6 +3,7 @@ import { ArrowRight, Paperclip, Square, Image as ImageIcon } from 'lucide-react'
 import { FileAttachment } from '../../types/chat';
 import { FilePreview } from './FilePreview';
 import { generateUUID } from '../../utils/formatters';
+import { cn } from '../../utils/cn';
 
 interface PromptDockProps {
   value: string;
@@ -11,6 +12,7 @@ interface PromptDockProps {
   isStreaming: boolean;
   onStop: () => void;
   disabled?: boolean;
+  isKeyboardOpen?: boolean;
 }
 
 export const PromptDock: React.FC<PromptDockProps> = ({
@@ -20,6 +22,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   isStreaming,
   onStop,
   disabled = false,
+  isKeyboardOpen = false,
 }) => {
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -146,8 +149,22 @@ export const PromptDock: React.FC<PromptDockProps> = ({
 
   const canSend = value.trim().length > 0 || attachments.length > 0;
 
+  const handleFocus = () => {
+    // Dá tempo para o teclado virtual do Android/iOS abrir e reposiciona suavemente
+    setTimeout(() => {
+      textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 250);
+  };
+
   return (
-    <div className="w-full max-w-4xl mx-auto px-2.5 sm:px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1">
+    <div
+      className={cn(
+        'w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-1 flex-shrink-0 transition-all duration-150',
+        isKeyboardOpen
+          ? 'pb-2 sm:pb-3'
+          : 'pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] sm:pb-3'
+      )}
+    >
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -193,9 +210,10 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onFocus={handleFocus}
             disabled={disabled}
             placeholder={isStreaming ? 'Charlie está respondendo...' : 'Envie uma mensagem para o Charlie...'}
-            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-2.5 bg-transparent text-[#F3F4F6] placeholder-[#6B7280] text-sm resize-none focus:outline-none leading-relaxed font-sans"
+            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-2.5 bg-transparent text-[#F3F4F6] placeholder-[#6B7280] text-base sm:text-sm resize-none focus:outline-none leading-relaxed font-sans"
           />
 
           {/* Action Button: Send Arrow [ → ] or Stop Square [ ■ ] */}
