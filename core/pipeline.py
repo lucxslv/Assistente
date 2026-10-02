@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import os
+import platform
 
 from brain.context.manager import ContextManager
 from brain.planner.planner import IntentPlanner, IntentCategory
@@ -50,6 +52,7 @@ class AssistantPipeline:
         self.tools = ToolRegistry()
         self.memory = ConversationMemory(max_messages=config.max_history_messages)
         self.llm = self._get_llm_provider()
+        self.last_model_used: str = config.gemini_model
 
     def _get_llm_provider(self) -> BaseLLMProvider:
         provider = config.llm_provider.lower()
@@ -140,13 +143,27 @@ class AssistantPipeline:
 
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
         route_decision = self.router.route(user_text or "continuar análise do sistema")
+        self.last_model_used = route_decision.model_name
         logger.info(f"Rota selecionada: {route_decision.mode.value} -> {route_decision.model_name} ({route_decision.reason})")
 
         # Etapa 4: Contexto Inteligente & Presença
         asyncio.create_task(self.context_manager.refresh_weather_if_needed())
         context_str = self.context_manager.build_context(active_thread_id=thread_id, user_name=uname)
 
-        # Etapa 5: Recuperador de Memória Semântica (RAG) estritamente isolado pelo user_id
+        # Etapa 5: Recuperador de Memória Contínua (UserMemory / UserPreference) com isolamento estrito
+        user_facts = []
+        user_prefs = {}
+        try:
+            from api.db import get_or_init_db_pool
+            from api.services.chat_persistence import get_user_memory_facts, get_user_preferences_dict
+            pool = await get_or_init_db_pool()
+            if pool and uid:
+                user_facts = await get_user_memory_facts(pool, uid, limit=15)
+                user_prefs = await get_user_preferences_dict(pool, uid)
+        except Exception as mem_err:
+            logger.warning(f"Aviso ao carregar memórias ativas para o prompt: {mem_err}")
+
+        # Recuperador de Memória Semântica (RAG)
         memory_str = self.retriever.get_summary_context(query=user_text or "sistema", user_id=uid)
 
         # Etapa 6: Selecionador de Ferramentas e Configuração do Prompt Adaptativo
@@ -158,6 +175,8 @@ class AssistantPipeline:
             user_id=uid,
             thread_id=thread_id,
             user_text=user_text,
+            user_facts=user_facts,
+            user_preferences=user_prefs,
         )
 
         active_tools = self.tools.get_schemas()
@@ -297,7 +316,7 @@ class AssistantPipeline:
         except Exception as e:
             logger.debug("Falha ao disparar memory_extractor em background: %s", e)
 
-        yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id})
+        yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id, "model": self.last_model_used})
 
     async def run_pipeline(
         self,

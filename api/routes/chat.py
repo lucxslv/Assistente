@@ -7,7 +7,7 @@ import logging
 import platform
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -36,47 +36,29 @@ def get_pipeline() -> AssistantPipeline:
 class ChatRequest(BaseModel):
     message: str = ""
     thread_id: Optional[str] = None
+    session_id: Optional[str] = None
     skip_tts: bool = True
     tool_results: Optional[list[dict]] = None
     history: Optional[list[dict]] = None
 
 
 async def _load_thread_history(thread_id: str, limit: int = 30) -> list[dict]:
-    """Carrega o histórico real de mensagens da conversa (Thread) persistido no Supabase/PostgreSQL."""
+    """Carrega o histórico real de mensagens da conversa (chat_messages com fallback para Step)."""
     pool = await get_or_init_db_pool()
     if not pool or not thread_id:
         return []
-    try:
-        t_uuid = uuid.UUID(thread_id)
-    except ValueError:
-        return []
-    try:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch("""
-                SELECT type, output, "createdAt"
-                FROM "Step"
-                WHERE "threadId" = $1 AND type IN ('user_message', 'assistant_message')
-                ORDER BY "createdAt" ASC
-            """, t_uuid)
-            history = []
-            for r in rows:
-                role = "user" if r["type"] == "user_message" else "assistant"
-                content = r["output"] or ""
-                if content.strip():
-                    history.append({"role": role, "content": content})
-            return history[-limit:]
-    except Exception as e:
-        logger.warning(f"Erro ao carregar histórico persistido da thread {thread_id}: {e}")
-        return []
+    from api.services.chat_persistence import load_chat_history
+    return await load_chat_history(pool, thread_id, limit=limit)
 
 
-
-async def _prepare_thread_and_store_user_message(
+async def _prepare_session_and_store_user_message(
     message: str,
     thread_id: Optional[str] = None,
+    session_id: Optional[str] = None,
     user: Optional[dict] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> str:
-    """Garante a existência da thread vinculada ao usuário autenticado e persiste a mensagem no Supabase."""
+    """Garante a existência da sessão em chat_sessions e persiste a mensagem do usuário (role: user)."""
     if not user or not user.get("id"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -84,78 +66,86 @@ async def _prepare_thread_and_store_user_message(
         )
 
     pool = await get_or_init_db_pool()
-    now = datetime.datetime.now(datetime.timezone.utc)
-    u_uuid = uuid.UUID(str(user["id"]))
-    u_ident = user.get("email")
-
-    if not thread_id:
-        thread_id = str(uuid.uuid4())
+    sid = thread_id or session_id or str(uuid.uuid4())
     try:
-        t_uuid = uuid.UUID(thread_id)
-    except ValueError:
-        thread_id = str(uuid.uuid4())
-        t_uuid = uuid.UUID(thread_id)
+        uuid.UUID(sid)
+    except (ValueError, TypeError):
+        sid = str(uuid.uuid4())
 
-    state.active_thread_id = thread_id
+    state.active_thread_id = sid
+    u_id_str = str(user["id"])
+    u_email = user.get("email")
 
     if pool:
-        async with pool.acquire() as conn:
-            existing = await conn.fetchrow('SELECT id, name, "userId" FROM "Thread" WHERE id = $1', t_uuid)
-            title = (message[:35] + ("..." if len(message) > 35 else "")) if (message and message.strip()) else "Ação do Agente"
+        from api.services.chat_persistence import ensure_session_record, save_chat_message_record
+        # Garante a existência imediata da sessão para integridade e FK
+        await ensure_session_record(pool, session_id=sid, user_id=u_id_str, user_email=u_email, prompt=message)
 
-            if not existing:
-                await conn.execute("""
-                    INSERT INTO "Thread" (id, name, "createdAt", "updatedAt", "userId", "userIdentifier", metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                """, t_uuid, title, now, now, u_uuid, u_ident, json.dumps({}))
-            else:
-                # Valida que o usuário possui acesso à conversa existente
-                if existing["userId"] is not None and existing["userId"] != u_uuid:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Acesso negado: esta conversa pertence a outra conta.",
-                    )
-                elif existing["userId"] is None:
-                    # Associa thread legada ao usuário atual
-                    await conn.execute("""
-                        UPDATE "Thread" SET "userId" = $1, "userIdentifier" = $2 WHERE id = $3
-                    """, u_uuid, u_ident, t_uuid)
+        # Persistência assíncrona não-bloqueante da mensagem do usuário
+        if message and message.strip():
+            if background_tasks:
+                background_tasks.add_task(
+                    save_chat_message_record,
+                    pool=pool,
+                    session_id=sid,
+                    user_id=u_id_str,
+                    role="user",
+                    content=message,
+                )
+            asyncio.create_task(
+                save_chat_message_record(
+                    pool=pool,
+                    session_id=sid,
+                    user_id=u_id_str,
+                    role="user",
+                    content=message,
+                )
+            )
 
-                if message and message.strip() and existing["name"] in ("Novo Chat", "Nova conversa", "Conversa sem título", None, ""):
-                    await conn.execute("""
-                        UPDATE "Thread" SET name = $1, "updatedAt" = $2 WHERE id = $3
-                    """, title, now, t_uuid)
-                else:
-                    await conn.execute("""
-                        UPDATE "Thread" SET "updatedAt" = $1 WHERE id = $2
-                    """, now, t_uuid)
-
-            # Salva mensagem do usuário vinculada à conversa se houver texto
-            if message and message.strip():
-                user_msg_id = str(uuid.uuid4())
-                await conn.execute("""
-                    INSERT INTO "Step" (id, "threadId", name, type, output, "createdAt")
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                """, uuid.UUID(user_msg_id), t_uuid, "Usuário", "user_message", message, now)
-
-    return thread_id
+    return sid
 
 
-async def _store_assistant_message(thread_id: str, reply: str):
-    """Persiste a resposta final do Charlie no Supabase."""
+async def _store_assistant_message(
+    thread_id: str,
+    reply: str,
+    user_id: Optional[str] = None,
+    model: Optional[str] = None,
+    tokens: Optional[int] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+):
+    """Persiste a resposta final do Charlie (role: assistant) em chat_messages com modelo e tokens."""
+    if not reply or not reply.strip():
+        return
     pool = await get_or_init_db_pool()
-    if pool and reply and reply.strip():
-        try:
-            t_uuid = uuid.UUID(thread_id)
-            asst_msg_id = str(uuid.uuid4())
-            asst_now = datetime.datetime.now(datetime.timezone.utc)
-            async with pool.acquire() as conn:
-                await conn.execute("""
-                    INSERT INTO "Step" (id, "threadId", name, type, output, "createdAt")
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                """, uuid.UUID(asst_msg_id), t_uuid, "Charlie", "assistant_message", reply, asst_now)
-        except Exception as e:
-            logger.error("Erro ao salvar mensagem da assistente no Supabase: %s", e)
+    if not pool:
+        return
+
+    from api.services.chat_persistence import save_chat_message_record
+    u_id_str = str(user_id) if user_id else "default"
+    m_name = model or "gemini-3.1-flash-lite"
+
+    if background_tasks:
+        background_tasks.add_task(
+            save_chat_message_record,
+            pool=pool,
+            session_id=thread_id,
+            user_id=u_id_str,
+            role="assistant",
+            content=reply,
+            model=m_name,
+            tokens=tokens,
+        )
+    asyncio.create_task(
+        save_chat_message_record(
+            pool=pool,
+            session_id=thread_id,
+            user_id=u_id_str,
+            role="assistant",
+            content=reply,
+            model=m_name,
+            tokens=tokens,
+        )
+    )
 
 
 def _extract_ip(req: Request) -> str:
@@ -169,10 +159,21 @@ def _extract_ip(req: Request) -> str:
 # ================= Endpoints =================
 
 @router.post("")
-async def chat_post(req: ChatRequest, request: Request, user: dict = Depends(get_current_user)):
-    """Processa uma mensagem de texto de forma síncrona (espera resposta completa)."""
+async def chat_post(
+    req: ChatRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    """Processa uma mensagem de texto de forma síncrona com persistência via BackgroundTasks."""
     pipeline = get_pipeline()
-    thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
+    thread_id = await _prepare_session_and_store_user_message(
+        req.message,
+        thread_id=req.thread_id,
+        session_id=req.session_id,
+        user=user,
+        background_tasks=background_tasks,
+    )
 
     thread_history = await _load_thread_history(thread_id)
     if not thread_history and req.history:
@@ -195,20 +196,31 @@ async def chat_post(req: ChatRequest, request: Request, user: dict = Depends(get
     finally:
         state.set_status(CharlieStatus.IDLE)
 
-    await _store_assistant_message(thread_id, reply)
+    model_used = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
+    from api.services.audit_service import estimate_tokens
+    tokens_count = estimate_tokens(reply)
 
-    # Gravação assíncrona de telemetria e custo em USD (não-bloqueante)
+    await _store_assistant_message(
+        thread_id=thread_id,
+        reply=reply,
+        user_id=str(user["id"]),
+        model=model_used,
+        tokens=tokens_count,
+        background_tasks=background_tasks,
+    )
+
+    # Gravação assíncrona de telemetria e custo em USD
     try:
         from api.services.audit_service import record_audit_log
-        asyncio.create_task(
-            record_audit_log(
-                user_id=str(user["id"]),
-                user_email=user.get("email") or "usuario@teste.com",
-                user_prompt=req.message,
-                model_response=reply,
-                ip_address=_extract_ip(request),
-                session_id=thread_id,
-            )
+        background_tasks.add_task(
+            record_audit_log,
+            user_id=str(user["id"]),
+            user_email=user.get("email") or "usuario@teste.com",
+            user_prompt=req.message,
+            model_response=reply,
+            ip_address=_extract_ip(request),
+            session_id=thread_id,
+            model_name=model_used,
         )
     except Exception as audit_err:
         logger.warning(f"Aviso ao registrar audit log: {audit_err}")
@@ -216,15 +228,27 @@ async def chat_post(req: ChatRequest, request: Request, user: dict = Depends(get
     return {
         "reply": reply,
         "thread_id": thread_id,
+        "session_id": thread_id,
         "status": "success",
     }
 
 
 @router.post("/stream")
-async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depends(get_current_user)):
-    """Endpoint de streaming em tempo real via Server-Sent Events (SSE)."""
+async def chat_stream_sse(
+    req: ChatRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    """Endpoint de streaming em tempo real via Server-Sent Events (SSE) com persistência em BackgroundTasks."""
     pipeline = get_pipeline()
-    thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
+    thread_id = await _prepare_session_and_store_user_message(
+        req.message,
+        thread_id=req.thread_id,
+        session_id=req.session_id,
+        user=user,
+        background_tasks=background_tasks,
+    )
     client_ip = _extract_ip(request)
 
     thread_history = await _load_thread_history(thread_id)
@@ -233,6 +257,7 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
 
     async def event_generator():
         final_reply = ""
+        final_model = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
         state.set_status(CharlieStatus.THINKING)
 
         try:
@@ -248,6 +273,8 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
                     final_reply += ev.data.get("token", "")
                 elif ev.type == "done":
                     final_reply = ev.data.get("reply", final_reply)
+                    if ev.data.get("model"):
+                        final_model = ev.data.get("model")
 
                 yield ev.to_sse()
         except Exception as e:
@@ -257,7 +284,17 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
         finally:
             state.set_status(CharlieStatus.IDLE)
             if final_reply and final_reply.strip():
-                await _store_assistant_message(thread_id, final_reply)
+                from api.services.audit_service import estimate_tokens
+                tokens_count = estimate_tokens(final_reply)
+
+                await _store_assistant_message(
+                    thread_id=thread_id,
+                    reply=final_reply,
+                    user_id=str(user["id"]),
+                    model=final_model,
+                    tokens=tokens_count,
+                    background_tasks=background_tasks,
+                )
                 try:
                     from api.services.audit_service import record_audit_log
                     asyncio.create_task(
@@ -268,6 +305,7 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
                             model_response=final_reply,
                             ip_address=client_ip,
                             session_id=thread_id,
+                            model_name=final_model,
                         )
                     )
                 except Exception as audit_err:
@@ -281,6 +319,7 @@ async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depen
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+        background=background_tasks,
     )
 
 
@@ -342,19 +381,22 @@ async def chat_ws(websocket: WebSocket):
                     await websocket.send_json({"type": "error", "data": {"error": "Autenticação obrigatória para enviar mensagens."}})
                     continue
                 text = data.get("message", "")
-                thread_id_in = data.get("thread_id")
-                thread_id = await _prepare_thread_and_store_user_message(text, thread_id_in, user=ws_user)
+                thread_id_in = data.get("thread_id") or data.get("session_id")
+                thread_id = await _prepare_session_and_store_user_message(text, thread_id=thread_id_in, user=ws_user)
                 presence_manager.register_or_heartbeat(client_id=client_id, active_thread_id=thread_id)
 
                 final_reply = ""
+                final_model = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
                 state.set_status(CharlieStatus.THINKING)
 
                 try:
-                    async for ev in pipeline.run_pipeline_stream(text, thread_id=thread_id):
+                    async for ev in pipeline.run_pipeline_stream(text, thread_id=thread_id, user_id=str(ws_user["id"])):
                         if ev.type == "token":
                             final_reply += ev.data.get("token", "")
                         elif ev.type == "done":
                             final_reply = ev.data.get("reply", final_reply)
+                            if ev.data.get("model"):
+                                final_model = ev.data.get("model")
 
                         # Envia cada evento de stream para o cliente conectado
                         await websocket.send_json(ev.to_dict())
@@ -364,7 +406,15 @@ async def chat_ws(websocket: WebSocket):
                     await websocket.send_json({"type": "error", "data": {"error": str(e)}})
                 finally:
                     state.set_status(CharlieStatus.IDLE)
-                    await _store_assistant_message(thread_id, final_reply)
+                    if final_reply and final_reply.strip():
+                        from api.services.audit_service import estimate_tokens
+                        await _store_assistant_message(
+                            thread_id=thread_id,
+                            reply=final_reply,
+                            user_id=str(ws_user["id"]),
+                            model=final_model,
+                            tokens=estimate_tokens(final_reply),
+                        )
     except WebSocketDisconnect:
         logger.info(f"Cliente WebSocket {client_id} desconectado.")
     finally:
