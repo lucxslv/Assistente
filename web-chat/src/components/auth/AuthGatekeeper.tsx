@@ -68,15 +68,15 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
   const activeError = localValidation || error;
 
   return (
-    <div className="h-screen w-screen bg-[#0A0B0E] text-[#F3F4F6] flex items-center justify-center p-4 select-none relative overflow-hidden font-sans">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-[#0A0B0E] text-[#F3F4F6] flex items-center justify-center p-3 sm:p-4 select-none relative overflow-hidden font-sans">
       {/* Subtle background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/[0.04] rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Gatekeeper Card */}
-      <div className="w-full max-w-md bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl p-6 sm:p-8 relative z-10 flex flex-col backdrop-blur-xl">
+      <div className="w-full max-w-md bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl p-5 sm:p-8 relative z-10 flex flex-col backdrop-blur-xl">
         {/* Branding & Status Badge */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-[#161922] border border-white/[0.1] flex items-center justify-center p-3 shadow-[0_0_24px_rgba(99,102,241,0.2)] mb-4">
+        <div className="flex flex-col items-center text-center mb-5 sm:mb-6">
+          <div className="w-14 h-14 rounded-2xl bg-[#161922] border border-white/[0.1] flex items-center justify-center p-3 shadow-[0_0_24px_rgba(99,102,241,0.2)] mb-3 sm:mb-4">
             <img
               src="/charlie-logo.svg"
               alt="Charlie"
@@ -86,7 +86,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
 
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-mono font-medium text-emerald-400 mb-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>SISTEMA PRONTO • CONFIGURAÇÃO ATIVA</span>
+            <span>AMBIENTE SEGURO • ONLINE</span>
           </div>
 
           <h1 className="text-xl font-bold tracking-tight text-zinc-100">
@@ -94,8 +94,8 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
           </h1>
           <p className="text-xs text-zinc-400 mt-1 max-w-xs">
             {tab === 'login'
-              ? 'Autenticação obrigatória. Conecte-se para acessar suas conversas e ferramentas.'
-              : 'Cadastre-se na nuvem para ter seu assistente pessoal com memória duradoura.'}
+              ? 'Autenticação obrigatória. Conecte-se para conversar com o assistente.'
+              : 'Cadastre-se para acessar o assistente inteligente na nuvem.'}
           </p>
         </div>
 
@@ -220,7 +220,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-4 py-2.5 px-4 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition shadow-md disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full mt-4 min-h-[44px] py-2.5 px-4 rounded-xl bg-zinc-100 hover:bg-white active:bg-zinc-200 text-zinc-950 font-semibold text-xs transition shadow-md disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer"
           >
             {isLoading ? (
               <>

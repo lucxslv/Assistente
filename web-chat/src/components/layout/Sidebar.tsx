@@ -3,7 +3,6 @@ import {
   Plus,
   Search,
   MessageSquare,
-  Settings,
   Pencil,
   Trash2,
   X,
@@ -28,7 +27,6 @@ interface SidebarProps {
   onNewThread: () => void;
   onRenameThread: (threadId: string, newName: string) => void;
   onDeleteThread: (threadId: string) => void;
-  onOpenSettings: () => void;
   onLogout: () => void;
 }
 
@@ -43,7 +41,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewThread,
   onRenameThread,
   onDeleteThread,
-  onOpenSettings,
   onLogout,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Backdrop Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -124,12 +121,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Panel */}
       <aside
-        className={`fixed lg:static top-0 bottom-0 left-0 z-40 w-72 bg-[#0E0F12] border-r border-white/[0.06] flex flex-col transition-transform duration-200 ease-in-out select-none ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        className={`fixed md:static top-0 bottom-0 left-0 z-40 w-72 md:w-64 lg:w-72 bg-[#0E0F12] border-r border-white/[0.06] flex flex-col transition-transform duration-200 ease-in-out select-none ${
+          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
         {/* Top Header: Brand & Status & Close */}
-        <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="p-3.5 sm:p-4 border-b border-white/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center text-primary shadow-glow-sm">
               <Sparkles className="w-4 h-4" />
@@ -158,12 +155,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* Close button on mobile */}
+          {/* Close button on mobile (< 768px) */}
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.06] lg:hidden cursor-pointer"
+            className="min-h-[44px] min-w-[44px] rounded-xl text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] md:hidden cursor-pointer flex items-center justify-center -mr-1"
+            title="Fechar menu lateral"
+            aria-label="Fechar menu lateral"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -172,9 +171,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={() => {
               onNewThread();
-              if (window.innerWidth < 1024) onClose();
+              if (window.innerWidth < 768) onClose();
             }}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#151821] hover:bg-[#1C202B] text-[#F3F4F6] border border-white/[0.08] hover:border-white/[0.14] transition-all duration-150 shadow-sm group cursor-pointer"
+            className="w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#151821] hover:bg-[#1C202B] active:bg-[#202533] text-[#F3F4F6] border border-white/[0.08] hover:border-white/[0.14] transition-all duration-150 shadow-sm group cursor-pointer"
           >
             <div className="flex items-center gap-2.5">
               <div className="w-6 h-6 rounded-lg bg-primary-soft text-primary flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -182,7 +181,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <span className="text-xs font-semibold">Nova Conversa</span>
             </div>
-            <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-white/[0.08] text-[10px] font-mono text-[#6B7280] group-hover:text-[#9CA3AF]">
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-black/40 border border-white/[0.08] text-[10px] font-mono text-[#6B7280] group-hover:text-[#9CA3AF]">
               N
             </kbd>
           </button>
@@ -233,7 +232,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onClick={() => {
                         if (!isEditing && !isDeleting) {
                           onSelectThread(thread.id);
-                          if (window.innerWidth < 1024) onClose();
+                          if (window.innerWidth < 768) onClose();
                         }
                       }}
                       className={`group relative flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all duration-150 cursor-pointer ${
@@ -333,9 +332,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Footer: Logged User & Settings Trigger */}
-        <div className="p-3 border-t border-white/[0.06] bg-[#0A0B0E]/60 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 p-1.5 -ml-1 rounded-lg">
+        {/* Footer: Logged User & Logout Action */}
+        <div className="p-3 border-t border-white/[0.06] bg-[#0A0B0E]/80 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 p-1 rounded-lg">
             <div className="w-8 h-8 rounded-full bg-[#181B22] border border-white/[0.08] flex items-center justify-center text-primary text-xs font-semibold uppercase flex-shrink-0">
               {user?.name ? user.name.slice(0, 2) : <UserIcon className="w-3.5 h-3.5 text-[#9CA3AF]" />}
             </div>
@@ -349,22 +348,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onOpenSettings}
-              className="p-2 text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
-              title="Configurações"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onLogout}
-              className="p-2 text-[#9CA3AF] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-              title="Sair da conta"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={onLogout}
+            className="min-h-[44px] min-w-[44px] text-[#9CA3AF] hover:text-red-400 active:bg-red-500/10 rounded-xl transition-colors cursor-pointer flex items-center justify-center flex-shrink-0"
+            title="Sair da conta"
+            aria-label="Sair da conta"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
     </>

@@ -25,7 +25,6 @@ interface HeaderProps {
   onRenameThread: (newName: string) => void;
   onDeleteThread: () => void;
   onClearChat: () => void;
-  onOpenSettings: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,7 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
   onRenameThread,
   onDeleteThread,
   onClearChat,
-  onOpenSettings,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -107,95 +105,113 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-14 border-b border-white/[0.06] bg-[#0A0B0E]/90 backdrop-blur-md px-4 flex items-center justify-between z-10 select-none">
+    <header className="h-14 border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between z-10 select-none flex-shrink-0">
       {/* Left: Sidebar Toggle & Title */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
           onClick={onToggleSidebar}
-          className="p-2 -ml-1 text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
+          className="min-h-[44px] min-w-[44px] -ml-1 sm:ml-0 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
           title="Alternar barra lateral"
+          aria-label="Abrir menu lateral"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        {isEditingTitle ? (
-          <div className="flex items-center gap-1.5 max-w-xs sm:max-w-md w-full">
-            <input
-              ref={inputRef}
-              type="text"
-              value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveTitle();
-                if (e.key === 'Escape') setIsEditingTitle(false);
-              }}
-              className="bg-[#181B22] border border-primary/50 text-[#F3F4F6] text-sm px-2.5 py-1 rounded-md focus:outline-none w-full"
-            />
-            <button
-              onClick={handleSaveTitle}
-              className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setIsEditingTitle(false)}
-              className="p-1 rounded text-[#9CA3AF] hover:bg-white/[0.06] cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 min-w-0">
+        {/* Mobile Header: App Brand + Subtle Status Indicator */}
+        <div className="flex md:hidden items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold tracking-tight text-[#F3F4F6]">Charlie</span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              connectionStatus === 'online'
+                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                : 'bg-red-400'
+            }`}
+            title={connectionStatus === 'online' ? 'Online' : 'Offline'}
+          />
+        </div>
+
+        {/* Desktop Header: Renameable Thread Title */}
+        <div className="hidden md:flex items-center gap-2 min-w-0 flex-1">
+          {isEditingTitle ? (
+            <div className="flex items-center gap-1.5 max-w-md w-full">
+              <input
+                ref={inputRef}
+                type="text"
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle();
+                  if (e.key === 'Escape') setIsEditingTitle(false);
+                }}
+                className="bg-[#181B22] border border-primary/50 text-[#F3F4F6] text-sm px-2.5 py-1 rounded-md focus:outline-none w-full"
+              />
+              <button
+                onClick={handleSaveTitle}
+                className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsEditingTitle(false)}
+                className="p-1 rounded text-[#9CA3AF] hover:bg-white/[0.06] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
             <h1
               onClick={() => setIsEditingTitle(true)}
-              className="text-sm font-semibold text-[#F3F4F6] truncate max-w-[200px] sm:max-w-md cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 group"
+              className="text-sm font-semibold text-[#F3F4F6] truncate max-w-md cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 group"
               title="Clique para renomear"
             >
               <span>{activeThread?.name || 'Nova Conversa'}</span>
               <Pencil className="w-3 h-3 text-[#6B7280] opacity-0 group-hover:opacity-100 transition-opacity" />
             </h1>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Right: Status Badges & Context Menu */}
-      <div className="flex items-center gap-2">
-        {/* Charlie Status */}
+      {/* Right: Actions */}
+      <div className="flex items-center gap-1 sm:gap-2">
+        {/* Charlie Status (Desktop) */}
         {charlieStatus === 'thinking' && (
-          <Badge variant="info" dot className="hidden sm:inline-flex">
+          <Badge variant="info" dot className="hidden md:inline-flex text-[10px]">
             Pensando
           </Badge>
         )}
         {charlieStatus === 'speaking' && (
-          <Badge variant="success" dot className="hidden sm:inline-flex">
+          <Badge variant="success" dot className="hidden md:inline-flex text-[10px]">
             Transmitindo
           </Badge>
         )}
 
-        {/* Server Connection Indicator */}
+        {/* Server Connection Indicator (Desktop) */}
         <Badge
           variant={connectionStatus === 'online' ? 'success' : 'danger'}
           dot
-          className="text-[10px]"
+          className="hidden md:inline-flex text-[10px]"
         >
           {connectionStatus === 'online' ? 'Online' : 'Offline'}
         </Badge>
 
-        {/* Action: New Chat Quick Button */}
+        {/* Action: + Nova Conversa (Touch-friendly & Visible on all screen sizes) */}
         <button
           onClick={onNewThread}
-          className="p-2 text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer hidden sm:flex"
+          className="min-h-[44px] min-w-[44px] px-2.5 sm:px-3 text-[#E5E7EB] hover:text-white bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/[0.08] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-xs font-medium"
           title="Nova Conversa [N]"
+          aria-label="Nova Conversa"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 text-primary" />
+          <span className="hidden sm:inline">Nova</span>
         </button>
 
         {/* Context Menu Dropdown */}
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="p-2 text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
-            title="Menu de contexto"
+            className="min-h-[44px] min-w-[44px] text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+            title="Mais opções"
+            aria-label="Mais opções"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
@@ -241,19 +257,6 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <RotateCcw className="w-3.5 h-3.5 text-[#9CA3AF]" />
                 <span>Limpar mensagens</span>
-              </button>
-
-              <div className="my-1 border-t border-white/[0.06]" />
-
-              <button
-                onClick={() => {
-                  onOpenSettings();
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-white/[0.06] text-left cursor-pointer"
-              >
-                <Sliders className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                <span>Configurações</span>
               </button>
 
               {activeThread && (

@@ -27,7 +27,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
 
   return (
     <div
-      className={`group w-full max-w-4xl mx-auto px-4 py-3 flex gap-3.5 transition-colors ${
+      className={`group w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex gap-2.5 sm:gap-3.5 transition-colors ${
         isUser ? 'justify-end' : 'justify-start'
       }`}
     >
@@ -40,7 +40,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
 
       {/* Message Body Container */}
       <div
-        className={`flex flex-col max-w-[85%] sm:max-w-[78%] ${
+        className={`flex flex-col max-w-[90%] sm:max-w-[78%] ${
           isUser ? 'items-end' : 'items-start'
         }`}
       >
@@ -55,7 +55,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
 
         {/* Content Box */}
         <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed transition-all ${
+          className={`rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-sm leading-relaxed transition-all ${
             isUser
               ? 'bg-[#181B22] text-[#F3F4F6] border border-white/[0.08] rounded-tr-sm'
               : 'bg-[#0E0F12] text-[#E5E7EB] border border-white/[0.06] rounded-tl-sm w-full shadow-sm'
@@ -118,22 +118,22 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
           )}
         </div>
 
-        {/* Action bar on hover */}
+        {/* Action bar (Always visible with subtle opacity on mobile, hover on desktop) */}
         {!message.isStreaming && message.content && (
-          <div className="flex items-center gap-1 mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 mt-1 px-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1 p-1 rounded text-[11px] text-[#6B7280] hover:text-[#D1D5DB] hover:bg-white/[0.04] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 p-1.5 sm:p-1 rounded-lg text-[11px] text-[#6B7280] hover:text-[#D1D5DB] active:text-white hover:bg-white/[0.04] transition-colors cursor-pointer"
               title="Copiar mensagem"
             >
               {copied ? (
                 <>
-                  <Check className="w-3 h-3 text-emerald-400" />
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
                   <span className="text-emerald-400 text-[10px]">Copiado</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-3 h-3" />
+                  <Copy className="w-3.5 h-3.5" />
                   <span className="text-[10px]">Copiar</span>
                 </>
               )}
