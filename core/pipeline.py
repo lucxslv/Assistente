@@ -90,7 +90,12 @@ class AssistantPipeline:
         import uuid
         from tools.registry import ToolScope
 
-        is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+        is_cloud = bool(
+            os.getenv("VERCEL")
+            or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+            or os.getenv("CHARLIE_RUNTIME_MODE") == "cloud"
+            or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
+        )
 
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var

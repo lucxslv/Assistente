@@ -2,6 +2,7 @@
 
 import logging
 import os
+import subprocess
 import ctypes
 from ctypes import cast, POINTER
 
@@ -71,17 +72,17 @@ def system_power_action(action: str) -> str:
         elif action == "sleep":
             # Coloca o computador para dormir / hibernar / suspender
             # Depende das configurações de energia do Windows do usuário
-            os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+            subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], check=False)
             return "O comando de suspensão foi enviado."
             
         elif action == "shutdown":
             # Desliga após 60 segundos por segurança, permitindo 'shutdown /a'
-            os.system("shutdown /s /t 60")
+            subprocess.run(["shutdown", "/s", "/t", "60"], check=False)
             return "Atenção: O computador será desligado em 60 segundos."
             
         elif action == "restart":
             # Reinicia após 60 segundos por segurança
-            os.system("shutdown /r /t 60")
+            subprocess.run(["shutdown", "/r", "/t", "60"], check=False)
             return "Atenção: O computador será reiniciado em 60 segundos."
             
         else:

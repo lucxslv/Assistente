@@ -210,6 +210,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [attachedImage, setAttachedImage] = useState<{
+    file: File;
+    previewUrl: string;
+    name: string;
+    sizeKb: number;
+  } | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -235,9 +242,62 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     adjustTextareaHeight();
   }, [input]);
 
-  const handleSend = (textToSend?: string) => {
-    const finalMsg = (textToSend !== undefined ? textToSend : input).trim();
-    if (!finalMsg || isLoading) return;
+  const processImageFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const previewUrl = URL.createObjectURL(file);
+    setAttachedImage({
+      file,
+      previewUrl,
+      name: file.name,
+      sizeKb: Math.max(1, Math.round(file.size / 1024)),
+    });
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          processImageFile(file);
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      processImageFile(file);
+    }
+  };
+
+  const handleSend = async (textToSend?: string) => {
+    const rawText = (textToSend !== undefined ? textToSend : input).trim();
+    if (!rawText && !attachedImage) return;
+    if (isLoading) return;
+
+    let finalMsg = rawText;
+    if (attachedImage) {
+      const imgHeader = `[Imagem Anexada: ${attachedImage.name} (${attachedImage.sizeKb} KB)]\n`;
+      finalMsg = rawText ? `${imgHeader}${rawText}` : `${imgHeader}Analise esta imagem em detalhes.`;
+      setAttachedImage(null);
+    }
 
     onSendMessage(finalMsg, !voiceActive);
     setInput("");
@@ -341,12 +401,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  // Upload/Anexo de arquivo
+  // Upload/Anexo de arquivo e imagem
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const promptText = `Analise o arquivo '${file.name}':\n`;
-      setInput((prev) => (prev ? `${prev}\n${promptText}` : promptText));
+      if (file.type.startsWith("image/")) {
+        processImageFile(file);
+      } else {
+        const promptText = `Analise o arquivo '${file.name}':\n`;
+        setInput((prev) => (prev ? `${prev}\n${promptText}` : promptText));
+      }
       textareaRef.current?.focus();
     }
     e.target.value = "";
@@ -472,15 +536,52 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             O que vamos fazer agora?
           </h2>
 
-          {/* Composer Centralizado */}
-          <div className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-4 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)] mb-6">
+          {/* Composer Centralizado com Suporte a Drag-and-Drop e Multimodalidade */}
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`w-full bg-[var(--surface)] border rounded-[var(--radius-lg)] p-4 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)] mb-6 ${
+              isDraggingOver ? "border-indigo-500 bg-indigo-500/10 shadow-[0_0_16px_rgba(99,102,241,0.2)]" : "border-[var(--border)]"
+            }`}
+          >
+            {/* Preview de Imagem Anexada */}
+            {attachedImage && (
+              <div className="flex items-center gap-3 p-2 mb-3 rounded-lg bg-zinc-900 border border-zinc-700/80">
+                <div className="relative w-12 h-12 rounded overflow-hidden border border-zinc-700 shrink-0 bg-black">
+                  <img
+                    src={attachedImage.previewUrl}
+                    alt={attachedImage.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-mono font-medium text-zinc-200 truncate">
+                    {attachedImage.name}
+                  </div>
+                  <div className="text-[10px] text-zinc-400">
+                    {attachedImage.sizeKb} KB • Análise visual multimodal
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttachedImage(null)}
+                  className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition cursor-pointer"
+                  title="Remover imagem"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <textarea
               ref={textareaRef}
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Fala comigo..."
+              onPaste={handlePaste}
+              placeholder="Fala comigo ou cole/arraste uma imagem..."
               disabled={isLoading}
               className="w-full bg-transparent border-none text-[var(--text-primary)] text-[15px] leading-relaxed resize-none outline-none min-h-[26px] max-h-[120px] placeholder:text-[var(--text-muted)]"
             />
@@ -498,7 +599,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
-                  title="Anexar arquivo"
+                  title="Anexar imagem ou arquivo"
                 >
                   <Paperclip className="w-3.5 h-3.5" />
                 </button>
@@ -517,16 +618,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                 {/* Menu popup do botão + */}
                 {showPlusMenu && (
-                  <div className="absolute left-0 bottom-10 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-[var(--radius-md)] p-1 shadow-2xl z-30 min-w-[160px] text-xs">
+                  <div className="absolute left-0 bottom-10 bg-zinc-900 border border-zinc-700/80 rounded-lg p-1.5 shadow-2xl z-30 min-w-[200px] text-xs space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
                         setShowPlusMenu(false);
-                        handleSend("Limpe o histórico desta conversa.");
+                        fileInputRef.current?.click();
                       }}
-                      className="w-full text-left px-3 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                      className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
                     >
-                      Limpar conversa
+                      <Paperclip className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Anexar Imagem ou Arquivo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPlusMenu(false);
+                        invoke("manage_application", { app_name: "snippingtool", action: "open" }).catch(() => {});
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Captura de Tela Rápida</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPlusMenu(false);
+                        handleSend("Como está o desempenho e telemetria atual do meu computador?");
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                    >
+                      <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Auditar Sistema & Hardware</span>
                     </button>
                   </div>
                 )}
@@ -535,7 +659,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <button
                 type="button"
                 onClick={() => handleSend()}
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && !attachedImage) || isLoading}
                 className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-zinc-100 hover:bg-white text-zinc-950 transition-colors disabled:opacity-30 disabled:hover:bg-zinc-100 shadow-sm cursor-pointer"
                 title="Enviar mensagem"
               >
@@ -889,16 +1013,53 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Composer Ancorado no Rodapé */}
+          {/* Composer Ancorado no Rodapé com Multimodalidade */}
           <div className="p-4 border-t border-[var(--border)] bg-[var(--background)]">
-            <div className="max-w-[800px] mx-auto w-full bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-3.5 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)]">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`max-w-[800px] mx-auto w-full bg-[var(--surface)] border rounded-[var(--radius-lg)] p-3.5 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)] ${
+                isDraggingOver ? "border-indigo-500 bg-indigo-500/10 shadow-[0_0_16px_rgba(99,102,241,0.2)]" : "border-[var(--border)]"
+              }`}
+            >
+              {/* Preview de Imagem Anexada */}
+              {attachedImage && (
+                <div className="flex items-center gap-3 p-2 mb-2.5 rounded-lg bg-zinc-900 border border-zinc-700/80">
+                  <div className="relative w-12 h-12 rounded overflow-hidden border border-zinc-700 shrink-0 bg-black">
+                    <img
+                      src={attachedImage.previewUrl}
+                      alt={attachedImage.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono font-medium text-zinc-200 truncate">
+                      {attachedImage.name}
+                    </div>
+                    <div className="text-[10px] text-zinc-400">
+                      {attachedImage.sizeKb} KB • Imagem para análise multimodal
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedImage(null)}
+                    className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition cursor-pointer"
+                    title="Remover imagem"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               <textarea
                 ref={textareaRef}
                 rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Fala comigo..."
+                onPaste={handlePaste}
+                placeholder="Fala comigo ou cole/arraste uma imagem..."
                 disabled={isLoading}
                 className="w-full bg-transparent border-none text-[var(--text-primary)] text-[14px] leading-relaxed resize-none outline-none min-h-[24px] max-h-[120px] placeholder:text-[var(--text-muted)]"
               />
@@ -916,7 +1077,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
-                    title="Anexar arquivo"
+                    title="Anexar imagem ou arquivo"
                   >
                     <Paperclip className="w-3.5 h-3.5" />
                   </button>
@@ -935,16 +1096,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                   {/* Menu popup do botão + */}
                   {showPlusMenu && (
-                    <div className="absolute left-0 bottom-10 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-[var(--radius-md)] p-1 shadow-2xl z-30 min-w-[160px] text-xs">
+                    <div className="absolute left-0 bottom-10 bg-zinc-900 border border-zinc-700/80 rounded-lg p-1.5 shadow-2xl z-30 min-w-[200px] text-xs space-y-0.5">
                       <button
                         type="button"
                         onClick={() => {
                           setShowPlusMenu(false);
-                          handleSend("Limpe o histórico desta conversa.");
+                          fileInputRef.current?.click();
                         }}
-                        className="w-full text-left px-3 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                        className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
                       >
-                        Limpar conversa
+                        <Paperclip className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Anexar Imagem ou Arquivo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPlusMenu(false);
+                          invoke("manage_application", { app_name: "snippingtool", action: "open" }).catch(() => {});
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Captura de Tela Rápida</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPlusMenu(false);
+                          handleSend("Como está o desempenho e telemetria atual do meu computador?");
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Auditar Sistema & Hardware</span>
                       </button>
                     </div>
                   )}
@@ -953,7 +1137,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSend()}
-                  disabled={!input.trim() || isLoading}
+                  disabled={(!input.trim() && !attachedImage) || isLoading}
                   className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-zinc-100 hover:bg-white text-zinc-950 transition-colors disabled:opacity-30 disabled:hover:bg-zinc-100 shadow-sm cursor-pointer"
                   title="Enviar mensagem"
                 >
@@ -965,10 +1149,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       )}
 
-      {/* Input de Arquivo Oculto para o botão de clipe 📎 */}
+      {/* Input de Arquivo Oculto para imagens e documentos */}
       <input
         ref={fileInputRef}
         type="file"
+        accept="image/*,.txt,.md,.json,.py,.ts,.tsx,.csv"
         onChange={handleFileAttach}
         className="hidden"
       />

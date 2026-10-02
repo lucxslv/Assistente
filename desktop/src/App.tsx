@@ -296,11 +296,15 @@ export function App() {
         return;
       }
 
-      // Ctrl + N: Nova Conversa
+      // Ctrl + N: Nova Conversa (na aba Chat) ou Nova Missão (na aba Agente)
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        handleNewThread();
-        showToast("Nova conversa iniciada");
+        if (activeView === "agent") {
+          agentRuntimeStore.clearSession();
+          showToast("Nova missão do agente pronta!");
+        } else {
+          handleNewThread();
+        }
         return;
       }
 
@@ -630,6 +634,7 @@ export function App() {
         }
         onNewAgentMission={() => {
           agentRuntimeStore.clearSession();
+          setActiveView("agent");
           showToast("Nova missão do agente pronta!");
         }}
       />

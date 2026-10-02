@@ -73,7 +73,13 @@ class ToolRegistry:
         # Se for ferramenta local de dispositivo
         if scope == ToolScope.DEVICE:
             import os
-            is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+            import platform
+            is_cloud = bool(
+                os.getenv("VERCEL")
+                or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+                or os.getenv("CHARLIE_RUNTIME_MODE") == "cloud"
+                or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
+            )
 
             # 1. Se estiver na nuvem e prefer_remote for solicitado (e houver dispositivo WebSocket ativo)
             if is_cloud and prefer_remote:
