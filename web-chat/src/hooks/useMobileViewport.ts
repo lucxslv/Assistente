@@ -25,6 +25,11 @@ export function useMobileViewport() {
       const keyboardActive = diff > 120;
       setIsKeyboardOpen(keyboardActive);
 
+      // Garante que o window não tenha scroll residual que desloque o cabeçalho
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+
       // Atualiza variáveis CSS no root do documento para adaptação instantânea
       document.documentElement.style.setProperty('--app-height', `${currentHeight}px`);
       document.documentElement.style.setProperty(
@@ -43,6 +48,18 @@ export function useMobileViewport() {
       window.addEventListener('orientationchange', handleUpdate);
     }
 
+    // Previne rolagem acidental no body em mobile
+    const preventBounce = (e: TouchEvent) => {
+      if (e.touches.length > 1) return;
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('.overflow-y-auto, .overflow-x-auto, textarea, input')) {
+        // Previne rubber-banding em áreas fixas
+        if (e.cancelable) e.preventDefault();
+      }
+    };
+
+    window.addEventListener('touchmove', preventBounce, { passive: false });
+
     return () => {
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', handleUpdate);
@@ -51,6 +68,7 @@ export function useMobileViewport() {
         window.removeEventListener('resize', handleUpdate);
         window.removeEventListener('orientationchange', handleUpdate);
       }
+      window.removeEventListener('touchmove', preventBounce);
     };
   }, []);
 

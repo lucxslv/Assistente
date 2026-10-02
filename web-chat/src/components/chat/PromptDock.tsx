@@ -4,6 +4,7 @@ import { FileAttachment } from '../../types/chat';
 import { FilePreview } from './FilePreview';
 import { generateUUID } from '../../utils/formatters';
 import { cn } from '../../utils/cn';
+import { hapticFeedback } from '../../utils/haptics';
 
 interface PromptDockProps {
   value: string;
@@ -29,7 +30,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auto-resize textarea to fit text up to 140px on mobile, 180px on desktop
+  // Auto-resize textarea to fit text up to 5 lines (~140px on mobile, ~180px on desktop)
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -38,6 +39,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     const maxHeight = isMobile ? 140 : 180;
     const newHeight = Math.min(el.scrollHeight, maxHeight);
     el.style.height = `${Math.max(newHeight, 44)}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, []);
 
   useEffect(() => {
@@ -128,6 +130,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
 
   const handleSend = () => {
     if (isStreaming) {
+      hapticFeedback.warning();
       onStop();
       return;
     }
@@ -135,15 +138,18 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     const trimmed = value.trim();
     if (!trimmed && attachments.length === 0) return;
 
+    hapticFeedback.light();
     onSend(trimmed, attachments);
     setAttachments([]);
     onChange('');
     if (textareaRef.current) {
       textareaRef.current.style.height = '44px';
+      textareaRef.current.style.overflowY = 'hidden';
     }
   };
 
   const handleRemoveAttachment = (id: string) => {
+    hapticFeedback.light();
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
@@ -153,7 +159,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     // Dá tempo para o teclado virtual do Android/iOS abrir e reposiciona suavemente
     setTimeout(() => {
       textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 250);
+    }, 280);
   };
 
   return (
@@ -162,7 +168,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
         'w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-1 flex-shrink-0 transition-all duration-150',
         isKeyboardOpen
           ? 'pb-2 sm:pb-3'
-          : 'pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] sm:pb-3'
+          : 'pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))] sm:pb-3'
       )}
     >
       <div

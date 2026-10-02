@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { MessageFeed } from './components/chat/MessageFeed';
@@ -10,6 +10,7 @@ import { useAuth } from './hooks/useAuth';
 import { useMobileViewport } from './hooks/useMobileViewport';
 import { FileAttachment } from './types/chat';
 import { checkIsAdmin } from './utils/admin';
+import { hapticFeedback } from './utils/haptics';
 
 function isSecretRoute(): boolean {
   if (typeof window === 'undefined') return false;
@@ -36,6 +37,33 @@ export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'chat' | 'audit'>(() =>
     isSecretRoute() ? 'audit' : 'chat'
   );
+
+  // Mobile Edge Swipe (< 768px): Swipe right from left edge (x < 28px) to open sidebar
+  const edgeTouchRef = useRef<{ startX: number; startY: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.innerWidth >= 768 || isSidebarOpen) return;
+    const touch = e.touches[0];
+    if (touch.clientX < 28) {
+      edgeTouchRef.current = { startX: touch.clientX, startY: touch.clientY };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!edgeTouchRef.current || isSidebarOpen) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - edgeTouchRef.current.startX;
+    const deltaY = touch.clientY - edgeTouchRef.current.startY;
+    if (deltaX > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      hapticFeedback.light();
+      setIsSidebarOpen(true);
+      edgeTouchRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    edgeTouchRef.current = null;
+  };
 
   const {
     user,
@@ -149,7 +177,12 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full h-[var(--app-height,100dvh)] w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans">
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="flex h-full h-[var(--app-height,100dvh)] w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans"
+    >
       {/* Sidebar Navigation Drawer */}
       <Sidebar
         isOpen={isSidebarOpen}
