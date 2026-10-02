@@ -101,16 +101,16 @@ export function App() {
     try {
       const data = await fetchThreads();
       setThreads(data);
-      if (!hasInitializedRef.current) {
-        hasInitializedRef.current = true;
+      if (!hasInitializedRef.current || !activeThreadId) {
         if (data.length > 0) {
+          hasInitializedRef.current = true;
           setActiveThreadId((prev) => prev ?? data[0].id);
         }
       }
     } catch (err) {
       console.error("Erro ao carregar conversas:", err);
     }
-  }, []);
+  }, [activeThreadId]);
 
   // Carrega status da API e telemetria do sistema
   const loadStatus = useCallback(async () => {
@@ -162,12 +162,22 @@ export function App() {
       setIsConnected(liveStatus.is_online);
     });
 
-    const interval = setInterval(loadStatus, 5000);
+    const interval = setInterval(() => {
+      loadStatus();
+      // Se ainda não encontrou threads ou se conectou recentemente, tenta recarregar
+      setThreads((current) => {
+        if (current.length === 0) {
+          loadThreads();
+        }
+        return current;
+      });
+    }, 5000);
+
     return () => {
       clearInterval(interval);
       unsubscribeWs();
     };
-  }, [currentUser]);
+  }, [currentUser, loadStatus, loadThreads, loadSettingsData]);
 
   // Carrega mensagens ao trocar de conversa
   useEffect(() => {

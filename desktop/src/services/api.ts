@@ -174,8 +174,33 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
   return headers;
 }
 
+/**
+ * Executa requisições HTTP com fallback transparente e imediato entre motor local (8005) e Vercel Cloud.
+ */
+export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const currentBase = getApiBase();
+  const fullPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${currentBase}${fullPath}`;
+
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok && currentBase === LOCAL_API && [502, 503, 504].includes(res.status)) {
+      throw new Error(`Local status ${res.status}`);
+    }
+    return res;
+  } catch (err: any) {
+    if (currentBase === LOCAL_API) {
+      console.warn(`[Charlie API] Backend local inacessível para ${path}. Alternando imediatamente para a nuvem Vercel...`);
+      activeApiBase = CLOUD_API;
+      const cloudUrl = `${CLOUD_API}${fullPath}`;
+      return await fetch(cloudUrl, options);
+    }
+    throw err;
+  }
+}
+
 export async function registerUser(name: string, email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${getApiBase()}/auth/register`, {
+  const res = await apiFetch("/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, email, password }),
@@ -189,7 +214,7 @@ export async function registerUser(name: string, email: string, password: string
 }
 
 export async function loginUser(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${getApiBase()}/auth/login`, {
+  const res = await apiFetch("/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -206,7 +231,7 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const token = getStoredToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${getApiBase()}/auth/me`, {
+    const res = await apiFetch("/auth/me", {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -251,25 +276,25 @@ export interface ToolsStatus {
 }
 
 export async function checkHealth(): Promise<{ status: string; database_connected: boolean }> {
-  const res = await fetch(`${getApiBase()}/health`);
+  const res = await apiFetch("/health");
   if (!res.ok) throw new Error("API Offline");
   return res.json();
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatus> {
-  const res = await fetch(`${getApiBase()}/system/status`);
+  const res = await apiFetch("/system/status");
   if (!res.ok) throw new Error("Falha ao buscar status do sistema");
   return res.json();
 }
 
 export async function fetchToolsStatus(): Promise<ToolsStatus> {
-  const res = await fetch(`${getApiBase()}/tools/status`);
+  const res = await apiFetch("/tools/status");
   if (!res.ok) throw new Error("Falha ao buscar status das ferramentas");
   return res.json();
 }
 
 export async function fetchThreads(): Promise<Thread[]> {
-  const res = await fetch(`${getApiBase()}/threads`, {
+  const res = await apiFetch("/threads", {
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Falha ao buscar conversas");
@@ -277,7 +302,7 @@ export async function fetchThreads(): Promise<Thread[]> {
 }
 
 export async function createThread(name: string = "Novo Chat"): Promise<Thread> {
-  const res = await fetch(`${getApiBase()}/threads`, {
+  const res = await apiFetch("/threads", {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({ name }),
@@ -287,7 +312,7 @@ export async function createThread(name: string = "Novo Chat"): Promise<Thread> 
 }
 
 export async function fetchThreadSteps(threadId: string): Promise<Message[]> {
-  const res = await fetch(`${getApiBase()}/messages?thread_id=${encodeURIComponent(threadId)}`, {
+  const res = await apiFetch(`/messages?thread_id=${encodeURIComponent(threadId)}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Falha ao buscar mensagens");
@@ -295,7 +320,7 @@ export async function fetchThreadSteps(threadId: string): Promise<Message[]> {
 }
 
 export async function deleteThread(threadId: string): Promise<void> {
-  const res = await fetch(`${getApiBase()}/threads/${encodeURIComponent(threadId)}`, {
+  const res = await apiFetch(`/threads/${encodeURIComponent(threadId)}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
@@ -303,7 +328,7 @@ export async function deleteThread(threadId: string): Promise<void> {
 }
 
 export async function renameThread(threadId: string, name: string): Promise<void> {
-  const res = await fetch(`${getApiBase()}/threads/${encodeURIComponent(threadId)}`, {
+  const res = await apiFetch(`/threads/${encodeURIComponent(threadId)}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
     body: JSON.stringify({ name }),
@@ -483,13 +508,13 @@ export function connectSystemWebSocket(
 }
 
 export async function fetchSettings(): Promise<Settings> {
-  const res = await fetch(`${getApiBase()}/settings`);
+  const res = await apiFetch("/settings");
   if (!res.ok) throw new Error("Falha ao buscar configurações");
   return res.json();
 }
 
 export async function updateSettings(data: Partial<Settings>): Promise<any> {
-  const res = await fetch(`${getApiBase()}/settings`, {
+  const res = await apiFetch("/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -500,7 +525,7 @@ export async function updateSettings(data: Partial<Settings>): Promise<any> {
 
 export async function fetchUserMemories(): Promise<{ facts: string[]; preferences: Record<string, string>; count: number }> {
   try {
-    const res = await fetch(`${getApiBase()}/settings/memory`, {
+    const res = await apiFetch("/settings/memory", {
       headers: getAuthHeaders(),
     });
     if (!res.ok) return { facts: [], preferences: {}, count: 0 };
@@ -511,7 +536,7 @@ export async function fetchUserMemories(): Promise<{ facts: string[]; preference
 }
 
 export async function clearUserMemories(): Promise<void> {
-  const res = await fetch(`${getApiBase()}/settings/memory`, {
+  const res = await apiFetch("/settings/memory", {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
