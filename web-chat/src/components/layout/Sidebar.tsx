@@ -11,6 +11,7 @@ import {
   ChevronRight,
   LogOut,
   Check,
+  Shield,
 } from 'lucide-react';
 import { Thread, ConnectionStatus } from '../../types/chat';
 import { User } from '../../types/auth';
@@ -28,6 +29,7 @@ interface SidebarProps {
   onRenameThread: (threadId: string, newName: string) => void;
   onDeleteThread: (threadId: string) => void;
   onLogout: () => void;
+  onOpenAudit?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRenameThread,
   onDeleteThread,
   onLogout,
+  onOpenAudit,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -331,6 +334,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ))
           )}
         </div>
+
+        {/* Audit & Cost Dashboard Action */}
+        {onOpenAudit && (
+          <div className="px-3 pb-2 pt-1 border-t border-white/[0.04]">
+            <button
+              onClick={() => {
+                onOpenAudit();
+                onClose();
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-emerald-500/10 active:bg-emerald-500/20 border border-white/[0.06] hover:border-emerald-500/30 text-xs text-[#D1D5DB] hover:text-white transition-all cursor-pointer group"
+              title="Painel de Auditoria & Custos USD"
+            >
+              <div className="flex items-center gap-2.5">
+                <Shield className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <span className="font-medium">Auditoria & Custos</span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                USD
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Footer: Logged User & Logout Action */}
         <div className="p-3 border-t border-white/[0.06] bg-[#0A0B0E]/80 flex items-center justify-between">

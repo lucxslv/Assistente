@@ -58,6 +58,14 @@ async def init_db_pool() -> Optional[asyncpg.Pool]:
             )
             _last_db_error = None
             logger.info("Pool de conexões Supabase estabelecido com sucesso.")
+
+            # Inicializa schema de auditoria e telemetria de custos de forma assíncrona
+            try:
+                from api.services.audit_service import ensure_audit_schema
+                await ensure_audit_schema(_pool)
+            except Exception as schema_err:
+                logger.warning(f"Aviso ao inicializar audit_chat_logs: {schema_err}")
+
         except Exception as e:
             _last_db_error = f"{type(e).__name__}: {str(e)}"
             logger.error(f"Falha ao conectar no Supabase: {e}")
