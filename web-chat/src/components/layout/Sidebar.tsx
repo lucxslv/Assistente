@@ -130,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         {/* Top Header: Brand & Status & Close */}
-        <div className="p-3.5 sm:p-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="p-3.5 sm:p-4 pt-[max(0.875rem,env(safe-area-inset-top,0px))] border-b border-white/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden shadow-glow-sm p-1 flex-shrink-0">
               <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain" />
@@ -359,7 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Footer: Logged User & Logout Action */}
-        <div className="p-3 border-t border-white/[0.06] bg-[#0A0B0E]/80 flex items-center justify-between">
+        <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-white/[0.06] bg-[#0A0B0E]/80 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 p-1 rounded-lg">
             <div className="w-8 h-8 rounded-full bg-[#181B22] border border-white/[0.08] flex items-center justify-center text-primary text-xs font-semibold uppercase flex-shrink-0">
               {user?.name ? user.name.slice(0, 2) : <UserIcon className="w-3.5 h-3.5 text-[#9CA3AF]" />}

@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-14 border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between z-10 select-none flex-shrink-0">
+    <header className="min-h-14 pt-[env(safe-area-inset-top,0px)] border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between z-10 select-none flex-shrink-0">
       {/* Left: Sidebar Toggle & Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button

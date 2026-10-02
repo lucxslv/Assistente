@@ -68,12 +68,12 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
   const activeError = localValidation || error;
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full bg-[#0A0B0E] text-[#F3F4F6] flex items-center justify-center p-3 sm:p-4 select-none relative overflow-hidden font-sans">
+    <div className="min-h-[100dvh] w-full bg-[#0A0B0E] text-[#F3F4F6] flex items-center justify-center p-3 sm:p-4 py-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] select-none relative overflow-y-auto font-sans">
       {/* Subtle background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/[0.04] rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Gatekeeper Card */}
-      <div className="w-full max-w-md bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl p-5 sm:p-8 relative z-10 flex flex-col backdrop-blur-xl">
+      <div className="w-full max-w-md bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl p-5 sm:p-8 relative z-10 flex flex-col backdrop-blur-xl my-auto">
         {/* Branding & Status Badge */}
         <div className="flex flex-col items-center text-center mb-5 sm:mb-6">
           <div className="w-16 h-16 rounded-2xl bg-black border border-white/[0.1] flex items-center justify-center p-2.5 shadow-[0_0_24px_rgba(139,124,255,0.25)] mb-3 sm:mb-4 overflow-hidden">
