@@ -159,6 +159,8 @@ async def register(data: RegisterRequest):
             msg = err_json.get("msg") or err_json.get("error_description") or err_json.get("message") or "Erro ao criar conta."
             if "already registered" in msg.lower():
                 msg = "Este e-mail já está cadastrado. Faça login para continuar."
+            elif "rate limit" in msg.lower():
+                msg = "Limite de e-mails do Supabase atingido. Desative a opção 'Confirm email' no painel do Supabase para permitir cadastros imediatos sem restrição."
         except Exception:
             msg = "Erro ao processar o cadastro no servidor de autenticação."
         raise HTTPException(status_code=e.code, detail=msg)
