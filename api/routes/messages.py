@@ -26,10 +26,13 @@ async def list_messages(
 
     async with pool.acquire() as conn:
         # Valida que a thread existe e pertence ao usuário autenticado
+        email = user.get("email")
         thread_owner = await conn.fetchrow("""
             SELECT id FROM "Thread"
-            WHERE id = $1 AND "userId" = $2 AND "deletedAt" IS NULL
-        """, t_uuid, u_uuid)
+            WHERE id = $1 
+              AND ("userId" = $2 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3))
+              AND "deletedAt" IS NULL
+        """, t_uuid, u_uuid, email)
 
         if not thread_owner:
             raise HTTPException(

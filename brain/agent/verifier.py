@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from brain.agent.task_graph import TaskEvidence, TaskNode
 
+VerificationResult = TaskEvidence
+
 logger = logging.getLogger("charlie.agent.verifier")
 
 

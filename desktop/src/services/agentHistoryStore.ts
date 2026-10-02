@@ -1,5 +1,5 @@
 import { AgentSession } from "../types";
-import { getApiBase, getAuthHeaders } from "./api";
+import { apiFetch, getAuthHeaders } from "./api";
 
 const STORAGE_KEY_HISTORY = "charlie_agent_history_v1_2";
 
@@ -77,7 +77,7 @@ class AgentHistoryStore {
 
     // Sincroniza assincronamente com o Backend SQLite
     try {
-      fetch(`${getApiBase()}/agent/sessions`, {
+      apiFetch("/agent/sessions", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ session }),
@@ -92,7 +92,7 @@ class AgentHistoryStore {
     this.notify();
 
     try {
-      fetch(`${getApiBase()}/agent/sessions/${sessionId}`, {
+      apiFetch(`/agent/sessions/${sessionId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
       }).catch(() => {});

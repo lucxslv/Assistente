@@ -24,14 +24,15 @@ async def list_threads(user: dict = Depends(get_current_user)):
         return []
 
     u_uuid = uuid.UUID(user["id"])
+    email = user.get("email")
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT id, name, "createdAt", "updatedAt"
             FROM "Thread"
             WHERE "deletedAt" IS NULL
-              AND "userId" = $1
+              AND ("userId" = $1 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $2))
             ORDER BY "updatedAt" DESC
-        """, u_uuid)
+        """, u_uuid, email)
 
         return [
             {
@@ -81,12 +82,13 @@ async def delete_thread(thread_id: str, user: dict = Depends(get_current_user)):
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
 
+    email = user.get("email")
     async with pool.acquire() as conn:
         res = await conn.execute("""
             UPDATE "Thread"
             SET "deletedAt" = CURRENT_TIMESTAMP
-            WHERE id = $1 AND "userId" = $2
-        """, t_uuid, u_uuid)
+            WHERE id = $1 AND ("userId" = $2 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3))
+        """, t_uuid, u_uuid, email)
         if res == "UPDATE 0":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -114,12 +116,13 @@ async def update_thread(thread_id: str, data: ThreadUpdate, user: dict = Depends
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
 
+    email = user.get("email")
     async with pool.acquire() as conn:
         res = await conn.execute("""
             UPDATE "Thread"
             SET name = $1, "updatedAt" = CURRENT_TIMESTAMP
-            WHERE id = $2 AND "userId" = $3
-        """, data.name, t_uuid, u_uuid)
+            WHERE id = $2 AND ("userId" = $3 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $4))
+        """, data.name, t_uuid, u_uuid, email)
         if res == "UPDATE 0":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
