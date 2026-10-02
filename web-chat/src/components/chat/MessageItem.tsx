@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, RotateCcw, AlertTriangle, Sparkles, User as UserIcon } from 'lucide-react';
+import { Copy, Check, RotateCcw, AlertTriangle, User as UserIcon } from 'lucide-react';
 import { Message } from '../../types/chat';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatTimeOrDate } from '../../utils/formatters';
@@ -31,10 +31,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
         isUser ? 'justify-end' : 'justify-start'
       }`}
     >
-      {/* Assistant Avatar */}
+      {/* Assistant Avatar with Charlie Logo */}
       {isAssistant && (
-        <div className="w-8 h-8 rounded-xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center flex-shrink-0 text-primary mt-0.5 shadow-glow-sm">
-          <Sparkles className="w-4 h-4" />
+        <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden mt-0.5 shadow-glow-sm p-1">
+          <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
         </div>
       )}
 

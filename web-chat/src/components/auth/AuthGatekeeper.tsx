@@ -76,10 +76,10 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
       <div className="w-full max-w-md bg-[#111318] border border-white/[0.08] rounded-2xl shadow-2xl p-5 sm:p-8 relative z-10 flex flex-col backdrop-blur-xl">
         {/* Branding & Status Badge */}
         <div className="flex flex-col items-center text-center mb-5 sm:mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-[#161922] border border-white/[0.1] flex items-center justify-center p-3 shadow-[0_0_24px_rgba(99,102,241,0.2)] mb-3 sm:mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-black border border-white/[0.1] flex items-center justify-center p-2.5 shadow-[0_0_24px_rgba(139,124,255,0.25)] mb-3 sm:mb-4 overflow-hidden">
             <img
-              src="/charlie-logo.svg"
-              alt="Charlie"
+              src="/logo.png"
+              alt="Charlie Logo"
               className="w-full h-full object-contain"
             />
           </div>
