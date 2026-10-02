@@ -197,36 +197,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="h-[1px] bg-[var(--border)] my-3" />
+      <div className="h-[1px] bg-white/[0.06] my-2.5" />
 
       {/* 2. Navegação Principal: Chat vs Agent Command Center */}
-      <div className="grid grid-cols-2 gap-1 p-1 bg-[#12141A] border border-[var(--border)] rounded-lg mb-3">
+      <div className="grid grid-cols-2 gap-1 p-0.5 bg-[#12151C] border border-white/[0.08] rounded-lg mb-2.5">
         <button
           type="button"
           onClick={() => onSelectView?.("chat")}
-          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition cursor-pointer ${
             activeView === "chat"
-              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm border border-zinc-700/60"
-              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-zinc-800/40"
+              ? "bg-[#1C202A] text-zinc-200 shadow-sm border border-white/[0.08]"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]"
           }`}
         >
-          <MessageSquare className="w-3.5 h-3.5" />
+          <MessageSquare className="w-3.5 h-3.5 text-zinc-400" />
           <span>Chat</span>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectView?.("agent")}
-          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-semibold transition cursor-pointer relative ${
+          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition cursor-pointer relative ${
             activeView === "agent"
-              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm border border-zinc-700/60"
-              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-zinc-800/40"
+              ? "bg-[#1C202A] text-zinc-200 shadow-sm border border-white/[0.08]"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]"
           }`}
         >
-          <Cpu className="w-3.5 h-3.5 text-blue-400" />
-          <span>Agent</span>
+          <Cpu className="w-3.5 h-3.5 text-slate-400" />
+          <span>Agente</span>
           {isAgentActive && (
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse absolute top-1 right-1" />
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse absolute top-1 right-1" />
           )}
         </button>
       </div>
@@ -434,42 +434,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* 5. Estatísticas de Hardware Discretas (.system-stats) */}
-      <div className="pt-2 border-t border-[var(--border)]/60">
-        <div className="flex justify-between items-center text-[12px] text-[var(--text-muted)] mb-1">
-          <span>CPU</span>
-          <span className="font-mono">{cpuPercent}%</span>
-        </div>
-        <div className="w-full h-[3px] bg-[var(--border)] rounded-[2px] overflow-hidden">
-          <div
-            className={`h-full rounded-[2px] transition-all duration-300 ${
-              cpuPercent > 85
-                ? "bg-[var(--danger)]"
-                : cpuPercent > 65
-                ? "bg-[var(--warning)]"
-                : "bg-[var(--text-muted)]"
-            }`}
-            style={{ width: `${cpuPercent}%` }}
-          />
+      {/* 5. Telemetria de Hardware Discreta */}
+      <div className="pt-2.5 pb-0.5 border-t border-white/[0.06] space-y-2">
+        <div>
+          <div className="flex justify-between items-center text-[11px] text-zinc-500 font-mono mb-1">
+            <span>CPU</span>
+            <span className="text-zinc-400 font-medium">{cpuPercent}%</span>
+          </div>
+          <div className="w-full h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-zinc-400 rounded-full transition-all duration-300"
+              style={{ width: `${cpuPercent}%` }}
+            />
+          </div>
         </div>
 
-        <div className="flex justify-between items-center text-[12px] text-[var(--text-muted)] mt-3 mb-1">
-          <span>RAM</span>
-          <span className="font-mono">
-            {ramUsedGb} / {ramTotalGb} GB
-          </span>
-        </div>
-        <div className="w-full h-[3px] bg-[var(--border)] rounded-[2px] overflow-hidden">
-          <div
-            className={`h-full rounded-[2px] transition-all duration-300 ${
-              ramPercent > 85
-                ? "bg-[var(--danger)]"
-                : ramPercent > 70
-                ? "bg-[var(--warning)]"
-                : "bg-[var(--text-muted)]"
-            }`}
-            style={{ width: `${ramPercent}%` }}
-          />
+        <div>
+          <div className="flex justify-between items-center text-[11px] text-zinc-500 font-mono mb-1">
+            <span>RAM</span>
+            <span className="text-zinc-400 font-medium">{ramUsedGb} / {ramTotalGb} GB</span>
+          </div>
+          <div className="w-full h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-zinc-400 rounded-full transition-all duration-300"
+              style={{ width: `${ramPercent}%` }}
+            />
+          </div>
         </div>
       </div>
     </aside>

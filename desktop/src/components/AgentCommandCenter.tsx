@@ -1,15 +1,9 @@
-import React, { useState } from "react";
-import {
-  useAgentRuntime,
-} from "../services/agentRuntimeStore";
-import {
-  AgentLogCategory,
-  RiskLevel,
-} from "../types";
+import React, { useState, useEffect } from "react";
+import { useAgentRuntime } from "../services/agentRuntimeStore";
+import { AgentLogCategory, RiskLevel } from "../types";
 import {
   Play,
   Pause,
-  XCircle,
   RotateCw,
   CheckCircle2,
   AlertCircle,
@@ -19,16 +13,13 @@ import {
   Terminal,
   Cpu,
   FileCheck,
-  Activity,
-  Plus,
-  ArrowRight,
-  Search,
   ChevronDown,
   ChevronRight,
-  Layers,
   Sparkles,
   Trash2,
   FolderOpen,
+  ArrowRight,
+  Search,
 } from "lucide-react";
 
 type AgentTab = "overview" | "tasks" | "permissions" | "evidence" | "logs" | "processes" | "history";
@@ -47,7 +38,6 @@ export const AgentCommandCenter: React.FC = () => {
     resumeAgent,
     cancelAgent,
     retryTask,
-    completeTaskWithEvidence,
     resolvePermission,
     refreshProcesses,
     loadSession,
@@ -57,18 +47,18 @@ export const AgentCommandCenter: React.FC = () => {
   } = useAgentRuntime();
 
   const [activeTab, setActiveTab] = useState<AgentTab>("overview");
-  const [historyFilter, setHistoryFilter] = useState<"ALL" | "completed" | "failed">("ALL");
-
-  React.useEffect(() => {
-    if (activeTab === "processes") {
-      refreshProcesses();
-    }
-  }, [activeTab]);
   const [goalInput, setGoalInput] = useState("");
   const [projectInput, setProjectInput] = useState("Charlie");
   const [logFilter, setLogFilter] = useState<AgentLogCategory | "ALL">("ALL");
   const [logSearch, setLogSearch] = useState("");
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [historyFilter, setHistoryFilter] = useState<"ALL" | "completed" | "failed">("ALL");
+
+  useEffect(() => {
+    if (activeTab === "processes") {
+      refreshProcesses();
+    }
+  }, [activeTab]);
 
   const toggleTaskExpand = (taskId: string) => {
     setExpandedTasks((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
@@ -90,86 +80,102 @@ export const AgentCommandCenter: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
-  // Cores e rótulos de status
-  const getStatusBadge = (status: string) => {
+  // Indicador de status pontual e sutil
+  const renderStatusBadge = (status: string) => {
     switch (status) {
       case "running":
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-            RUNNING
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-500/10 text-slate-300 border border-slate-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" />
+            Em execução
           </span>
         );
       case "waiting_permission":
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            PERMISSÃO NECESSÁRIA
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Autorização necessária
           </span>
         );
       case "paused":
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-            <Pause className="w-3 h-3" />
-            PAUSADO
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+            <Pause className="w-3 h-3 text-zinc-400" />
+            Pausado
           </span>
         );
       case "completed":
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            CONCLUÍDO
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            Concluído
           </span>
         );
       case "failed":
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <AlertCircle className="w-3.5 h-3.5" />
-            FALHA
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <AlertCircle className="w-3 h-3 text-rose-400" />
+            Falha
           </span>
         );
       default:
         return (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
-            IDLE
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-400 border border-zinc-700/60">
+            Aguardando
           </span>
         );
     }
   };
 
-  const getRiskBadge = (risk: RiskLevel) => {
+  const renderRiskBadge = (risk: RiskLevel) => {
     switch (risk) {
       case "CRITICAL":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800">CRÍTICO</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-rose-950/80 text-rose-300 border border-rose-800/60">
+            Crítico
+          </span>
+        );
       case "HIGH":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-950 text-orange-300 border border-orange-800">ALTO</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-950/80 text-amber-300 border border-amber-800/60">
+            Alto
+          </span>
+        );
       case "MEDIUM":
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">MÉDIO</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
+            Médio
+          </span>
+        );
       default:
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">BAIXO</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800/60 text-zinc-400 border border-zinc-700/50">
+            Baixo
+          </span>
+        );
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0E0F12] text-[#F2F3F5] overflow-hidden select-none">
-      {/* ================= Top Bar / Header Operacional ================= */}
-      <header className="px-6 py-4 border-b border-[#23262D] bg-[#12141A]/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+    <div className="flex-1 flex flex-col h-full bg-[#090A0F] text-[#F2F3F5] overflow-hidden select-none">
+      {/* ================= Header Superior Discreto ================= */}
+      <header className="px-6 py-3.5 border-b border-white/[0.08] bg-[#12151C]/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-mono font-bold text-sm">
+          <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-zinc-400 text-sm">
             ⚙️
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold tracking-wide text-zinc-100">
-                CHARLIE AGENT RUNTIME
+              <h1 className="text-xs font-semibold tracking-wider text-zinc-200 uppercase font-mono">
+                Charlie Agentic Runtime
               </h1>
-              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
                 v1.2
               </span>
-              {session && getStatusBadge(session.status)}
+              {session && renderStatusBadge(session.status)}
             </div>
-            <p className="text-xs text-zinc-400 max-w-xl truncate mt-0.5">
-              {session ? session.goal : "Aguardando novo objetivo de execução."}
+            <p className="text-xs text-zinc-400 max-w-xl truncate mt-0.5 font-normal">
+              {session ? session.goal : "Aguardando definição de objetivo."}
             </p>
           </div>
         </div>
@@ -180,84 +186,78 @@ export const AgentCommandCenter: React.FC = () => {
             <>
               {session.status === "running" && (
                 <button
+                  type="button"
                   onClick={pauseAgent}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition"
-                  title="Pausar execução sem cancelar"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition cursor-pointer"
                 >
-                  <Pause className="w-3.5 h-3.5" /> Pausar
+                  <Pause className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Pausar</span>
                 </button>
               )}
+
               {session.status === "paused" && (
                 <button
+                  type="button"
                   onClick={resumeAgent}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition"
-                  title="Retomar execução"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-100 hover:bg-white text-zinc-950 transition cursor-pointer shadow-sm"
                 >
-                  <Play className="w-3.5 h-3.5" /> Retomar
+                  <Play className="w-3.5 h-3.5" />
+                  <span>Retomar</span>
                 </button>
               )}
-              {["running", "paused", "waiting_permission"].includes(session.status) && (
+
+              {session.status === "running" && (
                 <button
+                  type="button"
                   onClick={cancelAgent}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 border border-rose-500/30 transition"
-                  title="Interromper agente"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-900/40 transition cursor-pointer"
                 >
-                  <XCircle className="w-3.5 h-3.5" /> Cancelar
+                  <span>Cancelar</span>
                 </button>
               )}
-              {["completed", "failed"].includes(session.status) && (
-                <button
-                  onClick={clearSession}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Nova Sessão
-                </button>
-              )}
+
+              <button
+                type="button"
+                onClick={clearSession}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
+              >
+                <span>Nova Missão</span>
+              </button>
             </>
           ) : (
             <div className="text-xs text-zinc-500 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500/80"></span>
-              Runtime Local Conectado
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
+              Runtime local pronto
             </div>
           )}
         </div>
       </header>
 
-      {/* Barra de Progresso Superior */}
-      {session && (
-        <div className="w-full bg-[#181A20] h-1.5 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 transition-all duration-500"
-            style={{ width: `${session.progress}%` }}
-          />
-        </div>
-      )}
-
       {/* ================= Sub-Navegação (Tabs Operacionais) ================= */}
-      <div className="px-6 border-b border-[#23262D] bg-[#12141A]/40 flex items-center justify-between text-xs">
+      <div className="px-6 border-b border-white/[0.08] bg-[#12151C]/40 flex items-center justify-between text-xs">
         <nav className="flex space-x-1">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
               activeTab === "overview"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Layers className="w-3.5 h-3.5" /> Overview
+            <span>Visão Geral</span>
           </button>
 
           <button
             onClick={() => setActiveTab("tasks")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
               activeTab === "tasks"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Activity className="w-3.5 h-3.5" /> Task Graph
+            <span>Linha do Tempo</span>
             {session && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.06] text-zinc-400 font-mono">
                 {session.tasks.filter((t) => t.status === "success").length}/{session.tasks.length}
               </span>
             )}
@@ -265,53 +265,55 @@ export const AgentCommandCenter: React.FC = () => {
 
           <button
             onClick={() => setActiveTab("permissions")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 relative ${
               activeTab === "permissions"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Shield className="w-3.5 h-3.5" /> Permissões
+            <Shield className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Permissões</span>
             {pendingPermissions.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-black animate-bounce">
-                {pendingPermissions.length}
-              </span>
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5" />
             )}
           </button>
 
           <button
             onClick={() => setActiveTab("evidence")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
               activeTab === "evidence"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <FileCheck className="w-3.5 h-3.5" /> Verifier & Evidências
+            <FileCheck className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Evidências</span>
           </button>
 
           <button
             onClick={() => setActiveTab("logs")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
               activeTab === "logs"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Terminal className="w-3.5 h-3.5" /> Console & Logs
+            <Terminal className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Console</span>
           </button>
 
           <button
             onClick={() => setActiveTab("processes")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
               activeTab === "processes"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Cpu className="w-3.5 h-3.5" /> Processos
+            <Cpu className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Processos</span>
             {processes.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.06] text-zinc-400 font-mono">
                 {processes.length}
               </span>
             )}
@@ -319,15 +321,16 @@ export const AgentCommandCenter: React.FC = () => {
 
           <button
             onClick={() => setActiveTab("history")}
-            className={`py-3 px-3.5 border-b-2 font-medium transition flex items-center gap-1.5 ${
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
               activeTab === "history"
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                ? "border-zinc-300 text-zinc-100"
+                : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Clock className="w-3.5 h-3.5" /> Histórico
+            <Clock className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Histórico</span>
             {history.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.06] text-zinc-400 font-mono">
                 {history.length}
               </span>
             )}
@@ -336,7 +339,7 @@ export const AgentCommandCenter: React.FC = () => {
 
         {session && (
           <div className="text-[11px] text-zinc-500 font-mono">
-            Sessão: {session.id} | Progresso: {session.progress}%
+            {session.progress}% concluído
           </div>
         )}
       </div>
@@ -345,55 +348,55 @@ export const AgentCommandCenter: React.FC = () => {
       <main className="flex-1 overflow-y-auto p-6">
         {/* Caso não haja sessão ativa: Prompt de Inicialização de Objetivo */}
         {!session && (
-          <div className="max-w-2xl mx-auto mt-12 bg-[#14161E] border border-[#23262D] rounded-2xl p-8 shadow-2xl">
+          <div className="max-w-2xl mx-auto mt-8 bg-[#12151C] border border-white/[0.08] rounded-2xl p-7 shadow-xl">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-blue-600/10 border border-blue-500/20 rounded-xl text-blue-400">
-                <Sparkles className="w-6 h-6" />
+              <div className="p-2.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-zinc-300">
+                <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-zinc-100">Iniciar Novo Objetivo do Agente</h2>
-                <p className="text-xs text-zinc-400">
-                  Defina um objetivo real no computador. O Charlie irá decompor em tarefas, planejar, executar ferramentas e comprovar o resultado com o Verifier.
+                <h2 className="text-base font-medium text-zinc-100">Iniciar Novo Objetivo do Agente</h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  O Charlie planeja a sequência em grafo (DAG), executa ferramentas locais com autorização e comprova o resultado com o Verifier.
                 </p>
               </div>
             </div>
 
             <form onSubmit={handleStartGoal} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Objetivo / Missão do Agente
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Objetivo ou Instrução de Execução
                 </label>
                 <textarea
                   value={goalInput}
                   onChange={(e) => setGoalInput(e.target.value)}
-                  placeholder="Ex: Inspecionar o sistema de autenticação, corrigir erros e rodar testes unitários até passar..."
+                  placeholder="Ex: Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo..."
                   rows={3}
-                  className="w-full px-3.5 py-2.5 bg-[#0E0F12] border border-[#2A2E39] rounded-xl text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition resize-none"
+                  className="w-full px-3.5 py-2.5 bg-[#0C0D12] border border-white/[0.08] rounded-xl text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition resize-none font-normal"
                 />
               </div>
 
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                    Nome do Projeto / Escopo
+                  <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                    Projeto / Contexto
                   </label>
                   <input
                     type="text"
                     value={projectInput}
                     onChange={(e) => setProjectInput(e.target.value)}
                     placeholder="Charlie"
-                    className="w-full px-3.5 py-2 bg-[#0E0F12] border border-[#2A2E39] rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-blue-500 transition"
+                    className="w-full px-3 py-2 bg-[#0C0D12] border border-white/[0.08] rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-500 transition"
                   />
                 </div>
               </div>
 
-              <div className="pt-2 flex items-center justify-between">
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400">
                   <span className="text-zinc-500">Sugestões:</span>
                   <button
                     type="button"
                     onClick={() => setGoalInput("Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo")}
-                    className="hover:text-blue-400 underline underline-offset-2 transition cursor-pointer"
+                    className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
                   >
                     📁 Criar pasta & arquivo
                   </button>
@@ -401,7 +404,7 @@ export const AgentCommandCenter: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setGoalInput("Inspecionar processos ativos do Windows e uso de recursos")}
-                    className="hover:text-blue-400 underline underline-offset-2 transition cursor-pointer"
+                    className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
                   >
                     ⚡ Monitorar processos
                   </button>
@@ -409,7 +412,7 @@ export const AgentCommandCenter: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setGoalInput("Executar verificação de status do Git no repositório")}
-                    className="hover:text-blue-400 underline underline-offset-2 transition cursor-pointer"
+                    className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
                   >
                     💻 Verificar Git
                   </button>
@@ -418,9 +421,9 @@ export const AgentCommandCenter: React.FC = () => {
                 <button
                   type="submit"
                   disabled={!goalInput.trim()}
-                  className="px-5 py-2.5 rounded-xl font-medium text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600 text-white flex items-center gap-2 shadow-lg shadow-blue-600/20 transition cursor-pointer"
+                  className="px-4 py-2 rounded-lg font-medium text-xs bg-zinc-100 hover:bg-white disabled:opacity-40 disabled:hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
                 >
-                  <Play className="w-3.5 h-3.5" /> Iniciar Execução do Agente
+                  <Play className="w-3.5 h-3.5" /> Iniciar Missão
                 </button>
               </div>
             </form>
@@ -429,111 +432,114 @@ export const AgentCommandCenter: React.FC = () => {
 
         {/* ================= TAB 1: OVERVIEW ================= */}
         {session && activeTab === "overview" && (
-          <div className="space-y-6 max-w-5xl mx-auto">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-[#14161E] border border-[#23262D] rounded-xl p-4">
-                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Status Geral</div>
-                <div className="mt-2 flex items-center gap-2">
-                  {getStatusBadge(session.status)}
-                </div>
-                <div className="mt-2 text-xs text-zinc-500 font-mono">
-                  {session.tasks.filter((t) => t.status === "success").length} de {session.tasks.length} tarefas concluídas
+          <div className="space-y-5 max-w-4xl mx-auto">
+            {/* 1. Barra de Resumo Horizontal Contínua (Substitui os 4 cards verticais) */}
+            <div className="bg-[#12151C] border border-white/[0.08] rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-4 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-500 text-[11px]">Status</span>
+                {renderStatusBadge(session.status)}
+              </div>
+
+              <div className="h-4 w-[1px] bg-white/[0.08] hidden sm:block" />
+
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-500 text-[11px]">Progresso</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium text-zinc-200">{session.progress}%</span>
+                  <div className="w-20 bg-white/[0.06] h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-zinc-300 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${session.progress}%` }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-[#14161E] border border-[#23262D] rounded-xl p-4">
-                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Progresso Verificado</div>
-                <div className="mt-1 text-2xl font-bold font-mono text-zinc-100">{session.progress}%</div>
-                <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-2 overflow-hidden">
-                  <div className="bg-blue-500 h-full rounded-full transition-all" style={{ width: `${session.progress}%` }} />
-                </div>
+              <div className="h-4 w-[1px] bg-white/[0.08] hidden sm:block" />
+
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 text-[11px]">Permissões</span>
+                <span className="font-medium text-zinc-300">
+                  {pendingPermissions.length === 0 ? "Nenhuma pendente" : `${pendingPermissions.length} pendente(s)`}
+                </span>
               </div>
 
-              <div className="bg-[#14161E] border border-[#23262D] rounded-xl p-4">
-                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Permissões Pendentes</div>
-                <div className="mt-1 text-2xl font-bold font-mono text-zinc-100">{pendingPermissions.length}</div>
-                <div className="mt-2 text-xs text-zinc-500">
-                  {pendingPermissions.length > 0 ? "Aguardando sua autorização" : "Nenhum bloqueio de segurança"}
-                </div>
-              </div>
+              <div className="h-4 w-[1px] bg-white/[0.08] hidden sm:block" />
 
-              <div className="bg-[#14161E] border border-[#23262D] rounded-xl p-4">
-                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Evidências do Verifier</div>
-                <div className="mt-1 text-2xl font-bold font-mono text-emerald-400">
-                  {session.tasks.filter((t) => t.evidence?.passed).length}
-                </div>
-                <div className="mt-2 text-xs text-zinc-500">Comprovações tangíveis</div>
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 text-[11px]">Evidências</span>
+                <span className="font-medium text-zinc-300 font-mono">
+                  {session.tasks.filter((t) => t.evidence?.passed).length} / {session.tasks.length}
+                </span>
               </div>
             </div>
 
-            {/* Tarefa em Execução / Atual */}
-            {session.currentTaskId && (
-              <div className="bg-[#14161E] border border-blue-500/30 rounded-xl p-5 shadow-lg shadow-blue-950/20">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
-                    TAREFA EM EXECUÇÃO NO LOCAL RUNTIME
+            {/* 2. Bloco Inteligente: Resultado Final Concluído OU Tarefa Atual em Execução */}
+            {session.status === "completed" ? (
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-emerald-400 font-medium text-xs">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Objetivo concluído com evidências validadas</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-zinc-500">
+                    {session.updatedAt ? new Date(session.updatedAt).toLocaleTimeString("pt-BR") : ""}
                   </span>
-                  <span className="text-xs font-mono text-zinc-400">ID: {session.currentTaskId}</span>
+                </div>
+                <p className="text-xs text-zinc-300 bg-[#0C0D12] p-3 rounded-lg border border-white/[0.06]">
+                  {session.summary || "Todas as tarefas foram executadas com sucesso no Local Runtime e validadas."}
+                </p>
+              </div>
+            ) : session.status === "running" && session.currentTaskId ? (
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" />
+                    Passo atual em execução
+                  </span>
+                  <span className="font-mono text-[11px] text-zinc-500">{session.currentTaskId}</span>
                 </div>
                 {(() => {
                   const curr = session.tasks.find((t) => t.id === session.currentTaskId);
                   if (!curr) return null;
                   return (
                     <div>
-                      <h3 className="text-base font-semibold text-zinc-100">{curr.title}</h3>
-                      <p className="text-xs text-zinc-400 mt-1">{curr.description}</p>
+                      <h3 className="text-sm font-medium text-zinc-100">{curr.title}</h3>
                       {curr.tool && (
-                        <div className="mt-3 flex items-center gap-2 text-xs font-mono bg-[#0E0F12] border border-zinc-800 rounded-lg p-2.5 text-zinc-300">
-                          <Terminal className="w-4 h-4 text-zinc-500" />
-                          <span>Ferramenta: <strong className="text-blue-300">{curr.tool}</strong></span>
+                        <div className="mt-2 text-xs font-mono text-zinc-400 bg-[#0C0D12] px-2.5 py-1.5 rounded border border-white/[0.06] inline-block">
+                          ferramenta: <span className="text-zinc-200">{curr.tool}</span>
                         </div>
                       )}
                     </div>
                   );
                 })()}
               </div>
-            )}
+            ) : null}
 
-            {/* Alerta de Permissão Interativa se houver */}
+            {/* 3. Autorização Pendente (se houver) */}
             {pendingPermissions.length > 0 && (
-              <div className="bg-amber-950/20 border border-amber-500/40 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+              <div className="bg-[#161412] border border-amber-500/20 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-400 font-medium text-xs">
                     <ShieldAlert className="w-4 h-4" />
-                    AUTORIZAÇÃO DO OPERADOR NECESSÁRIA
+                    <span>Autorização de Operação Requerida</span>
                   </div>
-                  {getRiskBadge(pendingPermissions[0].risk)}
+                  {renderRiskBadge(pendingPermissions[0].risk)}
                 </div>
-                <p className="text-xs text-zinc-300 mb-2">
-                  O Charlie quer executar: <code className="bg-black/50 px-2 py-0.5 rounded text-amber-300 font-mono">{pendingPermissions[0].tool}</code>
+                <p className="text-xs text-zinc-300">
+                  Comando: <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-zinc-200">{pendingPermissions[0].tool}</code>
                 </p>
-                <p className="text-xs text-zinc-400 mb-4">
-                  <strong>Justificativa:</strong> {pendingPermissions[0].reason}
-                </p>
-                <div className="flex flex-wrap gap-2">
+                <p className="text-xs text-zinc-400">{pendingPermissions[0].reason}</p>
+                <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => resolvePermission(pendingPermissions[0].id, "allow_once")}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-200 hover:bg-white text-zinc-950 transition cursor-pointer"
                   >
                     Permitir Uma Vez
                   </button>
                   <button
-                    onClick={() => resolvePermission(pendingPermissions[0].id, "allow_for_task")}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer"
-                  >
-                    Permitir Para Esta Tarefa
-                  </button>
-                  <button
-                    onClick={() => resolvePermission(pendingPermissions[0].id, "trust_in_project")}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition cursor-pointer"
-                  >
-                    Confiar no Projeto
-                  </button>
-                  <button
                     onClick={() => resolvePermission(pendingPermissions[0].id, "deny")}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800 transition cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition cursor-pointer"
                   >
                     Negar
                   </button>
@@ -541,46 +547,56 @@ export const AgentCommandCenter: React.FC = () => {
               </div>
             )}
 
-            {/* Task Graph Simplificado na Overview */}
-            <div className="bg-[#14161E] border border-[#23262D] rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Sequência do Task Graph</h3>
+            {/* 4. Linha do Tempo Vertical Compacta (Task Graph) */}
+            <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-medium text-zinc-300">Linha do Tempo de Execução</h3>
                 <button
                   onClick={() => setActiveTab("tasks")}
-                  className="text-xs text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-xs text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1 cursor-pointer"
                 >
-                  Ver grafo completo <ArrowRight className="w-3 h-3" />
+                  Ver detalhes <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
-              <div className="space-y-2">
+              {/* Vertical Timeline */}
+              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-white/[0.08]">
                 {session.tasks.map((task, idx) => (
-                  <div
-                    key={task.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border text-xs ${
-                      task.status === "running"
-                        ? "bg-blue-950/20 border-blue-500/30 text-zinc-100"
-                        : task.status === "success"
-                        ? "bg-[#0E0F12] border-emerald-900/30 text-zinc-300"
-                        : "bg-[#0E0F12] border-zinc-800/60 text-zinc-500"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-zinc-500 w-4">{idx + 1}.</span>
-                      {task.status === "success" && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-                      {task.status === "running" && <span className="w-3.5 h-3.5 rounded-full bg-blue-400 animate-ping shrink-0" />}
-                      {task.status === "pending" && <Clock className="w-4 h-4 text-zinc-600 shrink-0" />}
-                      {task.status === "failure" && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
-                      <span className="font-medium truncate">{task.title}</span>
+                  <div key={task.id} className="relative flex items-start gap-3">
+                    {/* Marcador da timeline */}
+                    <div className="absolute -left-6 mt-0.5">
+                      {task.status === "success" ? (
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+                          <CheckCircle2 className="w-2.5 h-2.5" />
+                        </div>
+                      ) : task.status === "running" ? (
+                        <div className="w-4 h-4 rounded-full bg-slate-400/20 border border-slate-400 text-slate-300 flex items-center justify-center animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                        </div>
+                      ) : task.status === "failure" ? (
+                        <div className="w-4 h-4 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                        </div>
+                      ) : (
+                        <div className="w-4 h-4 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 flex items-center justify-center text-[9px] font-mono">
+                          {idx + 1}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {task.evidence?.passed && (
-                        <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">
-                          Verificado ✓
-                        </span>
+                    {/* Conteúdo do passo */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-zinc-200 truncate">{task.title}</span>
+                        {task.evidence?.passed && (
+                          <span className="text-[11px] text-zinc-500 font-normal shrink-0">
+                            comprovado
+                          </span>
+                        )}
+                      </div>
+                      {task.tool && (
+                        <p className="text-[11px] text-zinc-500 font-mono mt-0.5">{task.tool}</p>
                       )}
-                      <span className="text-[11px] font-mono text-zinc-500 uppercase">{task.status}</span>
                     </div>
                   </div>
                 ))}
@@ -589,127 +605,115 @@ export const AgentCommandCenter: React.FC = () => {
           </div>
         )}
 
-        {/* ================= TAB 2: TASK GRAPH (DAG) ================= */}
+        {/* ================= TAB 2: TASK GRAPH (DAG COMPLETO COM ACCORDION) ================= */}
         {session && activeTab === "tasks" && (
-          <div className="space-y-4 max-w-5xl mx-auto">
+          <div className="space-y-4 max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-zinc-200">Grafo de Tarefas e Dependências (DAG)</h2>
-              <span className="text-xs text-zinc-500">
-                {session.tasks.length} nós no grafo de execução
-              </span>
+              <div>
+                <h2 className="text-sm font-medium text-zinc-200">Grafo de Tarefas e Dependências</h2>
+                <span className="text-xs text-zinc-500">{session.tasks.length} etapas no plano operacional</span>
+              </div>
             </div>
 
-            <div className="space-y-3">
+            {/* Vertical Timeline com Accordion Interativo */}
+            <div className="relative pl-7 space-y-4 before:absolute before:left-3 before:top-3 before:bottom-3 before:w-[1px] before:bg-white/[0.08]">
               {session.tasks.map((task) => {
                 const isExpanded = !!expandedTasks[task.id];
                 return (
-                  <div
-                    key={task.id}
-                    className={`border rounded-xl transition ${
-                      task.status === "running"
-                        ? "bg-[#141824] border-blue-500/40 shadow-lg shadow-blue-950/20"
-                        : task.status === "success"
-                        ? "bg-[#14161E] border-emerald-900/30"
-                        : task.status === "failure"
-                        ? "bg-[#1E1416] border-rose-900/40"
-                        : "bg-[#14161E] border-[#23262D]"
-                    }`}
-                  >
-                    <div
-                      onClick={() => toggleTaskExpand(task.id)}
-                      className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-800/20"
-                    >
-                      <div className="flex items-center gap-3">
-                        <button className="text-zinc-500">
-                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </button>
+                  <div key={task.id} className="relative">
+                    {/* Marcador na linha */}
+                    <div className="absolute -left-7 mt-3">
+                      {task.status === "success" ? (
+                        <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+                          <CheckCircle2 className="w-3 h-3" />
+                        </div>
+                      ) : task.status === "running" ? (
+                        <div className="w-5 h-5 rounded-full bg-slate-400/20 border border-slate-400 text-slate-300 flex items-center justify-center animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                        </div>
+                      ) : task.status === "failure" ? (
+                        <div className="w-5 h-5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                          <AlertCircle className="w-3 h-3" />
+                        </div>
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 flex items-center justify-center text-[10px] font-mono">
+                          •
+                        </div>
+                      )}
+                    </div>
 
-                        <div className="flex items-center gap-2">
-                          {task.status === "success" && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-                          {task.status === "running" && <span className="w-3 h-3 rounded-full bg-blue-400 animate-ping" />}
-                          {task.status === "pending" && <Clock className="w-4 h-4 text-zinc-600" />}
-                          {task.status === "failure" && <AlertCircle className="w-5 h-5 text-rose-400" />}
+                    {/* Card Accordion */}
+                    <div className="bg-[#12151C] border border-white/[0.08] rounded-xl overflow-hidden transition-all">
+                      <div
+                        onClick={() => toggleTaskExpand(task.id)}
+                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <button className="text-zinc-500 hover:text-zinc-300 transition">
+                            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-medium text-zinc-200 truncate">{task.title}</h4>
+                            <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                              {task.tool || "etapa lógica"} {task.dependencies.length > 0 && `• depende de: ${task.dependencies.join(", ")}`}
+                            </p>
+                          </div>
                         </div>
 
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-zinc-500 font-bold">TASK_{task.id}</span>
-                            <h4 className="text-sm font-semibold text-zinc-200">{task.title}</h4>
-                          </div>
-                          {task.description && (
-                            <p className="text-xs text-zinc-400 mt-0.5">{task.description}</p>
+                        <div className="flex items-center gap-2 text-xs">
+                          {task.evidence?.passed && (
+                            <span className="text-[11px] text-zinc-500 font-normal">verificado</span>
+                          )}
+                          {task.attempts > 1 && (
+                            <span className="text-[10px] font-mono text-zinc-500">
+                              tentativa {task.attempts}
+                            </span>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 text-xs">
-                        {task.tool && (
-                          <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-[#0E0F12] border border-zinc-800 text-blue-300">
-                            {task.tool}
-                          </span>
-                        )}
-                        <span className="font-mono text-zinc-500 text-[11px]">
-                          Tentativas: {task.attempts}/{task.maxAttempts}
-                        </span>
-                        {task.status === "running" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              completeTaskWithEvidence(task.id, "Operação executada com sucesso e comprovada no disco local.", "file");
-                            }}
-                            className="px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
-                          >
-                            Simular Sucesso ✓
-                          </button>
-                        )}
-                        {task.status === "failure" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              retryTask(task.id);
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 cursor-pointer"
-                          >
-                            <RotateCw className="w-3 h-3" /> Replanejar
-                          </button>
-                        )}
-                      </div>
+                      {/* Accordion Expandido com Saída e Evidências */}
+                      {isExpanded && (
+                        <div className="p-4 border-t border-white/[0.06] bg-[#0C0D12] space-y-3 text-xs">
+                          {task.description && (
+                            <p className="text-zinc-400 text-xs">{task.description}</p>
+                          )}
+
+                          {task.args && (
+                            <div>
+                              <span className="text-[11px] font-mono text-zinc-500 block mb-1">Parâmetros:</span>
+                              <pre className="p-2.5 bg-[#08090C] border border-white/[0.06] rounded-lg font-mono text-[11px] text-zinc-300 overflow-x-auto">
+                                {JSON.stringify(task.args, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+
+                          {task.evidence && (
+                            <div>
+                              <span className="text-[11px] font-mono text-zinc-500 block mb-1">Evidência Comprovada:</span>
+                              <div className="p-2.5 bg-[#08090C] border border-emerald-950/40 rounded-lg text-emerald-400 font-mono text-[11px]">
+                                {task.evidence.summary}
+                              </div>
+                            </div>
+                          )}
+
+                          {task.error && (
+                            <div className="p-2.5 bg-rose-950/20 border border-rose-900/30 rounded-lg text-rose-300 font-mono text-[11px]">
+                              {task.error}
+                            </div>
+                          )}
+
+                          {task.status === "failure" && (
+                            <button
+                              onClick={() => retryTask(task.id)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition cursor-pointer"
+                            >
+                              Tentar Novamente
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-
-                    {/* Detalhes Expandidos da Tarefa */}
-                    {isExpanded && (
-                      <div className="px-5 pb-5 pt-2 border-t border-zinc-800/60 bg-[#0E0F12]/50 text-xs space-y-3">
-                        {task.dependencies.length > 0 && (
-                          <div>
-                            <span className="text-zinc-500 font-mono text-[11px]">DEPENDÊNCIAS:</span>
-                            <div className="flex gap-1.5 mt-1">
-                              {task.dependencies.map((dep) => (
-                                <span key={dep} className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[11px]">
-                                  {dep}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {task.evidence && (
-                          <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded-lg">
-                            <div className="flex items-center justify-between text-emerald-400 font-bold text-[11px] mb-1">
-                              <span>EVIDÊNCIA COMPROVADA (VERIFIER)</span>
-                              <span className="font-mono text-zinc-500">{task.evidence.verifiedAt}</span>
-                            </div>
-                            <p className="text-zinc-300">{task.evidence.summary}</p>
-                          </div>
-                        )}
-
-                        {task.error && (
-                          <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg">
-                            <div className="text-rose-400 font-bold text-[11px] mb-1">DIAGNÓSTICO DE FALHA</div>
-                            <p className="text-zinc-300">{task.error}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -719,81 +723,66 @@ export const AgentCommandCenter: React.FC = () => {
 
         {/* ================= TAB 3: PERMISSIONS ================= */}
         {activeTab === "permissions" && (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="max-w-4xl mx-auto space-y-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-zinc-200">Permission Center & Controle de Acesso</h2>
-              <span className="text-xs text-zinc-500">
-                Princípio do Menor Privilégio & Supervisão Humana
-              </span>
+              <div>
+                <h2 className="text-sm font-medium text-zinc-200">Controle de Acesso e Permissões</h2>
+                <span className="text-xs text-zinc-500">Supervisão de segurança do Local Runtime</span>
+              </div>
             </div>
 
             {permissions.length === 0 ? (
-              <div className="p-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-[#14161E]">
-                <Shield className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">Nenhuma solicitação de permissão ativa ou registrada.</p>
-                <p className="text-xs text-zinc-600 mt-1">
-                  Quando o agente tentar executar ações potencialmente perigosas (instalação de pacotes, escrita em diretórios raiz ou comandos do sistema), você poderá revisar aqui.
-                </p>
+              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
+                <Shield className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
+                <p className="text-xs font-medium text-zinc-400">Nenhuma solicitação de permissão pendente.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {permissions.map((perm) => (
                   <div
                     key={perm.id}
-                    className={`border rounded-xl p-5 ${
-                      perm.status === "pending"
-                        ? "bg-amber-950/15 border-amber-500/40 shadow-lg"
-                        : "bg-[#14161E] border-[#23262D] opacity-80"
-                    }`}
+                    className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-3"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-zinc-400">{perm.id}</span>
-                        <h4 className="text-sm font-semibold text-zinc-200">Ferramenta: {perm.tool}</h4>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs font-mono text-zinc-200 bg-[#0C0D12] px-2 py-0.5 rounded border border-white/[0.06]">
+                            {perm.tool}
+                          </code>
+                          {renderRiskBadge(perm.risk)}
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1">{perm.reason}</p>
                       </div>
-                      {getRiskBadge(perm.risk)}
+
+                      <span className="text-[11px] font-mono text-zinc-500">
+                        {new Date(perm.requestedAt).toLocaleTimeString("pt-BR")}
+                      </span>
                     </div>
 
-                    <p className="text-xs text-zinc-300 mb-2">
-                      <strong>Motivo:</strong> {perm.reason}
-                    </p>
-
-                    {perm.command && (
-                      <div className="mb-3 p-2 bg-[#0E0F12] border border-zinc-800 rounded font-mono text-xs text-amber-300">
-                        {perm.command}
-                      </div>
-                    )}
-
                     {perm.status === "pending" ? (
-                      <div className="flex flex-wrap gap-2 pt-2">
+                      <div className="flex flex-wrap gap-2 pt-1 border-t border-white/[0.06]">
                         <button
                           onClick={() => resolvePermission(perm.id, "allow_once")}
-                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-200 hover:bg-white text-zinc-950 transition cursor-pointer"
                         >
                           Permitir Uma Vez
                         </button>
                         <button
-                          onClick={() => resolvePermission(perm.id, "allow_for_task")}
-                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white cursor-pointer"
-                        >
-                          Permitir Para Esta Tarefa
-                        </button>
-                        <button
                           onClick={() => resolvePermission(perm.id, "trust_in_project")}
-                          className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition cursor-pointer"
                         >
                           Confiar no Projeto
                         </button>
                         <button
                           onClick={() => resolvePermission(perm.id, "deny")}
-                          className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800 cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 transition cursor-pointer"
                         >
                           Negar
                         </button>
                       </div>
                     ) : (
-                      <div className="text-[11px] text-zinc-500 font-mono pt-1">
-                        Status da Decisão: <strong className="text-zinc-300 uppercase">{perm.status}</strong>
+                      <div className="text-[11px] text-zinc-500 font-mono">
+                        Decisão: {perm.status}
                       </div>
                     )}
                   </div>
@@ -803,45 +792,41 @@ export const AgentCommandCenter: React.FC = () => {
           </div>
         )}
 
-        {/* ================= TAB 4: EVIDENCE & VERIFIER ================= */}
+        {/* ================= TAB 4: EVIDENCE ================= */}
         {activeTab === "evidence" && (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="max-w-4xl mx-auto space-y-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-zinc-200">Verifier — Evidências Comprovadas</h2>
-              <span className="text-xs text-zinc-500 italic">«Conclusão exige evidência»</span>
+              <div>
+                <h2 className="text-sm font-medium text-zinc-200">Evidências do Verifier</h2>
+                <span className="text-xs text-zinc-500">Comprovações tangíveis coletadas em disco e comandos</span>
+              </div>
             </div>
 
-            {session && session.tasks.some((t) => t.evidence) ? (
+            {(!session || session.tasks.filter((t) => t.evidence).length === 0) ? (
+              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
+                <FileCheck className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
+                <p className="text-xs font-medium text-zinc-400">Nenhuma evidência registrada ainda.</p>
+              </div>
+            ) : (
               <div className="space-y-3">
                 {session.tasks
                   .filter((t) => t.evidence)
                   .map((task) => (
-                    <div key={task.id} className="bg-[#14161E] border border-emerald-900/40 rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <h4 className="text-sm font-semibold text-zinc-200">{task.title}</h4>
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 uppercase">
-                          {task.evidence?.type}
+                    <div
+                      key={task.id}
+                      className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-zinc-200">{task.title}</span>
+                        <span className="text-[11px] font-mono text-zinc-500">
+                          {task.evidence?.verifiedAt ? new Date(task.evidence.verifiedAt).toLocaleTimeString("pt-BR") : ""}
                         </span>
                       </div>
-                      <p className="text-xs text-zinc-300 mt-2 bg-[#0E0F12] p-3 rounded-lg border border-zinc-800/60 font-mono">
+                      <p className="text-emerald-400 font-mono text-[11px] bg-[#0C0D12] p-2.5 rounded-lg border border-white/[0.06]">
                         {task.evidence?.summary}
                       </p>
-                      <div className="mt-2 text-[10px] text-zinc-500 font-mono">
-                        Validado em: {task.evidence?.verifiedAt}
-                      </div>
                     </div>
                   ))}
-              </div>
-            ) : (
-              <div className="p-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-[#14161E]">
-                <FileCheck className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">Nenhuma evidência registrada ainda.</p>
-                <p className="text-xs text-zinc-600 mt-1">
-                  O Verifier avaliará saídas de compilador, testes, hash de arquivos e códigos de saída para comprovar cada tarefa executada.
-                </p>
               </div>
             )}
           </div>
@@ -849,25 +834,22 @@ export const AgentCommandCenter: React.FC = () => {
 
         {/* ================= TAB 5: LOGS ================= */}
         {activeTab === "logs" && (
-          <div className="max-w-5xl mx-auto flex flex-col h-[calc(100vh-210px)]">
-            {/* Filtros e Busca de Logs */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                {(["ALL", "SYSTEM", "AGENT", "TOOL", "PERMISSION", "VERIFIER", "REPLANNER", "ERROR"] as const).map(
-                  (cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setLogFilter(cat)}
-                      className={`px-2.5 py-1 rounded-md font-mono text-[11px] transition ${
-                        logFilter === cat
-                          ? "bg-blue-600 text-white font-bold"
-                          : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  )
-                )}
+          <div className="max-w-4xl mx-auto space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5">
+                {(["ALL", "SYSTEM", "AGENT", "TOOL", "PERMISSION", "VERIFIER", "ERROR"] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setLogFilter(cat)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer ${
+                      logFilter === cat
+                        ? "bg-zinc-200 text-zinc-950 font-semibold"
+                        : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.08]"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
 
               <div className="relative">
@@ -876,35 +858,36 @@ export const AgentCommandCenter: React.FC = () => {
                   type="text"
                   value={logSearch}
                   onChange={(e) => setLogSearch(e.target.value)}
-                  placeholder="Filtrar logs..."
-                  className="pl-8 pr-3 py-1 bg-[#14161E] border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-blue-500 transition w-48"
+                  placeholder="Pesquisar nos registros..."
+                  className="pl-8 pr-3 py-1.5 bg-[#0C0D12] border border-white/[0.08] rounded-lg text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
                 />
               </div>
             </div>
 
-            {/* Console de Logs */}
-            <div className="flex-1 bg-[#0A0B0E] border border-[#23262D] rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-1.5 text-zinc-300">
+            {/* Fundo de terminal limpo em tom carvão */}
+            <div className="p-4 bg-[#0B0C10] border border-white/[0.06] rounded-xl font-mono text-[11px] space-y-1.5 max-h-[500px] overflow-y-auto">
               {filteredLogs.length === 0 ? (
-                <div className="text-zinc-600 py-8 text-center">Nenhum log encontrado para o filtro selecionado.</div>
+                <div className="text-zinc-600">Nenhum registro para exibir.</div>
               ) : (
-                filteredLogs.map((log) => {
-                  let tagColor = "text-blue-400";
-                  if (log.category === "ERROR") tagColor = "text-rose-400";
-                  else if (log.category === "PERMISSION") tagColor = "text-amber-400";
-                  else if (log.category === "VERIFIER") tagColor = "text-emerald-400";
-                  else if (log.category === "REPLANNER") tagColor = "text-purple-400";
-                  else if (log.category === "TOOL") tagColor = "text-cyan-400";
-
-                  return (
-                    <div key={log.id} className="flex items-start gap-2 hover:bg-white/[0.02] py-0.5 px-1 rounded">
-                      <span className="text-zinc-600 select-none text-[11px]">{log.timestamp}</span>
-                      <span className={`font-bold text-[11px] w-24 shrink-0 ${tagColor}`}>
-                        [{log.category}]
-                      </span>
-                      <span className="text-zinc-300 break-all">{log.message}</span>
-                    </div>
-                  );
-                })
+                filteredLogs.map((log) => (
+                  <div key={log.id} className="leading-relaxed flex items-start gap-2">
+                    <span className="text-zinc-600 shrink-0 select-none">[{log.timestamp}]</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded text-[9px] shrink-0 font-bold ${
+                        log.category === "ERROR"
+                          ? "bg-rose-950/60 text-rose-400"
+                          : log.category === "TOOL"
+                          ? "bg-slate-900 text-slate-300"
+                          : log.category === "VERIFIER"
+                          ? "bg-emerald-950/60 text-emerald-400"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      {log.category}
+                    </span>
+                    <span className="text-zinc-300 whitespace-pre-wrap break-all">{log.message}</span>
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -915,45 +898,42 @@ export const AgentCommandCenter: React.FC = () => {
           <div className="max-w-4xl mx-auto space-y-4">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <h2 className="text-sm font-bold text-zinc-200">Process Monitor — Processos Ativos do Sistema</h2>
-                <span className="text-xs text-zinc-500">Monitoramento e telemetria operacional em tempo real</span>
+                <h2 className="text-sm font-medium text-zinc-200">Processos Ativos do Sistema</h2>
+                <span className="text-xs text-zinc-500">Telemetria de processos do Windows em tempo real</span>
               </div>
               <button
                 type="button"
                 onClick={() => refreshProcesses()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
               >
-                <RotateCw className="w-3.5 h-3.5" /> Atualizar Processos
+                <RotateCw className="w-3.5 h-3.5" /> Atualizar
               </button>
             </div>
 
             {processes.length === 0 ? (
-              <div className="p-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-[#14161E]">
-                <Cpu className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">Nenhum subprocesso em execução no momento.</p>
-                <p className="text-xs text-zinc-600 mt-1">
-                  Processos de compilação, testes e terminais executados pelo agente aparecerão listados aqui.
-                </p>
+              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
+                <Cpu className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
+                <p className="text-xs font-medium text-zinc-400">Nenhum processo capturado.</p>
               </div>
             ) : (
-              <div className="bg-[#14161E] border border-[#23262D] rounded-xl overflow-hidden">
+              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#12141A] text-zinc-400 uppercase text-[10px] font-mono border-b border-[#23262D]">
+                  <thead className="bg-[#0C0D12] text-zinc-500 uppercase text-[10px] font-mono border-b border-white/[0.06]">
                     <tr>
-                      <th className="py-2.5 px-4">PID</th>
-                      <th className="py-2.5 px-4">Processo</th>
-                      <th className="py-2.5 px-4">CPU</th>
-                      <th className="py-2.5 px-4">Status</th>
+                      <th className="py-2.5 px-4 font-normal">PID</th>
+                      <th className="py-2.5 px-4 font-normal">Processo</th>
+                      <th className="py-2.5 px-4 font-normal">CPU</th>
+                      <th className="py-2.5 px-4 font-normal">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/60 font-mono">
+                  <tbody className="divide-y divide-white/[0.04] font-mono">
                     {processes.map((proc) => (
-                      <tr key={proc.pid} className="hover:bg-zinc-800/20">
-                        <td className="py-2.5 px-4 text-zinc-400">{proc.pid}</td>
-                        <td className="py-2.5 px-4 font-semibold text-zinc-200">{proc.name}</td>
-                        <td className="py-2.5 px-4 text-blue-400">{proc.cpu}%</td>
-                        <td className="py-2.5 px-4">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                      <tr key={proc.pid} className="hover:bg-white/[0.02]">
+                        <td className="py-2 px-4 text-zinc-500">{proc.pid}</td>
+                        <td className="py-2 px-4 font-sans text-zinc-200">{proc.name}</td>
+                        <td className="py-2 px-4 text-zinc-400">{proc.cpu}%</td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] text-zinc-500">
                             {proc.status}
                           </span>
                         </td>
@@ -968,49 +948,47 @@ export const AgentCommandCenter: React.FC = () => {
 
         {/* ================= TAB 7: HISTORY ================= */}
         {activeTab === "history" && (
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="max-w-4xl mx-auto space-y-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold text-zinc-200">Histórico de Missões do Agente</h2>
-                <span className="text-xs text-zinc-500">
-                  Registro persistente em disco (SQLite/Local) de todas as sessões executadas
-                </span>
+                <h2 className="text-sm font-medium text-zinc-200">Histórico de Missões do Agente</h2>
+                <span className="text-xs text-zinc-500">Registro persistente em disco de todas as sessões executadas</span>
               </div>
               {history.length > 0 && (
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm("Deseja realmente limpar todo o histórico de missões?")) {
+                    if (confirm("Deseja realmente limpar todo o histórico?")) {
                       clearHistory();
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/50 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs text-zinc-500 hover:text-rose-400 transition cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Limpar Histórico
+                  <Trash2 className="w-3.5 h-3.5" /> Limpar
                 </button>
               )}
             </div>
 
             {/* Cartões de Métricas Agregadas */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Total de Missões</span>
-                <p className="text-xl font-bold text-zinc-100 mt-1">{historyMetrics.totalSessions}</p>
+              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase">Total de Missões</span>
+                <p className="text-lg font-medium text-zinc-100 mt-0.5">{historyMetrics.totalSessions}</p>
               </div>
 
-              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Taxa de Sucesso</span>
-                <p className="text-xl font-bold text-emerald-400 mt-1">{historyMetrics.successRate}%</p>
+              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase">Taxa de Sucesso</span>
+                <p className="text-lg font-medium text-zinc-100 mt-0.5">{historyMetrics.successRate}%</p>
               </div>
 
-              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Missões Concluídas</span>
-                <p className="text-xl font-bold text-blue-400 mt-1">{historyMetrics.completedSessions}</p>
+              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase">Concluídas</span>
+                <p className="text-lg font-medium text-zinc-100 mt-0.5">{historyMetrics.completedSessions}</p>
               </div>
 
-              <div className="p-3.5 bg-[#14161E] border border-[#23262D] rounded-xl">
-                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500">Tarefas Verificadas</span>
-                <p className="text-xl font-bold text-indigo-400 mt-1">
+              <div className="p-3 bg-[#12151C] border border-white/[0.08] rounded-xl">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase">Tarefas Validadas</span>
+                <p className="text-lg font-medium text-zinc-100 mt-0.5 font-mono">
                   {historyMetrics.completedTasks} / {historyMetrics.totalTasks}
                 </p>
               </div>
@@ -1021,10 +999,10 @@ export const AgentCommandCenter: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setHistoryFilter("ALL")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
                   historyFilter === "ALL"
-                    ? "bg-blue-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    ? "bg-zinc-200 text-zinc-950 font-semibold"
+                    : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 Todas ({history.length})
@@ -1032,10 +1010,10 @@ export const AgentCommandCenter: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setHistoryFilter("completed")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
                   historyFilter === "completed"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    ? "bg-zinc-200 text-zinc-950 font-semibold"
+                    : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 Concluídas ({history.filter((s) => s.status === "completed").length})
@@ -1043,10 +1021,10 @@ export const AgentCommandCenter: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setHistoryFilter("failed")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
                   historyFilter === "failed"
-                    ? "bg-rose-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    ? "bg-zinc-200 text-zinc-950 font-semibold"
+                    : "bg-white/[0.04] text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 Falhas ({history.filter((s) => s.status === "failed").length})
@@ -1055,12 +1033,9 @@ export const AgentCommandCenter: React.FC = () => {
 
             {/* Lista de Sessões */}
             {history.filter((s) => historyFilter === "ALL" || s.status === historyFilter).length === 0 ? (
-              <div className="p-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-[#14161E]">
-                <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium">Nenhuma missão no histórico.</p>
-                <p className="text-xs text-zinc-600 mt-1">
-                  Inicie um objetivo no Command Center e as missões concluídas serão salvas automaticamente aqui.
-                </p>
+              <div className="p-10 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]">
+                <Clock className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
+                <p className="text-xs font-medium text-zinc-400">Nenhuma missão no histórico.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1069,20 +1044,18 @@ export const AgentCommandCenter: React.FC = () => {
                   .map((item) => (
                     <div
                       key={item.id}
-                      className="p-4 bg-[#14161E] border border-[#23262D] rounded-xl hover:border-zinc-700 transition space-y-3"
+                      className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-2.5"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm text-zinc-100">{item.goal}</span>
-                            {getStatusBadge(item.status)}
+                            <span className="font-medium text-xs text-zinc-100">{item.goal}</span>
+                            {renderStatusBadge(item.status)}
                           </div>
-                          <div className="text-[11px] text-zinc-500 flex items-center gap-3">
-                            <span>Sessão: {item.id}</span>
-                            <span>•</span>
-                            <span>Projeto: {item.project || "Charlie"}</span>
-                            <span>•</span>
+                          <div className="text-[11px] text-zinc-500 flex items-center gap-2 font-mono">
                             <span>{new Date(item.startedAt).toLocaleString("pt-BR")}</span>
+                            <span>•</span>
+                            <span>{item.tasks?.filter((t) => t.status === "success").length || 0} de {item.tasks?.length || 0} tarefas</span>
                           </div>
                         </div>
 
@@ -1093,16 +1066,14 @@ export const AgentCommandCenter: React.FC = () => {
                               loadSession(item);
                               setActiveTab("overview");
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs bg-zinc-800 hover:bg-zinc-700 text-blue-400 transition cursor-pointer"
-                            title="Carregar esta missão no Command Center"
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 transition cursor-pointer"
                           >
                             <FolderOpen className="w-3.5 h-3.5" /> Carregar
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteHistorySession(item.id)}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 transition cursor-pointer"
-                            title="Excluir do histórico"
+                            className="p-1 rounded text-zinc-500 hover:text-rose-400 transition cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1110,28 +1081,10 @@ export const AgentCommandCenter: React.FC = () => {
                       </div>
 
                       {item.summary && (
-                        <p className="text-xs text-zinc-400 bg-[#0E0F12] p-2.5 rounded-lg border border-[#1E2028]">
+                        <p className="text-xs text-zinc-400 bg-[#0C0D12] p-2 rounded border border-white/[0.04]">
                           {item.summary}
                         </p>
                       )}
-
-                      <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-zinc-800/40">
-                        <span>
-                          {item.tasks?.filter((t) => t.status === "success").length || 0} de {item.tasks?.length || 0} tarefas concluídas
-                        </span>
-                        <div className="w-36 bg-[#0E0F12] rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full ${
-                              item.status === "completed"
-                                ? "bg-emerald-500"
-                                : item.status === "failed"
-                                ? "bg-rose-500"
-                                : "bg-blue-500"
-                            }`}
-                            style={{ width: `${item.progress}%` }}
-                          />
-                        </div>
-                      </div>
                     </div>
                   ))}
               </div>
