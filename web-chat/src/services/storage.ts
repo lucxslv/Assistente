@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   DRAFTS: 'charlie_web_drafts',
   THREADS_CACHE: 'charlie_web_threads_cache',
   MESSAGES_CACHE_PREFIX: 'charlie_web_msg_cache_',
+  ACTIVE_THREAD: 'charlie_web_active_thread',
 };
 
 // Safe JSON parse helper
@@ -92,9 +93,22 @@ export const StorageService = {
     localStorage.setItem(`${STORAGE_KEYS.MESSAGES_CACHE_PREFIX}${threadId}`, JSON.stringify(messages));
   },
 
+  // Active Thread ID (survives page reload)
+  getActiveThreadId(): string | null {
+    return localStorage.getItem(STORAGE_KEYS.ACTIVE_THREAD);
+  },
+  setActiveThreadId(threadId: string | null): void {
+    if (threadId) {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_THREAD, threadId);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_THREAD);
+    }
+  },
+
   // Clear all session data
   clearSession(): void {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     localStorage.removeItem(STORAGE_KEYS.USER);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_THREAD);
   }
 };

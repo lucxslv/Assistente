@@ -6,6 +6,7 @@ export interface SendMessageOptions {
   message: string;
   threadId: string;
   skipTts?: boolean;
+  history?: Array<{ role: string; content: string }>;
   onToken: (token: string) => void;
   onToolCall?: (name: string, args: Record<string, unknown>) => void;
   onDone: (fullReply: string) => void;
@@ -30,7 +31,7 @@ class ChatStreamService {
    * Envia mensagem via SSE (Server-Sent Events) - Recomendado e mais robusto para HTTP
    */
   public async streamSSE(options: SendMessageOptions): Promise<void> {
-    const { message, threadId, skipTts = true, onToken, onToolCall, onDone, onError, signal } = options;
+    const { message, threadId, skipTts = true, history, onToken, onToolCall, onDone, onError, signal } = options;
     try {
       let baseUrl = api.getBaseUrl();
       let url = `${baseUrl}/chat/stream`;
@@ -45,6 +46,7 @@ class ChatStreamService {
           message,
           thread_id: threadId,
           skip_tts: skipTts,
+          history,
         }),
         signal,
       });
@@ -60,6 +62,7 @@ class ChatStreamService {
             message,
             thread_id: threadId,
             skip_tts: skipTts,
+            history,
           }),
           signal,
         });
@@ -157,7 +160,7 @@ class ChatStreamService {
    * Fallback Síncrono REST (POST /chat)
    */
   public async sendRest(options: SendMessageOptions): Promise<void> {
-    const { message, threadId, skipTts = true, onToken, onDone, onError, signal } = options;
+    const { message, threadId, skipTts = true, history, onToken, onDone, onError, signal } = options;
     try {
       const res = await api.post<{ reply: string; thread_id: string }>(
         '/chat',
@@ -165,6 +168,7 @@ class ChatStreamService {
           message,
           thread_id: threadId,
           skip_tts: skipTts,
+          history,
         },
         { signal }
       );
