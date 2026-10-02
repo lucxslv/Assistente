@@ -91,8 +91,13 @@ class ContextManager:
             f"   - Data e Hora: {formatted_date}\n"
             f"   - Período do Dia: {periodo}\n"
             f"   - Fuso Horário Local: America/Sao_Paulo (UTC-3)",
-            f"2. Plataforma:\n"
-            f"   - Ambiente: Charlie Cloud Brain v2.0" if is_cloud else "   - Ambiente: Charlie Local Platform",
+            f"2. Plataforma e Ambiente Operacional:\n"
+            f"   - Computador do Usuário: Microsoft Windows 11 / Windows NT x64 (Desktop Local)\n"
+            f"   - Terminal do Usuário: PowerShell e CMD no Windows\n"
+            f"   - Pastas Pessoais: C:\\Users\\... (Área de Trabalho/Desktop, Documentos, Downloads)\n"
+            f"   - Papel do Servidor Nuvem: O cérebro em nuvem ({'Vercel Serverless' if is_cloud else 'Local'}) é apenas o motor de IA/API. "
+            f"O servidor NÃO possui arquivos do usuário, NÃO possui terminal do usuário e JAMAIS deve ser inspecionado. "
+            f"Todas as ações no disco, arquivos, processos e comandos pertencem exclusivamente ao Windows do usuário.",
         ]
 
         if user_name:

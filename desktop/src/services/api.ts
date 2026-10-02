@@ -166,6 +166,9 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
   const token = getStoredToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "X-Client-Platform": "Windows",
+    "X-Client-Type": "desktop",
+    "X-Client-Name": "Charlie Desktop",
     ...extraHeaders,
   };
   if (token) {

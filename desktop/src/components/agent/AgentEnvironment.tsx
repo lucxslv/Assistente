@@ -23,6 +23,7 @@ import {
 import { AgentSidePanel } from "../workspace/AgentSidePanel";
 import { sendChatMessageStream } from "../../services/api";
 import { agentRuntimeStore } from "../../services/agentRuntimeStore";
+import { executeDeviceTool } from "../../services/deviceExecutor";
 
 interface AgentEnvironmentProps {
   session: AgentSession | null;
@@ -239,25 +240,33 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
             // Registra no Agent Runtime Store
             const toolName = event.data?.name || "";
             const toolArgs = event.data?.args || {};
-            if (toolName === "exec_command") {
-              try {
-                agentRuntimeStore.addTerminal({
-                  name: `Terminal ${toolArgs.command || "Exec"}`,
-                  shell: "powershell",
-                  command: toolArgs.command || "",
-                  output: "Iniciando comando...",
-                  status: "running",
-                });
-              } catch {}
-            } else if (toolName === "read_file" && toolArgs.file_path) {
-              try {
-                agentRuntimeStore.recordFile({
-                  name: toolArgs.file_path.split(/[/\\]/).pop() || toolArgs.file_path,
-                  path: toolArgs.file_path,
-                  category: "analyzed",
-                });
-              } catch {}
+
+            if (toolArgs?.path || toolArgs?.file_path) {
+              const p = String(toolArgs.path || toolArgs.file_path);
+              agentRuntimeStore.recordFile({
+                path: p,
+                name: p.split(/[/\\]/).pop() || p,
+                category: toolName.includes("write") ? "modified" : "analyzed",
+              });
             }
+
+            // Executa a ferramenta nativamente no Windows via Tauri
+            executeDeviceTool(toolName, toolArgs)
+              .then((localOutput) => {
+                console.log(`[AgentEnvironment] Ferramenta local '${toolName}' executada no Windows:`, localOutput);
+                if (toolName === "execute_command" || toolName === "run_command" || toolName === "exec_command") {
+                  agentRuntimeStore.addTerminal({
+                    name: `PowerShell: ${toolArgs.command || "Exec"}`,
+                    shell: "powershell",
+                    command: toolArgs.command || "",
+                    output: localOutput,
+                    status: "completed",
+                  });
+                }
+              })
+              .catch((err) => {
+                console.warn(`[AgentEnvironment] Falha ao executar '${toolName}' no Windows:`, err);
+              });
           } else if (event.type === "tool_end") {
             setMessages((prev) =>
               prev.map((msg) => {
@@ -273,12 +282,12 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
 
             const toolName = event.data?.name || "";
             const toolResult = event.data?.result;
-            if (toolName === "exec_command" && toolResult) {
+            if ((toolName === "exec_command" || toolName === "execute_command" || toolName === "run_command") && toolResult) {
               try {
                 agentRuntimeStore.addTerminal({
                   name: `Comando concluído`,
                   shell: "powershell",
-                  command: "exec_command",
+                  command: "PowerShell",
                   output: typeof toolResult === "string" ? toolResult : JSON.stringify(toolResult),
                   status: "completed",
                 });

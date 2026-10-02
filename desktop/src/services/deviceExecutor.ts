@@ -140,9 +140,23 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
       return summary || "Diretório vazio.";
     }
 
+    if (name === "replace_in_file") {
+      const filePath = String(args.path || "");
+      const targetText = String(args.target_text || "");
+      const replacementText = String(args.replacement_text || "");
+      const current = await readLocalFile(filePath);
+      if (!current.includes(targetText)) {
+        return `Erro: Texto alvo '${targetText}' não foi encontrado no arquivo local.`;
+      }
+      const updated = current.replace(targetText, replacementText);
+      await invoke<string>("write_local_file", { path: filePath, content: updated });
+      return `Sucesso: Texto substituído com sucesso no arquivo '${filePath}'.`;
+    }
+
     if (
       name === "execute_command" ||
       name === "run_command" ||
+      name === "exec_command" ||
       name === "shell_exec" ||
       name === "powershell" ||
       name === "cmd"

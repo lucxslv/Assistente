@@ -210,7 +210,7 @@ async def chat_ws(websocket: WebSocket):
         client_id=client_id,
         client_type="desktop",
         name="Charlie Desktop Client",
-        platform=platform.system(),
+        platform="Windows",
     )
 
     device_broker.register_device_connection(websocket)
