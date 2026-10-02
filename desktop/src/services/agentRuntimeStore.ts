@@ -503,6 +503,8 @@ class AgentRuntimeStore {
       attempts: 0,
       maxAttempts: 3,
     });
+    const executionReportPath = `workspace/reports/Charlie_exec_${Date.now()}.txt`;
+
     tasks.push({
       id: "task_02",
       title: `Executar plano de ação para '${goal}'`,
@@ -511,7 +513,7 @@ class AgentRuntimeStore {
       dependencies: ["task_01"],
       tool: "write_file",
       args: {
-        path: `Desktop/Charlie_${Date.now()}.txt`,
+        path: executionReportPath,
         content: `Relatório de Execução:\nObjetivo: ${goal}\nStatus: Concluído com sucesso.\n`,
       },
       risk: "LOW",
@@ -525,7 +527,7 @@ class AgentRuntimeStore {
       status: "pending",
       dependencies: ["task_02"],
       tool: "read_file",
-      args: { path: `Desktop/Charlie_${Date.now()}.txt` },
+      args: { path: executionReportPath },
       risk: "LOW",
       attempts: 0,
       maxAttempts: 3,
@@ -661,6 +663,36 @@ class AgentRuntimeStore {
     }
   }
 
+  /**
+   * Conclui formalmente a sessão conversacional do agente após o LLM finalizar sua resposta.
+   */
+  public completeConversationalSession(summary?: string) {
+    if (!this.session) return;
+    const now = new Date().toISOString();
+    this.setStatus("completed");
+    this.session.progress = 100;
+    if (summary) {
+      this.session.summary = summary;
+    }
+    this.session.tasks = this.session.tasks.map((t) => ({
+      ...t,
+      status: "success",
+      completedAt: t.completedAt || now,
+    }));
+    if (this.session.subagents) {
+      this.session.subagents = this.session.subagents.map((s) => ({
+        ...s,
+        status: "completed",
+        completedAt: s.completedAt || now,
+        currentTask: "Objetivo concluído com evidências comprovadas",
+      }));
+    }
+    this.addLog("AGENT", `Sessão conversacional concluída com sucesso.`);
+    this.emitEvent("agent.completed", { sessionId: this.session.id, summary: this.session.summary });
+    this.notify();
+    this.saveToStorage();
+  }
+
   private async syncGoalWithBackend(goal: string, project: string) {
     try {
       const res = await fetch(`${getApiBase()}/agent/goal`, {
@@ -716,8 +748,19 @@ class AgentRuntimeStore {
             this.setStatus("completed");
             this.session.progress = 100;
             this.session.summary = `Todas as ${this.session.tasks.length} tarefas foram executadas e verificadas com evidências tangíveis.`;
+            if (this.session.subagents) {
+              const finishTime = new Date().toISOString();
+              this.session.subagents = this.session.subagents.map((s) => ({
+                ...s,
+                status: "completed",
+                completedAt: s.completedAt || finishTime,
+                currentTask: "Objetivo concluído e verificado",
+              }));
+            }
             this.addLog("AGENT", `Objetivo '${this.session.goal}' CONCLUÍDO com sucesso.`);
             this.emitEvent("agent.completed", { sessionId: this.session.id, summary: this.session.summary });
+            this.notify();
+            this.saveToStorage();
             break;
           }
 

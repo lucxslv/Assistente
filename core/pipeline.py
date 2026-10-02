@@ -83,8 +83,15 @@ class AssistantPipeline:
         thread_id: str | None = None,
         user_id: str | None = None,
         user_name: str | None = None,
+        tool_results: list[dict] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
+        import os
+        import uuid
+        from tools.registry import ToolScope
+
+        is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
             uid = user_id or current_user_id_var.get()
@@ -95,8 +102,20 @@ class AssistantPipeline:
 
         yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias..."})
 
+        # Registra resultados de ferramentas enviadas pelo cliente Desktop se houver
+        if tool_results:
+            for tr in tool_results:
+                t_name = tr.get("name", "tool")
+                t_res = tr.get("result", "")
+                t_cid = tr.get("call_id")
+                self.memory.add_tool_result(t_name, t_res, tool_call_id=t_cid)
+
+        # Registra mensagem de usuário se houver texto
+        if user_text and user_text.strip():
+            self.memory.add_user(user_text)
+
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
-        route_decision = self.router.route(user_text)
+        route_decision = self.router.route(user_text or "continuar análise do sistema")
         logger.info(f"Rota selecionada: {route_decision.mode.value} -> {route_decision.model_name} ({route_decision.reason})")
 
         # Etapa 4: Contexto Inteligente & Presença
@@ -104,7 +123,7 @@ class AssistantPipeline:
         context_str = self.context_manager.build_context(active_thread_id=thread_id, user_name=uname)
 
         # Etapa 5: Recuperador de Memória Semântica (RAG) estritamente isolado pelo user_id
-        memory_str = self.retriever.get_summary_context(query=user_text, user_id=uid)
+        memory_str = self.retriever.get_summary_context(query=user_text or "sistema", user_id=uid)
 
         # Etapa 6: Selecionador de Ferramentas e Configuração do Prompt Adaptativo
         system_prompt = build_system_prompt(
@@ -117,12 +136,12 @@ class AssistantPipeline:
             user_text=user_text,
         )
 
-        self.memory.add_user(user_text)
         active_tools = self.tools.get_schemas()
 
         MAX_ITERATIONS = 5
         iterations = 0
         final_reply = ""
+        emitted_any_token = False
 
         while iterations < MAX_ITERATIONS:
             iterations += 1
@@ -142,6 +161,7 @@ class AssistantPipeline:
                     if chunk.text:
                         iteration_reply += chunk.text
                         if not chunk.tool_calls:
+                            emitted_any_token = True
                             yield StreamEvent(type="token", data={"token": chunk.text})
             except Exception as e:
                 logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
@@ -158,6 +178,7 @@ class AssistantPipeline:
                         if chunk.text:
                             iteration_reply += chunk.text
                             if not chunk.tool_calls:
+                                emitted_any_token = True
                                 yield StreamEvent(type="token", data={"token": chunk.text})
                 else:
                     raise
@@ -168,13 +189,53 @@ class AssistantPipeline:
 
             self.memory.add_assistant_tool_calls(tool_calls)
 
-            # Executa ferramentas notificando o stream
+            # Notifica início das ferramentas
+            client_tools_to_exec = []
             for call in tool_calls:
-                tool_scope = self.tools.get_scope(call.name).value
-                yield StreamEvent(type="tool_start", data={"name": call.name, "args": call.arguments, "scope": tool_scope})
-                res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=call.id)
-                self.memory.add_tool_result(call.name, res, tool_call_id=call.id)
-                yield StreamEvent(type="tool_end", data={"name": call.name, "result": res, "scope": tool_scope})
+                scope_enum = self.tools.get_scope(call.name)
+                c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
+                yield StreamEvent(
+                    type="tool_start",
+                    data={
+                        "name": call.name,
+                        "args": call.arguments,
+                        "scope": scope_enum.value,
+                        "call_id": c_id,
+                    },
+                )
+                if is_cloud and scope_enum == ToolScope.DEVICE:
+                    client_tools_to_exec.append({
+                        "call_id": c_id,
+                        "name": call.name,
+                        "args": call.arguments,
+                    })
+
+            # Se estiver na nuvem e houver ferramentas de dispositivo, despacha para execução física no Windows via Desktop
+            if client_tools_to_exec:
+                yield StreamEvent(
+                    type="client_tool_request",
+                    data={
+                        "thread_id": thread_id,
+                        "tools": client_tools_to_exec,
+                    },
+                )
+                return
+
+            # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
+            for call in tool_calls:
+                scope_enum = self.tools.get_scope(call.name)
+                c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
+                res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id)
+                self.memory.add_tool_result(call.name, res, tool_call_id=c_id)
+                yield StreamEvent(
+                    type="tool_end",
+                    data={
+                        "name": call.name,
+                        "result": res,
+                        "scope": scope_enum.value,
+                        "call_id": c_id,
+                    },
+                )
 
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 
@@ -187,12 +248,15 @@ class AssistantPipeline:
         final_reply = re.sub(r'\{.*?"name".*?\}', '', final_reply, flags=re.DOTALL).strip()
         final_reply = re.sub(r'\{.*?"action".*?\}', '', final_reply, flags=re.DOTALL).strip()
         if not final_reply:
-            final_reply = "Ação concluída."
+            final_reply = "Ação concluída com sucesso."
 
         if not self.planner.validate_response(final_reply):
             final_reply = "Desculpe, ocorreu um erro ao gerar a resposta."
 
         self.memory.add_assistant(final_reply)
+
+        if not emitted_any_token and final_reply and final_reply.strip():
+            yield StreamEvent(type="token", data={"token": final_reply})
 
         # Etapa 10: Memory Extractor & Aprendizado Contínuo (executa em background sem travar o stream)
         try:

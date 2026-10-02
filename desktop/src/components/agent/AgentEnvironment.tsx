@@ -23,7 +23,6 @@ import {
 import { AgentSidePanel } from "../workspace/AgentSidePanel";
 import { sendChatMessageStream } from "../../services/api";
 import { agentRuntimeStore } from "../../services/agentRuntimeStore";
-import { executeDeviceTool } from "../../services/deviceExecutor";
 
 interface AgentEnvironmentProps {
   session: AgentSession | null;
@@ -147,6 +146,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputPrompt, setInputPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [statusText, setStatusText] = useState("");
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isSidePanelWide, setIsSidePanelWide] = useState(false);
 
@@ -249,24 +249,6 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                 category: toolName.includes("write") ? "modified" : "analyzed",
               });
             }
-
-            // Executa a ferramenta nativamente no Windows via Tauri
-            executeDeviceTool(toolName, toolArgs)
-              .then((localOutput) => {
-                console.log(`[AgentEnvironment] Ferramenta local '${toolName}' executada no Windows:`, localOutput);
-                if (toolName === "execute_command" || toolName === "run_command" || toolName === "exec_command") {
-                  agentRuntimeStore.addTerminal({
-                    name: `PowerShell: ${toolArgs.command || "Exec"}`,
-                    shell: "powershell",
-                    command: toolArgs.command || "",
-                    output: localOutput,
-                    status: "completed",
-                  });
-                }
-              })
-              .catch((err) => {
-                console.warn(`[AgentEnvironment] Falha ao executar '${toolName}' no Windows:`, err);
-              });
           } else if (event.type === "tool_end") {
             setMessages((prev) =>
               prev.map((msg) => {
@@ -292,6 +274,28 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   status: "completed",
                 });
               } catch {}
+            }
+          } else if (event.type === "done") {
+            const reply = event.data?.reply || "";
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMsgId
+                  ? {
+                      ...msg,
+                      content: msg.content || reply || "Ação concluída com sucesso.",
+                    }
+                  : msg
+              )
+            );
+            agentRuntimeStore.completeConversationalSession(reply || "Missão concluída pelo agente.");
+            setStatusText("");
+          } else if (event.type === "status") {
+            const st =
+              typeof event.data === "string"
+                ? event.data
+                : event.data?.text || event.data?.status || "";
+            if (st) {
+              setStatusText(st);
             }
           } else if (event.type === "error") {
             const errStr =
@@ -329,6 +333,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
       );
     } finally {
       setIsLoading(false);
+      setStatusText("");
     }
   };
 
@@ -556,7 +561,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   ) : isLoading && msg.type === "assistant_message" ? (
                     <div className="flex items-center gap-2 text-zinc-500 text-xs py-1">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                      <span>Raciocinando e preparando plano...</span>
+                      <span>{statusText || "Raciocinando e preparando plano..."}</span>
                     </div>
                   ) : null}
                 </div>

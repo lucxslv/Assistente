@@ -1,5 +1,6 @@
 import { Message, Settings, Thread, StreamEvent } from "../types";
 import { invoke } from "@tauri-apps/api/core";
+import { executeDeviceTool } from "./deviceExecutor";
 
 export interface LocalSystemMetrics {
   cpu_percent: number;
@@ -393,15 +394,25 @@ export async function sendChatMessageStream(
   message: string,
   threadId: string | null,
   onEvent: (event: StreamEvent) => void,
-  skipTts: boolean = true
+  skipTts: boolean = true,
+  toolResults?: Array<{ call_id: string; name: string; result: string }>
 ): Promise<void> {
   let base = getApiBase();
   let res: Response;
+  const payload: any = {
+    message,
+    thread_id: threadId,
+    skip_tts: skipTts,
+  };
+  if (toolResults && toolResults.length > 0) {
+    payload.tool_results = toolResults;
+  }
+
   try {
     res = await fetch(`${base}/chat/stream`, {
       method: "POST",
       headers: getAuthHeaders(),
-      body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     if (base === LOCAL_API) {
@@ -411,7 +422,7 @@ export async function sendChatMessageStream(
       res = await fetch(`${base}/chat/stream`, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+        body: JSON.stringify(payload),
       });
     } else {
       throw err;
@@ -425,6 +436,9 @@ export async function sendChatMessageStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+
+  let clientToolCalls: Array<{ call_id: string; name: string; args: any }> = [];
+  let returnedThreadId: string | null = threadId;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -451,6 +465,11 @@ export async function sendChatMessageStream(
         try {
           const parsed = JSON.parse(eventDataStr);
           onEvent({ type: eventType, data: parsed });
+
+          if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
+            clientToolCalls = parsed.tools || [];
+            if (parsed.thread_id) returnedThreadId = parsed.thread_id;
+          }
         } catch (e) {
           console.error("Erro ao fazer parse do evento SSE:", e, eventDataStr);
         }
@@ -469,10 +488,52 @@ export async function sendChatMessageStream(
       try {
         const parsed = JSON.parse(eventDataStr);
         onEvent({ type: eventType, data: parsed });
+        if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
+          clientToolCalls = parsed.tools || [];
+          if (parsed.thread_id) returnedThreadId = parsed.thread_id;
+        }
       } catch (e) {
         // ignore
       }
     }
+  }
+
+  // Se o backend solicitou execução física de ferramentas no computador local (Windows)
+  if (clientToolCalls.length > 0) {
+    const results: Array<{ call_id: string; name: string; result: string }> = [];
+
+    for (const call of clientToolCalls) {
+      onEvent({
+        type: "status",
+        data: { status: "executing", text: `Executando no Windows: ${call.name}...` },
+      });
+      try {
+        const output = await executeDeviceTool(call.name, call.args || {});
+        results.push({
+          call_id: call.call_id,
+          name: call.name,
+          result: output,
+        });
+        onEvent({
+          type: "tool_end",
+          data: { name: call.name, result: output },
+        });
+      } catch (err: any) {
+        const errStr = `Erro ao executar no dispositivo: ${err?.message || err}`;
+        results.push({
+          call_id: call.call_id,
+          name: call.name,
+          result: errStr,
+        });
+        onEvent({
+          type: "tool_end",
+          data: { name: call.name, result: errStr },
+        });
+      }
+    }
+
+    // Continua recursivamente enviando os dados reais coletados de volta para a IA finalizar a resposta
+    return await sendChatMessageStream("", returnedThreadId, onEvent, skipTts, results);
   }
 }
 

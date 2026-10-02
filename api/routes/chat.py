@@ -34,9 +34,10 @@ def get_pipeline() -> AssistantPipeline:
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = ""
     thread_id: Optional[str] = None
     skip_tts: bool = True
+    tool_results: Optional[list[dict]] = None
 
 
 async def _prepare_thread_and_store_user_message(
@@ -69,7 +70,7 @@ async def _prepare_thread_and_store_user_message(
     if pool:
         async with pool.acquire() as conn:
             existing = await conn.fetchrow('SELECT id, name, "userId" FROM "Thread" WHERE id = $1', t_uuid)
-            title = message[:35] + ("..." if len(message) > 35 else "")
+            title = (message[:35] + ("..." if len(message) > 35 else "")) if (message and message.strip()) else "Ação do Agente"
 
             if not existing:
                 await conn.execute("""
@@ -89,7 +90,7 @@ async def _prepare_thread_and_store_user_message(
                         UPDATE "Thread" SET "userId" = $1, "userIdentifier" = $2 WHERE id = $3
                     """, u_uuid, u_ident, t_uuid)
 
-                if existing["name"] in ("Novo Chat", "Nova conversa", "Conversa sem título", None, ""):
+                if message and message.strip() and existing["name"] in ("Novo Chat", "Nova conversa", "Conversa sem título", None, ""):
                     await conn.execute("""
                         UPDATE "Thread" SET name = $1, "updatedAt" = $2 WHERE id = $3
                     """, title, now, t_uuid)
@@ -98,12 +99,13 @@ async def _prepare_thread_and_store_user_message(
                         UPDATE "Thread" SET "updatedAt" = $1 WHERE id = $2
                     """, now, t_uuid)
 
-            # Salva mensagem do usuário vinculada à conversa
-            user_msg_id = str(uuid.uuid4())
-            await conn.execute("""
-                INSERT INTO "Step" (id, "threadId", name, type, output, "createdAt")
-                VALUES ($1, $2, $3, $4, $5, $6)
-            """, uuid.UUID(user_msg_id), t_uuid, "Usuário", "user_message", message, now)
+            # Salva mensagem do usuário vinculada à conversa se houver texto
+            if message and message.strip():
+                user_msg_id = str(uuid.uuid4())
+                await conn.execute("""
+                    INSERT INTO "Step" (id, "threadId", name, type, output, "createdAt")
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                """, uuid.UUID(user_msg_id), t_uuid, "Usuário", "user_message", message, now)
 
     return thread_id
 
@@ -111,7 +113,7 @@ async def _prepare_thread_and_store_user_message(
 async def _store_assistant_message(thread_id: str, reply: str):
     """Persiste a resposta final do Charlie no Supabase."""
     pool = await get_or_init_db_pool()
-    if pool and reply:
+    if pool and reply and reply.strip():
         try:
             t_uuid = uuid.UUID(thread_id)
             asst_msg_id = str(uuid.uuid4())
@@ -174,6 +176,7 @@ async def chat_stream_sse(req: ChatRequest, user: dict = Depends(get_current_use
                 thread_id=thread_id,
                 user_id=str(user["id"]),
                 user_name=user.get("name"),
+                tool_results=req.tool_results,
             ):
                 if ev.type == "token":
                     final_reply += ev.data.get("token", "")
@@ -187,7 +190,8 @@ async def chat_stream_sse(req: ChatRequest, user: dict = Depends(get_current_use
             yield StreamEvent(type="error", data={"error": str(e)}).to_sse()
         finally:
             state.set_status(CharlieStatus.IDLE)
-            await _store_assistant_message(thread_id, final_reply)
+            if final_reply and final_reply.strip():
+                await _store_assistant_message(thread_id, final_reply)
 
     return StreamingResponse(
         event_generator(),
