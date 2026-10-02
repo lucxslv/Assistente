@@ -78,7 +78,7 @@ class MemoryExtractor:
     def __init__(self):
         if config.gemini_api_key:
             genai.configure(api_key=config.gemini_api_key)
-        self.model_name = "gemini-2.5-flash-lite"
+        self.model_name = getattr(config, "gemini_model", "gemini-3.1-flash-lite")
 
     async def analyze_turn_async(
         self,
@@ -97,15 +97,27 @@ class MemoryExtractor:
 USUÁRIO: {user_text}
 CHARLIE: {assistant_reply[:500]}
 """
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                generation_config={"response_mime_type": "application/json", "temperature": 0.2},
-                system_instruction=EXTRACTION_SYSTEM_PROMPT,
-            )
-
-            # Executa chamada assíncrona
+            models_to_try = [self.model_name, "gemini-3.1-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+            res = None
             loop = asyncio.get_event_loop()
-            res = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
+
+            for m_name in models_to_try:
+                try:
+                    model = genai.GenerativeModel(
+                        model_name=m_name,
+                        generation_config={"response_mime_type": "application/json", "temperature": 0.2},
+                        system_instruction=EXTRACTION_SYSTEM_PROMPT,
+                    )
+                    res = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
+                    if res and res.text:
+                        break
+                except Exception as m_err:
+                    logger.debug(f"[MemoryExtractor] Fallback do modelo {m_name}: {m_err}")
+                    continue
+
+            if not res or not res.text:
+                return
+
             raw_json = res.text.strip()
             data = json.loads(raw_json)
 
@@ -120,6 +132,15 @@ CHARLIE: {assistant_reply[:500]}
                 imp = float(m.get("importance", 0.5))
 
                 action = m.get("action", "reinforce")
+                try:
+                    from api.db import get_or_init_db_pool
+                    from api.services.chat_persistence import save_user_memory_entry
+                    pool = await get_or_init_db_pool()
+                    if pool:
+                        await save_user_memory_entry(pool, user_id=user_id, fact=content, category=m_type)
+                except Exception as p_err:
+                    logger.debug(f"Erro pool MemoryExtractor: {p_err}")
+
                 db.add_or_reinforce_memory(
                     content=content,
                     memory_type=m_type,
