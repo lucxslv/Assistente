@@ -73,3 +73,48 @@ export interface AuditFilterParams {
   userEmail?: string;
   modelName?: string;
 }
+
+export interface AuditUserSummary {
+  user_id: string;
+  user_email: string;
+  total_messages: number;
+  total_sessions: number;
+  total_cost_usd: number;
+  total_tokens: number;
+  total_prompt_tokens?: number;
+  total_completion_tokens?: number;
+  last_active: string | null;
+  ip_address: string;
+}
+
+export interface AuditMessageItem {
+  id: string;
+  created_at: string;
+  ip_address: string;
+  model_name: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  user_prompt: string;
+  model_response: string;
+}
+
+export interface UserConversationSession {
+  session_id: string;
+  started_at: string | null;
+  updated_at: string | null;
+  message_count: number;
+  total_cost_usd: number;
+  total_tokens: number;
+  model_names: string[];
+  messages: AuditMessageItem[];
+}
+
+export interface UserConversationsResponse {
+  user_email: string;
+  user_id: string;
+  total_messages: number;
+  total_cost_usd: number;
+  sessions: UserConversationSession[];
+}

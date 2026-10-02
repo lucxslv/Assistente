@@ -30,6 +30,7 @@ interface SidebarProps {
   onDeleteThread: (threadId: string) => void;
   onLogout: () => void;
   onOpenAudit?: () => void;
+  isAdmin?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -45,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteThread,
   onLogout,
   onOpenAudit,
+  isAdmin = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
@@ -335,8 +337,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* Audit & Cost Dashboard Action */}
-        {onOpenAudit && (
+        {/* Audit & Cost Dashboard Action (Somente Administrador) */}
+        {isAdmin && onOpenAudit && (
           <div className="px-3 pb-2 pt-1 border-t border-white/[0.04]">
             <button
               onClick={() => {
