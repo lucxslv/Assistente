@@ -377,6 +377,197 @@ fn set_system_volume_native(level: Option<i32>, mute: Option<bool>) -> Result<St
     }
 }
 
+#[derive(Serialize)]
+pub struct CommandExecutionResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub success: bool,
+    pub execution_time_ms: u64,
+}
+
+#[derive(Serialize)]
+pub struct LocalFileInfo {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub modified_at: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct LocalProcessInfo {
+    pub pid: u32,
+    pub name: String,
+    pub cpu: f32,
+    pub memory_mb: f32,
+    pub status: String,
+}
+
+#[tauri::command]
+fn execute_system_command(command: String, cwd: Option<String>) -> Result<CommandExecutionResult, String> {
+    let start = std::time::Instant::now();
+    let working_dir = cwd.map(|c| resolve_local_user_path(&c));
+
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        let mut cmd = Command::new("powershell.exe");
+        cmd.args(&["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &command]);
+        if let Some(dir) = working_dir {
+            cmd.current_dir(dir);
+        }
+
+        let output = cmd.output().map_err(|e| format!("Erro ao executar comando: {}", e))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+        let duration = start.elapsed().as_millis() as u64;
+
+        Ok(CommandExecutionResult {
+            stdout,
+            stderr,
+            exit_code,
+            success: output.status.success(),
+            execution_time_ms: duration,
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        use std::process::Command;
+        let mut cmd = Command::new("sh");
+        cmd.args(&["-c", &command]);
+        if let Some(dir) = working_dir {
+            cmd.current_dir(dir);
+        }
+
+        let output = cmd.output().map_err(|e| format!("Erro ao executar comando: {}", e))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+        let duration = start.elapsed().as_millis() as u64;
+
+        Ok(CommandExecutionResult {
+            stdout,
+            stderr,
+            exit_code,
+            success: output.status.success(),
+            execution_time_ms: duration,
+        })
+    }
+}
+
+#[tauri::command]
+fn read_local_file(path: String, max_bytes: Option<usize>) -> Result<String, String> {
+    let target = resolve_local_user_path(&path);
+    if !target.exists() {
+        return Err(format!("Arquivo não encontrado: {}", target.display()));
+    }
+    if target.is_dir() {
+        return Err(format!("O caminho especificado é um diretório: {}", target.display()));
+    }
+
+    let metadata = std::fs::metadata(&target).map_err(|e| format!("Erro ao ler metadados: {}", e))?;
+    let limit = max_bytes.unwrap_or(256 * 1024);
+    if metadata.len() as usize > limit {
+        use std::io::Read;
+        let mut file = std::fs::File::open(&target).map_err(|e| format!("Erro ao abrir arquivo: {}", e))?;
+        let mut buffer = vec![0; limit];
+        let bytes_read = file.read(&mut buffer).map_err(|e| format!("Erro ao ler buffer: {}", e))?;
+        let text = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+        return Ok(format!("{}\n\n[... Truncado em {} KB de {} KB ...]", text, limit / 1024, metadata.len() / 1024));
+    }
+
+    let bytes = std::fs::read(&target).map_err(|e| format!("Erro ao ler arquivo: {}", e))?;
+    Ok(String::from_utf8_lossy(&bytes).to_string())
+}
+
+#[tauri::command]
+fn list_local_directory(path: String) -> Result<Vec<LocalFileInfo>, String> {
+    let target = resolve_local_user_path(&path);
+    if !target.exists() {
+        return Err(format!("Diretório não encontrado: {}", target.display()));
+    }
+    if !target.is_dir() {
+        return Err(format!("O caminho não é um diretório: {}", target.display()));
+    }
+
+    let mut entries = Vec::new();
+    let read_dir = std::fs::read_dir(&target).map_err(|e| format!("Erro ao listar diretório: {}", e))?;
+
+    for entry in read_dir.flatten() {
+        let entry_path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_dir = entry_path.is_dir();
+        let size = if is_dir { 0 } else { entry.metadata().map(|m| m.len()).unwrap_or(0) };
+        let modified_at = entry.metadata().ok().and_then(|m| m.modified().ok()).map(|time| {
+            let duration = time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+            format!("{}", duration.as_secs())
+        });
+
+        entries.push(LocalFileInfo {
+            name,
+            path: entry_path.to_string_lossy().to_string(),
+            is_dir,
+            size,
+            modified_at,
+        });
+    }
+
+    entries.sort_by(|a, b| {
+        b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    Ok(entries)
+}
+
+#[tauri::command]
+fn get_process_list() -> Result<Vec<LocalProcessInfo>, String> {
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        let script = r#"Get-Process | Where-Object { $_.Id -gt 0 -and $_.ProcessName -ne 'Idle' } | Sort-Object CPU -Descending | Select-Object -First 30 Id, ProcessName, CPU, WorkingSet64 | ForEach-Object { "$($_.Id)|$($_.ProcessName)|$([math]::Round($_.CPU, 1))|$([math]::Round($_.WorkingSet64 / 1MB, 1))" }"#;
+
+        let output = Command::new("powershell.exe")
+            .args(&["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])
+            .output()
+            .map_err(|e| format!("Erro ao obter processos: {}", e))?;
+
+        let text = String::from_utf8_lossy(&output.stdout);
+        let mut list = Vec::new();
+
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() >= 4 {
+                let pid = parts[0].trim().parse::<u32>().unwrap_or(0);
+                let name = parts[1].trim().to_string();
+                let cpu = parts[2].trim().parse::<f32>().unwrap_or(0.0);
+                let memory_mb = parts[3].trim().parse::<f32>().unwrap_or(0.0);
+
+                list.push(LocalProcessInfo {
+                    pid,
+                    name,
+                    cpu,
+                    memory_mb,
+                    status: "RUNNING".to_string(),
+                });
+            }
+        }
+
+        Ok(list)
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(Vec::new())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -391,7 +582,11 @@ pub fn run() {
             create_local_directory,
             write_local_file,
             system_power_action_native,
-            set_system_volume_native
+            set_system_volume_native,
+            execute_system_command,
+            read_local_file,
+            list_local_directory,
+            get_process_list
         ])
         .setup(|app| {
             // Cria menu do System Tray (Bandeja)

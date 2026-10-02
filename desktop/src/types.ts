@@ -76,6 +76,8 @@ export interface AgentTask {
   dependencies: string[];
   tool?: string;
   command?: string;
+  args?: Record<string, any>;
+  risk?: RiskLevel;
   attempts: number;
   maxAttempts: number;
   result?: string;
