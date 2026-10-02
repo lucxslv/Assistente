@@ -36,6 +36,8 @@ export function App() {
   const [activeView, setActiveView] = useState<"chat" | "agent">("chat");
   const { session: agentSession, resolveChangeReview, resolvePermission } = useAgentRuntime();
   const [isWorkspaceDrawerOpen, setIsWorkspaceDrawerOpen] = useState(false);
+  const [focusedArtifactId, setFocusedArtifactId] = useState<string | undefined>(undefined);
+  const [workspaceDrawerWidth, setWorkspaceDrawerWidth] = useState<"compact" | "wide">("compact");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -97,6 +99,20 @@ export function App() {
   }, [currentUser]);
 
   const hasInitializedRef = useRef(false);
+
+  // Auto-abertura inteligente do Workspace Drawer quando o agente produz um artefato
+  const prevArtifactsCountRef = useRef(agentSession?.artifacts?.length || 0);
+  useEffect(() => {
+    const currentCount = agentSession?.artifacts?.length || 0;
+    if (currentCount > prevArtifactsCountRef.current) {
+      setIsWorkspaceDrawerOpen(true);
+      const newest = agentSession?.artifacts[currentCount - 1];
+      if (newest) {
+        setFocusedArtifactId(newest.id);
+      }
+    }
+    prevArtifactsCountRef.current = currentCount;
+  }, [agentSession?.artifacts]);
 
   // Carrega lista de conversas
   const loadThreads = useCallback(async () => {
@@ -615,12 +631,23 @@ export function App() {
                 onToggleWorkspace={() => setIsWorkspaceDrawerOpen((prev) => !prev)}
                 isWorkspaceOpen={isWorkspaceDrawerOpen}
                 hasActiveWorkspace={Boolean(agentSession)}
+                activeArtifacts={agentSession?.artifacts || []}
+                onOpenArtifact={(artId) => {
+                  setFocusedArtifactId(artId);
+                  setIsWorkspaceDrawerOpen(true);
+                }}
               />
             </div>
 
             {/* Painel Contextual Lateral do Agent Workspace (Especificação Seção 4: SIDEBAR | CHAT | WORKSPACE) */}
             {isWorkspaceDrawerOpen && (
-              <div className="w-[420px] lg:w-[480px] border-l border-white/[0.08] flex flex-col h-full bg-[#090A0F] shadow-2xl animate-fade-in z-20">
+              <div
+                className={`${
+                  workspaceDrawerWidth === "wide"
+                    ? "w-[680px] xl:w-[780px]"
+                    : "w-[460px] lg:w-[500px]"
+                } border-l border-white/[0.08] flex flex-col h-full bg-[#090A0F] shadow-2xl animate-fade-in z-20 transition-all duration-200`}
+              >
                 <div className="px-4 py-2.5 border-b border-white/[0.08] bg-[#12151C] flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-semibold text-zinc-200 uppercase tracking-wider">
@@ -635,8 +662,18 @@ export function App() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={() =>
+                        setWorkspaceDrawerWidth((prev) => (prev === "compact" ? "wide" : "compact"))
+                      }
+                      className="text-xs text-zinc-400 hover:text-zinc-200 font-mono transition cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/[0.04]"
+                      title={workspaceDrawerWidth === "compact" ? "Expandir largura do painel" : "Reduzir largura do painel"}
+                    >
+                      {workspaceDrawerWidth === "compact" ? "⇹ Expandir" : "⇸ Reduzir"}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setActiveView("agent")}
-                      className="text-xs text-zinc-400 hover:text-zinc-200 font-mono transition cursor-pointer"
+                      className="text-xs text-zinc-400 hover:text-zinc-200 font-mono transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-white/[0.04]"
                       title="Expandir tela cheia"
                     >
                       ⤢ Tela Cheia
@@ -644,7 +681,7 @@ export function App() {
                     <button
                       type="button"
                       onClick={() => setIsWorkspaceDrawerOpen(false)}
-                      className="text-zinc-400 hover:text-zinc-200 text-xs px-1.5 py-0.5 rounded transition cursor-pointer"
+                      className="text-zinc-400 hover:text-zinc-200 text-xs px-1.5 py-0.5 rounded transition cursor-pointer hover:bg-white/[0.04]"
                       title="Fechar Workspace Lateral"
                     >
                       ✕
@@ -656,6 +693,7 @@ export function App() {
                   {agentSession ? (
                     <AgentWorkspace
                       session={agentSession}
+                      selectedArtifactId={focusedArtifactId}
                       onReviewChange={resolveChangeReview}
                       onResolvePermission={(reqId) => resolvePermission(reqId, "allow_for_task")}
                     />
@@ -676,7 +714,7 @@ export function App() {
             )}
           </div>
         ) : (
-          <AgentCommandCenter />
+          <AgentCommandCenter selectedArtifactId={focusedArtifactId} />
         )}
       </main>
 
