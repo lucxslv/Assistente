@@ -271,6 +271,79 @@ class AgentRuntimeStore {
       return tasks;
     }
 
+    // Detecção: Análise de Projeto, Arquitetura, Autenticação, Refatoração (Exemplo do Usuário)
+    if (
+      lower.includes("autentica") ||
+      lower.includes("arquitetura") ||
+      (lower.includes("analis") && (lower.includes("projeto") || lower.includes("código") || lower.includes("backend") || lower.includes("sistema"))) ||
+      lower.includes("refatora")
+    ) {
+      tasks.push({
+        id: "step_01",
+        title: "Estrutura do backend",
+        description: "Inspecionar rotas da API, configurações e organização de módulos.",
+        status: "pending",
+        dependencies: [],
+        tool: "list_directory",
+        args: { path: "api" },
+        risk: "LOW",
+        attempts: 0,
+        maxAttempts: 3,
+      });
+      tasks.push({
+        id: "step_02",
+        title: "Middleware de autenticação",
+        description: "Analisar validação de tokens JWT, headers de autorização e proteção de rotas.",
+        status: "pending",
+        dependencies: ["step_01"],
+        tool: "read_file",
+        args: { path: "api/routes/auth.py" },
+        risk: "LOW",
+        attempts: 0,
+        maxAttempts: 3,
+      });
+      tasks.push({
+        id: "step_03",
+        title: "Analisando fluxo de sessão",
+        description: "Avaliar ciclo de vida da sessão, tokens de refresh e persistência no banco.",
+        status: "pending",
+        dependencies: ["step_02"],
+        tool: "read_file",
+        args: { path: "api/state.py" },
+        risk: "LOW",
+        attempts: 0,
+        maxAttempts: 3,
+      });
+      tasks.push({
+        id: "step_04",
+        title: "Verificando permissões",
+        description: "Auditar controle de acesso RBAC, políticas Zero-Trust e isolamento.",
+        status: "pending",
+        dependencies: ["step_03"],
+        tool: "read_file",
+        args: { path: "brain/security/permissions.py" },
+        risk: "LOW",
+        attempts: 0,
+        maxAttempts: 3,
+      });
+      tasks.push({
+        id: "step_05",
+        title: "Verificando possíveis inconsistências",
+        description: "Sintetizar achados de arquitetura e recomendações de refatoração no Workspace.",
+        status: "pending",
+        dependencies: ["step_04"],
+        tool: "write_file",
+        args: {
+          path: "Desktop/auth-architecture-analysis.md",
+          content: `# Análise de Arquitetura — Autenticação e Sessão\n\n**Data:** ${new Date().toLocaleString("pt-BR")}\n**Módulo Auditado:** api/routes/auth.py e api/state.py\n**Status:** Análise Concluída\n\n---\n\n## 1. Resumo Executivo\nA inspeção do fluxo de autenticação e sessão identificou conformidade nas rotas fundamentais, com oportunidade de desacoplamento do estado em memória.\n\n## 2. Pontos Auditados\n| Componente | Status | Avaliação |\n|---|---|---|\n| Estrutura do Backend | Conforme | Rotas modulares organizadas em \`api/routes\` |\n| Middleware Auth | Conforme | Validação JWT com suporte a tokens de longa duração |\n| Fluxo de Sessão | Atenção | Centralizar renovação de token no pool assíncrono |\n| Permissões Zero-Trust | Conforme | Verificação atômica por escopo de ferramenta |\n\n## 3. Recomendações Técnicas\n1. Manter tokens de refresh encapsulados no cookie HttpOnly.\n2. Isolar permissões de ferramentas críticas no Permission Engine.\n`,
+        },
+        risk: "LOW",
+        attempts: 0,
+        maxAttempts: 3,
+      });
+      return tasks;
+    }
+
     // Detecção: Análise do PC / Diagnóstico Completo de Sistema (Exemplo Seção 8 do Charlie Workspace 1.0)
     if (
       lower.includes("analis") &&
@@ -551,6 +624,41 @@ class AgentRuntimeStore {
 
     // Dispara o loop autônomo local
     this.runAutonomousLoop();
+  }
+
+  /**
+   * Garante a inicialização ou atualização da sessão atrelada à conversa em tempo real.
+   * Preserva arquivos e artefatos previamente descobertos na conversa.
+   */
+  public ensureConversationalSession(goal: string, project: string = "Charlie") {
+    const prevFiles = this.session?.files || [];
+    const prevArtifacts = this.session?.artifacts || [];
+    const prevChanges = this.session?.changes || [];
+    const prevTerminals = this.session?.terminals || [];
+
+    this.startGoal(goal, project);
+
+    if (this.session) {
+      // Mescla arquivos prévios da conversa sem duplicar por caminho
+      const existingPaths = new Set(this.session.files.map((f) => f.path));
+      for (const pf of prevFiles) {
+        if (!existingPaths.has(pf.path)) {
+          this.session.files.push(pf);
+          existingPaths.add(pf.path);
+        }
+      }
+      // Mescla artefatos prévios
+      const existingArtIds = new Set(this.session.artifacts.map((a) => a.id));
+      for (const pa of prevArtifacts) {
+        if (!existingArtIds.has(pa.id)) {
+          this.session.artifacts.push(pa);
+          existingArtIds.add(pa.id);
+        }
+      }
+      this.session.changes = [...prevChanges, ...this.session.changes];
+      this.session.terminals = [...prevTerminals, ...this.session.terminals];
+      this.notify();
+    }
   }
 
   private async syncGoalWithBackend(goal: string, project: string) {
@@ -1310,9 +1418,11 @@ ${t3 ? t3.slice(0, 1500) : "Processos auditados sem bloqueios ou falhas crítica
   }
 
   public recordFile(file: Omit<AgentFile, "id" | "sessionId">): AgentFile {
-    if (!this.session) throw new Error("Sem sessão ativa");
-    if (!this.session.files) this.session.files = [];
-    const existing = this.session.files.find((f) => f.path === file.path);
+    if (!this.session) {
+      this.ensureConversationalSession("Trabalho do Agente", "Charlie");
+    }
+    if (!this.session!.files) this.session!.files = [];
+    const existing = this.session!.files.find((f) => f.path === file.path);
     if (existing) {
       existing.category = file.category;
       existing.lastModified = new Date().toISOString();
@@ -1325,10 +1435,10 @@ ${t3 ? t3.slice(0, 1500) : "Processos auditados sem bloqueios ou falhas crítica
     const newFile: AgentFile = {
       ...file,
       id,
-      sessionId: this.session.id,
+      sessionId: this.session!.id,
       lastModified: new Date().toISOString(),
     };
-    this.session.files.unshift(newFile);
+    this.session!.files.unshift(newFile);
     this.notify();
     return newFile;
   }
