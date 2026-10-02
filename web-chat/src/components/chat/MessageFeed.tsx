@@ -4,6 +4,7 @@ import { Message, CharlieAIStatus } from '../../types/chat';
 import { MessageItem } from './MessageItem';
 import { useAutoScroll } from '../../hooks/useAutoScroll';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
+import { hapticFeedback } from '../../utils/haptics';
 
 interface MessageFeedProps {
   messages: Message[];
@@ -82,8 +83,11 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
                 return (
                   <button
                     key={idx}
-                    onClick={() => onSelectPrompt(item.prompt)}
-                    className="p-3 sm:p-3.5 rounded-xl bg-[#0E0F12] border border-white/[0.06] hover:border-primary/40 active:border-primary/50 hover:bg-[#13151A] transition-all duration-150 flex items-start gap-2.5 sm:gap-3 group text-left cursor-pointer"
+                    onClick={() => {
+                      hapticFeedback.light();
+                      onSelectPrompt(item.prompt);
+                    }}
+                    className="p-3 sm:p-3.5 rounded-xl bg-[#0E0F12] border border-white/[0.06] hover:border-primary/40 active:border-primary/50 hover:bg-[#13151A] transition-all duration-150 flex items-start gap-2.5 sm:gap-3 group text-left cursor-pointer active:scale-[0.99]"
                   >
                     <div className="p-2 rounded-lg bg-white/[0.04] text-primary group-hover:bg-primary-soft transition-colors mt-0.5 flex-shrink-0">
                       <Icon className="w-4 h-4" />

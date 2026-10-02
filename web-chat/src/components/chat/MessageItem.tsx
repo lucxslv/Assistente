@@ -3,6 +3,7 @@ import { Copy, Check, RotateCcw, AlertTriangle, User as UserIcon } from 'lucide-
 import { Message } from '../../types/chat';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatTimeOrDate } from '../../utils/formatters';
+import { hapticFeedback } from '../../utils/haptics';
 
 interface MessageItemProps {
   message: Message;
@@ -18,6 +19,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
+      hapticFeedback.success();
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -53,9 +55,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
           <span>{formatTimeOrDate(message.createdAt)}</span>
         </div>
 
-        {/* Content Box */}
+        {/* Content Box with Mobile-first Typography text-[15px] and relaxed line height */}
         <div
-          className={`rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-sm leading-relaxed transition-all ${
+          className={`rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-[15px] sm:text-sm leading-relaxed transition-all ${
             isUser
               ? 'bg-[#181B22] text-[#F3F4F6] border border-white/[0.08] rounded-tr-sm'
               : 'bg-[#0E0F12] text-[#E5E7EB] border border-white/[0.06] rounded-tl-sm w-full shadow-sm'
@@ -120,11 +122,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
 
         {/* Action bar (Always visible with subtle opacity on mobile, hover on desktop) */}
         {!message.isStreaming && message.content && (
-          <div className="flex items-center gap-1 mt-1 px-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1.5 mt-1 px-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 p-1.5 sm:p-1 rounded-lg text-[11px] text-[#6B7280] hover:text-[#D1D5DB] active:text-white hover:bg-white/[0.04] transition-colors cursor-pointer"
+              className="min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center gap-1.5 px-2 py-1 sm:p-1 rounded-lg text-[11px] text-[#6B7280] hover:text-[#D1D5DB] active:text-white hover:bg-white/[0.04] active:scale-95 transition-all cursor-pointer"
               title="Copiar mensagem"
+              aria-label="Copiar mensagem"
             >
               {copied ? (
                 <>
@@ -140,9 +143,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
             </button>
             {isUser && onRetry && (
               <button
-                onClick={onRetry}
-                className="flex items-center gap-1 p-1 rounded text-[11px] text-[#6B7280] hover:text-[#D1D5DB] hover:bg-white/[0.04] transition-colors cursor-pointer"
+                onClick={() => {
+                  hapticFeedback.light();
+                  onRetry();
+                }}
+                className="min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center gap-1.5 px-2 py-1 sm:p-1 rounded-lg text-[11px] text-[#6B7280] hover:text-[#D1D5DB] hover:bg-white/[0.04] active:scale-95 transition-all cursor-pointer"
                 title="Reenviar esta mensagem"
+                aria-label="Reenviar mensagem"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span className="text-[10px]">Reenviar</span>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ConnectionStatus, CharlieAIStatus, Thread, Message } from '../../types/chat';
 import { Badge } from '../ui/Badge';
+import { hapticFeedback } from '../../utils/haptics';
 
 interface HeaderProps {
   activeThread: Thread | null;
@@ -113,7 +114,10 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Left: Sidebar Toggle & Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
-          onClick={onToggleSidebar}
+          onClick={() => {
+            hapticFeedback.light();
+            onToggleSidebar();
+          }}
           className="md:hidden min-h-[44px] min-w-[44px] -ml-1 sm:ml-0 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
           title="Alternar barra lateral"
           aria-label="Abrir menu lateral"
@@ -261,6 +265,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={() => {
+                  hapticFeedback.warning();
                   onClearChat();
                   setIsMenuOpen(false);
                 }}
@@ -276,6 +281,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="my-1 border-t border-white/[0.06]" />
                   <button
                     onClick={() => {
+                      hapticFeedback.warning();
                       onDeleteThread();
                       setIsMenuOpen(false);
                     }}
