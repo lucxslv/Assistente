@@ -5,7 +5,6 @@ import {
   Pencil,
   Trash2,
   Download,
-  Plus,
   RotateCcw,
   Sliders,
   Check,
@@ -115,15 +114,18 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
           onClick={onToggleSidebar}
-          className="min-h-[44px] min-w-[44px] -ml-1 sm:ml-0 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+          className="md:hidden min-h-[44px] min-w-[44px] -ml-1 sm:ml-0 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
           title="Alternar barra lateral"
           aria-label="Abrir menu lateral"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Mobile Header: App Brand + Subtle Status Indicator */}
+        {/* Mobile Header: App Brand with Logo + Subtle Status Indicator */}
         <div className="flex md:hidden items-center gap-2 min-w-0">
+          <div className="w-6 h-6 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-0.5 flex-shrink-0 shadow-sm">
+            <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
+          </div>
           <span className="text-sm font-semibold tracking-tight text-[#F3F4F6]">Charlie</span>
           <span
             className={`w-2 h-2 rounded-full ${
@@ -198,17 +200,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {connectionStatus === 'online' ? 'Online' : 'Offline'}
         </Badge>
-
-        {/* Action: + Nova Conversa (Touch-friendly & Visible on all screen sizes) */}
-        <button
-          onClick={onNewThread}
-          className="min-h-[44px] min-w-[44px] px-2.5 sm:px-3 text-[#E5E7EB] hover:text-white bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/[0.08] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-xs font-medium"
-          title="Nova Conversa [N]"
-          aria-label="Nova Conversa"
-        >
-          <Plus className="w-4 h-4 text-primary" />
-          <span className="hidden sm:inline">Nova</span>
-        </button>
 
         {/* Context Menu Dropdown */}
         <div className="relative" ref={menuRef}>

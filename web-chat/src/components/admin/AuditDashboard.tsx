@@ -237,8 +237,8 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
           <div className="h-5 w-[1px] bg-white/[0.08] hidden sm:block" />
 
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Shield className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-1 flex-shrink-0 shadow-sm">
+              <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="text-sm font-semibold tracking-tight text-[#F3F4F6] flex items-center gap-2">
@@ -631,8 +631,10 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                             <div className="space-y-1">
                               <div className="flex items-center justify-between text-[11px] text-[#9CA3AF]">
                                 <span className="font-bold text-primary flex items-center gap-1.5">
-                                  <Bot className="w-3.5 h-3.5 text-primary" />
-                                  <span>🤖 Charlie:</span>
+                                  <div className="w-4 h-4 rounded bg-black border border-white/[0.1] flex items-center justify-center overflow-hidden p-0.5 flex-shrink-0">
+                                    <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
+                                  </div>
+                                  <span>Charlie:</span>
                                 </span>
                                 <div className="flex items-center gap-2 font-mono text-[10px]">
                                   <span className="text-emerald-400 font-semibold">{formatUSD(msg.cost_usd)}</span>

@@ -6,7 +6,6 @@ import {
   Pencil,
   Trash2,
   X,
-  Sparkles,
   User as UserIcon,
   ChevronRight,
   LogOut,
@@ -133,8 +132,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Top Header: Brand & Status & Close */}
         <div className="p-3.5 sm:p-4 border-b border-white/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center text-primary shadow-glow-sm">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden shadow-glow-sm p-1 flex-shrink-0">
+              <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-2">

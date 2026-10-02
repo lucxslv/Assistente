@@ -64,8 +64,8 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
         {messages.length === 0 ? (
           <div className="min-h-full flex flex-col items-center justify-center max-w-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 text-center animate-fade-in">
             {/* Center Logo Icon */}
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center text-primary shadow-glow mb-4 sm:mb-6">
-              <Sparkles className="w-7 h-7 sm:w-8 sm:h-8" />
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-black border border-white/[0.08] flex items-center justify-center shadow-glow mb-4 sm:mb-6 overflow-hidden p-2">
+              <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain" />
             </div>
 
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#F3F4F6] mb-1.5 sm:mb-2">
