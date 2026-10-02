@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Clock,
   Shield,
-  ShieldAlert,
   Terminal,
   Cpu,
   FileCheck,
@@ -21,9 +20,11 @@ import {
   Folder,
   ArrowRight,
   Search,
+  LayoutDashboard,
 } from "lucide-react";
+import { AgentWorkspace } from "./workspace/AgentWorkspace";
 
-type AgentTab = "overview" | "tasks" | "permissions" | "evidence" | "logs" | "processes" | "history";
+type AgentTab = "workspace" | "tasks" | "permissions" | "evidence" | "logs" | "processes" | "history";
 
 export const AgentCommandCenter: React.FC = () => {
   const {
@@ -40,6 +41,7 @@ export const AgentCommandCenter: React.FC = () => {
     cancelAgent,
     retryTask,
     resolvePermission,
+    resolveChangeReview,
     refreshProcesses,
     loadSession,
     deleteHistorySession,
@@ -47,7 +49,7 @@ export const AgentCommandCenter: React.FC = () => {
     clearSession,
   } = useAgentRuntime();
 
-  const [activeTab, setActiveTab] = useState<AgentTab>("overview");
+  const [activeTab, setActiveTab] = useState<AgentTab>("workspace");
   const [goalInput, setGoalInput] = useState("");
   const [projectInput, setProjectInput] = useState("Charlie");
   const [logFilter, setLogFilter] = useState<AgentLogCategory | "ALL">("ALL");
@@ -238,14 +240,18 @@ export const AgentCommandCenter: React.FC = () => {
       <div className="px-6 border-b border-white/[0.08] bg-[#12151C]/40 flex items-center justify-between text-xs">
         <nav className="flex space-x-1">
           <button
-            onClick={() => setActiveTab("overview")}
-            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 ${
-              activeTab === "overview"
+            onClick={() => setActiveTab("workspace")}
+            className={`py-3 px-3 border-b-2 font-medium transition flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "workspace"
                 ? "border-zinc-300 text-zinc-100"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <span>Visão Geral</span>
+            <LayoutDashboard className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Workspace</span>
+            {session && ((session.artifacts?.length || 0) > 0 || (session.changes?.length || 0) > 0) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+            )}
           </button>
 
           <button
@@ -346,7 +352,7 @@ export const AgentCommandCenter: React.FC = () => {
       </div>
 
       {/* ================= Conteúdo Principal ================= */}
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className={`flex-1 ${session && activeTab === "workspace" ? "p-0 overflow-hidden" : "overflow-y-auto p-6"}`}>
         {/* Caso não haja sessão ativa: Cockpit do Ambiente & Inicializador de Missão */}
         {!session && (
           <div className="max-w-4xl mx-auto space-y-6 py-2">
@@ -494,6 +500,14 @@ export const AgentCommandCenter: React.FC = () => {
                     <span className="text-zinc-500">Sugestões de teste:</span>
                     <button
                       type="button"
+                      onClick={() => setGoalInput("Charlie, analise completamente meu PC e gere o relatório system-analysis.md")}
+                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
+                    >
+                      🖥️ Analisar PC completo
+                    </button>
+                    <span>•</span>
+                    <button
+                      type="button"
                       onClick={() => setGoalInput("Criar pasta Teste no Desktop e criar arquivo notas.txt com Olá Mundo")}
                       className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition cursor-pointer"
                     >
@@ -578,178 +592,14 @@ export const AgentCommandCenter: React.FC = () => {
           </div>
         )}
 
-        {/* ================= TAB 1: OVERVIEW ================= */}
-        {session && activeTab === "overview" && (
-          <div className="space-y-5 max-w-4xl mx-auto">
-            {/* 1. Barra de Resumo Horizontal Contínua (Substitui os 4 cards verticais) */}
-            <div className="bg-[#12151C] border border-white/[0.08] rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="text-zinc-500 text-[11px]">Status</span>
-                {renderStatusBadge(session.status)}
-              </div>
-
-              <div className="h-4 w-[1px] bg-white/[0.08] hidden sm:block" />
-
-              <div className="flex items-center gap-3">
-                <span className="text-zinc-500 text-[11px]">Progresso</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-medium text-zinc-200">{session.progress}%</span>
-                  <div className="w-20 bg-white/[0.06] h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-zinc-300 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${session.progress}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-4 w-[1px] bg-white/[0.08] hidden sm:block" />
-
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-500 text-[11px]">Permissões</span>
-                <span className="font-medium text-zinc-300">
-                  {pendingPermissions.length === 0 ? "Nenhuma pendente" : `${pendingPermissions.length} pendente(s)`}
-                </span>
-              </div>
-
-              <div className="h-4 w-[1px] bg-white/[0.08] hidden sm:block" />
-
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-500 text-[11px]">Evidências</span>
-                <span className="font-medium text-zinc-300 font-mono">
-                  {session.tasks.filter((t) => t.evidence?.passed).length} / {session.tasks.length}
-                </span>
-              </div>
-            </div>
-
-            {/* 2. Bloco Inteligente: Resultado Final Concluído OU Tarefa Atual em Execução */}
-            {session.status === "completed" ? (
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-emerald-400 font-medium text-xs">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Objetivo concluído com evidências validadas</span>
-                  </div>
-                  <span className="text-[11px] font-mono text-zinc-500">
-                    {session.updatedAt ? new Date(session.updatedAt).toLocaleTimeString("pt-BR") : ""}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-300 bg-[#0C0D12] p-3 rounded-lg border border-white/[0.06]">
-                  {session.summary || "Todas as tarefas foram executadas com sucesso no Local Runtime e validadas."}
-                </p>
-              </div>
-            ) : session.status === "running" && session.currentTaskId ? (
-              <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-medium flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" />
-                    Passo atual em execução
-                  </span>
-                  <span className="font-mono text-[11px] text-zinc-500">{session.currentTaskId}</span>
-                </div>
-                {(() => {
-                  const curr = session.tasks.find((t) => t.id === session.currentTaskId);
-                  if (!curr) return null;
-                  return (
-                    <div>
-                      <h3 className="text-sm font-medium text-zinc-100">{curr.title}</h3>
-                      {curr.tool && (
-                        <div className="mt-2 text-xs font-mono text-zinc-400 bg-[#0C0D12] px-2.5 py-1.5 rounded border border-white/[0.06] inline-block">
-                          ferramenta: <span className="text-zinc-200">{curr.tool}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            ) : null}
-
-            {/* 3. Autorização Pendente (se houver) */}
-            {pendingPermissions.length > 0 && (
-              <div className="bg-[#161412] border border-amber-500/20 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-amber-400 font-medium text-xs">
-                    <ShieldAlert className="w-4 h-4" />
-                    <span>Autorização de Operação Requerida</span>
-                  </div>
-                  {renderRiskBadge(pendingPermissions[0].risk)}
-                </div>
-                <p className="text-xs text-zinc-300">
-                  Comando: <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-zinc-200">{pendingPermissions[0].tool}</code>
-                </p>
-                <p className="text-xs text-zinc-400">{pendingPermissions[0].reason}</p>
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={() => resolvePermission(pendingPermissions[0].id, "allow_once")}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-200 hover:bg-white text-zinc-950 transition cursor-pointer"
-                  >
-                    Permitir Uma Vez
-                  </button>
-                  <button
-                    onClick={() => resolvePermission(pendingPermissions[0].id, "deny")}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition cursor-pointer"
-                  >
-                    Negar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 4. Linha do Tempo Vertical Compacta (Task Graph) */}
-            <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium text-zinc-300">Linha do Tempo de Execução</h3>
-                <button
-                  onClick={() => setActiveTab("tasks")}
-                  className="text-xs text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1 cursor-pointer"
-                >
-                  Ver detalhes <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Vertical Timeline */}
-              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-white/[0.08]">
-                {session.tasks.map((task, idx) => (
-                  <div key={task.id} className="relative flex items-start gap-3">
-                    {/* Marcador da timeline */}
-                    <div className="absolute -left-6 mt-0.5">
-                      {task.status === "success" ? (
-                        <div className="w-4 h-4 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-                          <CheckCircle2 className="w-2.5 h-2.5" />
-                        </div>
-                      ) : task.status === "running" ? (
-                        <div className="w-4 h-4 rounded-full bg-slate-400/20 border border-slate-400 text-slate-300 flex items-center justify-center animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                        </div>
-                      ) : task.status === "failure" ? (
-                        <div className="w-4 h-4 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
-                          <AlertCircle className="w-2.5 h-2.5" />
-                        </div>
-                      ) : (
-                        <div className="w-4 h-4 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500 flex items-center justify-center text-[9px] font-mono">
-                          {idx + 1}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Conteúdo do passo */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-zinc-200 truncate">{task.title}</span>
-                        {task.evidence?.passed && (
-                          <span className="text-[11px] text-zinc-500 font-normal shrink-0">
-                            comprovado
-                          </span>
-                        )}
-                      </div>
-                      {task.tool && (
-                        <p className="text-[11px] text-zinc-500 font-mono mt-0.5">{task.tool}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {/* ================= TAB 1: WORKSPACE (CHARLIE AGENT WORKSPACE 1.0) ================= */}
+        {session && activeTab === "workspace" && (
+          <div className="h-full flex-1 overflow-hidden">
+            <AgentWorkspace
+              session={session}
+              onReviewChange={resolveChangeReview}
+              onResolvePermission={(reqId) => resolvePermission(reqId, "allow_for_task")}
+            />
           </div>
         )}
 
@@ -1212,7 +1062,7 @@ export const AgentCommandCenter: React.FC = () => {
                             type="button"
                             onClick={() => {
                               loadSession(item);
-                              setActiveTab("overview");
+                              setActiveTab("workspace");
                             }}
                             className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 transition cursor-pointer"
                           >
