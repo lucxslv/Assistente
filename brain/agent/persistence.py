@@ -13,16 +13,34 @@ from datetime import datetime
 class AgentPersistence:
     def __init__(self, db_path: Optional[str] = None):
         if not db_path:
-            # Pasta data/ na raiz do projeto ou diretório local
-            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
-            os.makedirs(base_dir, exist_ok=True)
-            db_path = os.path.join(base_dir, "agent_runtime.db")
+            # No ambiente Vercel serverless, apenas /tmp é gravável
+            if os.getenv("VERCEL") or not os.access(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")), os.W_OK):
+                base_dir = "/tmp"
+            else:
+                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+
+            try:
+                os.makedirs(base_dir, exist_ok=True)
+                db_path = os.path.join(base_dir, "agent_runtime.db")
+            except Exception:
+                base_dir = "/tmp"
+                try:
+                    os.makedirs(base_dir, exist_ok=True)
+                except Exception:
+                    pass
+                db_path = os.path.join(base_dir, "agent_runtime.db")
 
         self.db_path = db_path
-        self._init_db()
+        try:
+            self._init_db()
+        except Exception as e:
+            pass
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        try:
+            conn = sqlite3.connect(self.db_path)
+        except Exception:
+            conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         return conn
 

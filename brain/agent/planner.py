@@ -53,13 +53,15 @@ class AgentPlanner:
 
         # 1. Tenta decomposição via LLM
         try:
-            from providers.router import llm_router
+            from core.pipeline import AssistantPipeline
+            pipeline = AssistantPipeline()
             prompt = f"Meta a ser planejada e executada:\n'{goal}'\nProjeto: {project}"
-            raw_response = await llm_router.chat(
-                system_prompt=PLANNER_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+            response = await pipeline.llm.generate(
+                prompt=prompt,
+                system_instruction=PLANNER_SYSTEM_PROMPT,
                 temperature=0.2,
             )
+            raw_response = response.content if hasattr(response, "content") else str(response)
 
             # Extração de JSON
             cleaned = raw_response.strip()
