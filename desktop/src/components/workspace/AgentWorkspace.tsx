@@ -22,7 +22,7 @@ export type WorkspaceTab =
   | "logs_terminal";
 
 interface AgentWorkspaceProps {
-  session: AgentSession;
+  session?: AgentSession | null;
   initialTab?: WorkspaceTab;
   initialSubTab?: string;
   selectedArtifactId?: string;
@@ -49,6 +49,64 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
   onResolvePermission,
   onRetryTask,
 }) => {
+  // Visualização de Co-piloto Pronto quando não há tarefas ativas
+  if (!session) {
+    return (
+      <div className="flex flex-col h-full w-full bg-[#090A0F] text-[#F2F3F5] p-5 justify-between select-none overflow-y-auto">
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[#12151C] border border-white/[0.08] shadow-sm">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <div>
+              <div className="text-xs font-semibold text-zinc-100 font-mono uppercase tracking-wider">
+                Charlie Agent Runtime
+              </div>
+              <div className="text-[11px] text-zinc-400 mt-0.5">
+                Co-piloto inteligente ativo e pronto para agir
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+              Como funciona o trabalho em tempo real
+            </span>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Você não precisa preencher formulários ou disparar tarefas mecânicas. A conversa no chat é a interface primária.
+            </p>
+            <div className="p-3 bg-[#12151C] rounded-lg border border-white/[0.06] font-mono text-xs text-indigo-300 space-y-1">
+              <div className="font-semibold text-zinc-200 text-[11px] uppercase tracking-wider mb-1">
+                Ciclo Contínuo:
+              </div>
+              <div>Chat → Contexto → Raciocínio → Decisão → Ação</div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+              Exemplos para experimentar no chat
+            </span>
+            <div className="space-y-2 text-xs">
+              <div className="p-2.5 rounded-lg bg-[#12151C] border border-white/[0.06] text-zinc-300 font-mono leading-relaxed">
+                "Analisa esse sistema de autenticação e vê se tem algum problema de arquitetura."
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#12151C] border border-white/[0.06] text-zinc-300 font-mono leading-relaxed">
+                "Quero refatorar essa parte do projeto. O que você acha que deveríamos fazer?"
+              </div>
+              <div className="p-2.5 rounded-lg bg-[#12151C] border border-white/[0.06] text-zinc-300 font-mono leading-relaxed">
+                "Analisa meu computador e me devolve o máximo de informações possível."
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-zinc-500 font-mono">
+          <span>Zero-Trust: Ativo</span>
+          <span>Painel Lateral: Conectado</span>
+        </div>
+      </div>
+    );
+  }
+
   // Se houver um artefato selecionado, ou artefatos recém gerados, inicializa em files_artifacts
   const defaultTab: WorkspaceTab =
     initialTab ||

@@ -370,6 +370,61 @@ export const WorkspaceOverview: React.FC<WorkspaceOverviewProps> = ({
         </div>
       )}
 
+      {/* ================= 4. CHECKLIST DE ETAPAS / RACIOCÍNIO AO VIVO (ESTILO ANTIGRAVITY) ================= */}
+      {session.tasks && session.tasks.length > 0 && (
+        <div className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono font-semibold text-zinc-300 uppercase tracking-wider">
+                {session.status === "running" ? "Raciocínio & Ação ao Vivo" : "Etapas Executadas"}
+              </span>
+              {session.status === "running" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+              )}
+            </div>
+            <span className="text-[11px] font-mono text-zinc-400">
+              {completedTasks}/{session.tasks.length} concluídas
+            </span>
+          </div>
+
+          <div className="space-y-1.5 pt-1 font-mono text-xs">
+            {session.tasks.map((task) => {
+              const isSuccess = task.status === "success";
+              const isRunning = task.status === "running";
+
+              return (
+                <div
+                  key={task.id}
+                  className={`flex items-center gap-2.5 p-2 rounded-lg transition-all ${
+                    isRunning
+                      ? "bg-indigo-500/10 border border-indigo-500/30 text-indigo-200"
+                      : isSuccess
+                      ? "bg-white/[0.02] text-zinc-300"
+                      : "text-zinc-500"
+                  }`}
+                >
+                  {isSuccess ? (
+                    <span className="text-emerald-400 font-bold select-none text-xs">✓</span>
+                  ) : isRunning ? (
+                    <span className="text-indigo-400 font-bold select-none text-xs animate-pulse">●</span>
+                  ) : (
+                    <span className="text-zinc-600 select-none text-xs">○</span>
+                  )}
+                  <span className={`flex-1 truncate ${isSuccess ? "text-zinc-400" : isRunning ? "font-semibold text-zinc-200" : ""}`}>
+                    {task.title}
+                  </span>
+                  {task.tool && (
+                    <span className="text-[10px] text-zinc-500 px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.06]">
+                      {task.tool}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Card da Tarefa Ativa */}
       {runningTask && (
         <div className="bg-[#12151C] border border-indigo-500/30 rounded-xl p-4 space-y-2.5 shadow-sm">
