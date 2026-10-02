@@ -8,6 +8,7 @@ from .verifier import Verifier, VerificationResult
 from .failure_memory import FailureMemory, FailureRecord
 from .planner import AgentPlanner
 from .runtime import AgentRuntime
+from .persistence import AgentPersistence, agent_persistence
 
 __all__ = [
     "TaskGraph",
@@ -20,4 +21,6 @@ __all__ = [
     "FailureRecord",
     "AgentPlanner",
     "AgentRuntime",
+    "AgentPersistence",
+    "agent_persistence",
 ]
