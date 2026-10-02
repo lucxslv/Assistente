@@ -2,6 +2,7 @@
 
 import logging
 import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,9 @@ def manage_application(app_name: str, action: str) -> str:
                 webbrowser.open("https://google.com")
                 return "Navegador padrão aberto com sucesso."
                 
-            # No Windows, 'start' usa o registro App Paths ou o PATH do sistema
-            result = os.system(f"start {app_info['cmd']}")
-            if result == 0:
+            # No Windows, usa subprocess com shell=True seguro ou comando direto
+            res = subprocess.run(["cmd.exe", "/c", "start", app_info['cmd']], capture_output=True, text=True, check=False)
+            if res.returncode == 0:
                 return f"Comando de abrir '{app_name}' enviado com sucesso."
             else:
                 return f"Tentativa de abrir '{app_name}' concluída, mas o Windows pode não ter encontrado o executável."
@@ -50,8 +51,8 @@ def manage_application(app_name: str, action: str) -> str:
         elif action == "close":
             # Tenta matar o processo pelo nome de forma forçada (/F)
             process_name = app_info['process']
-            result = os.system(f"taskkill /IM {process_name} /F")
-            if result == 0:
+            res = subprocess.run(["taskkill", "/IM", process_name, "/F"], capture_output=True, text=True, check=False)
+            if res.returncode == 0:
                 return f"Aplicativo '{app_name}' ({process_name}) fechado com sucesso."
             else:
                 return f"Não foi possível fechar '{app_name}'. Pode ser que ele não esteja aberto ou exija permissões de administrador."

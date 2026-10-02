@@ -168,20 +168,7 @@ async def register(data: RegisterRequest):
 
     user_id = signup_res.get("id") or signup_res.get("user", {}).get("id")
 
-    # 2. Confirmação instantânea do email no banco via asyncpg
-    # Evita que o usuário fique travado aguardando servidor de envio de email
-    pool = await get_or_init_db_pool()
-    if pool:
-        try:
-            async with pool.acquire() as conn:
-                await conn.execute(
-                    "UPDATE auth.users SET email_confirmed_at = now() WHERE email = $1 AND email_confirmed_at IS NULL",
-                    data.email,
-                )
-        except Exception as e:
-            logger.warning(f"Não foi possível auto-confirmar email no banco: {e}")
-
-    # 3. Realiza o login para obter o token de sessão
+    # 2. Realiza o login para obter o token de sessão
     token = signup_res.get("access_token")
     if not token:
         login_url = f"{config.supabase_url}/auth/v1/token?grant_type=password"

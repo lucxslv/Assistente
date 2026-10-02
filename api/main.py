@@ -40,7 +40,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS seguro para desktop Tauri, localhost e domínios oficiais
+# CORS seguro e abrangente para desktop Tauri (Windows/Mac/Linux), localhost e web
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -50,13 +50,19 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:8005",
         "http://127.0.0.1:8005",
-        "tauri://localhost",
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://tauri.localhost",
         "https://tauri.localhost",
+        "tauri://localhost",
+        "null",
     ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
+    allow_origin_regex=r"https?://.*|tauri://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
 
 # Registro Modular de Rotas
