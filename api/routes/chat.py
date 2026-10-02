@@ -7,7 +7,7 @@ import logging
 import platform
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -127,10 +127,18 @@ async def _store_assistant_message(thread_id: str, reply: str):
             logger.error("Erro ao salvar mensagem da assistente no Supabase: %s", e)
 
 
+def _extract_ip(req: Request) -> str:
+    """Extrai o IP real do cliente mesmo através de proxies e CDN da Vercel."""
+    forwarded = req.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return req.client.host if req.client else "127.0.0.1"
+
+
 # ================= Endpoints =================
 
 @router.post("")
-async def chat_post(req: ChatRequest, user: dict = Depends(get_current_user)):
+async def chat_post(req: ChatRequest, request: Request, user: dict = Depends(get_current_user)):
     """Processa uma mensagem de texto de forma síncrona (espera resposta completa)."""
     pipeline = get_pipeline()
     thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
@@ -153,6 +161,22 @@ async def chat_post(req: ChatRequest, user: dict = Depends(get_current_user)):
 
     await _store_assistant_message(thread_id, reply)
 
+    # Gravação assíncrona de telemetria e custo em USD (não-bloqueante)
+    try:
+        from api.services.audit_service import record_audit_log
+        asyncio.create_task(
+            record_audit_log(
+                user_id=str(user["id"]),
+                user_email=user.get("email") or "usuario@teste.com",
+                user_prompt=req.message,
+                model_response=reply,
+                ip_address=_extract_ip(request),
+                session_id=thread_id,
+            )
+        )
+    except Exception as audit_err:
+        logger.warning(f"Aviso ao registrar audit log: {audit_err}")
+
     return {
         "reply": reply,
         "thread_id": thread_id,
@@ -161,10 +185,11 @@ async def chat_post(req: ChatRequest, user: dict = Depends(get_current_user)):
 
 
 @router.post("/stream")
-async def chat_stream_sse(req: ChatRequest, user: dict = Depends(get_current_user)):
+async def chat_stream_sse(req: ChatRequest, request: Request, user: dict = Depends(get_current_user)):
     """Endpoint de streaming em tempo real via Server-Sent Events (SSE)."""
     pipeline = get_pipeline()
     thread_id = await _prepare_thread_and_store_user_message(req.message, req.thread_id, user=user)
+    client_ip = _extract_ip(request)
 
     async def event_generator():
         final_reply = ""
@@ -192,6 +217,20 @@ async def chat_stream_sse(req: ChatRequest, user: dict = Depends(get_current_use
             state.set_status(CharlieStatus.IDLE)
             if final_reply and final_reply.strip():
                 await _store_assistant_message(thread_id, final_reply)
+                try:
+                    from api.services.audit_service import record_audit_log
+                    asyncio.create_task(
+                        record_audit_log(
+                            user_id=str(user["id"]),
+                            user_email=user.get("email") or "usuario@teste.com",
+                            user_prompt=req.message,
+                            model_response=final_reply,
+                            ip_address=client_ip,
+                            session_id=thread_id,
+                        )
+                    )
+                except Exception as audit_err:
+                    logger.warning(f"Aviso ao registrar audit log SSE: {audit_err}")
 
     return StreamingResponse(
         event_generator(),
