@@ -1,115 +1,113 @@
-# Voice AI Assistant
+# Charlie AI — Ecossistema de Inteligência Pessoal & Operacional
 
-A modular, highly extensible Python-based personal voice assistant integrating language models, speech recognition, speech synthesis, and custom system tools.
-
-Designed for robust local execution and experimentation, this project features an architecture that supports seamless switching between cloud-based and local LLM providers while safely controlling the local operating system.
+O **Charlie** é um ecossistema completo de assistência pessoal e inteligência autônoma com execução local profunda no Windows, cérebro em nuvem escalável com memória semântica vetorial contínua e múltiplos clientes (Desktop nativo e Web Chat PWA).
 
 ---
 
-## Architecture Overview
+## 🏗️ Arquitetura do Ecossistema
 
-The system is designed with a 9-step sequential pipeline handling everything from environment perception to autonomous action execution and validation:
-
-1. **Speech-to-Text (STT):** Local transcription powered by Faster-Whisper and CTranslate2 with VAD support.
-2. **Wake Word Detection:** OpenWakeWord integration for continuous local listening.
-3. **Intent Routing:** Heuristic and AI-driven classification to route commands vs. casual conversation.
-4. **Context Management:** Maintains state variables and contextual awareness.
-5. **Memory Retrieval:** Context-aware summarization of previous conversational turns.
-6. **Prompt Generation:** Dynamic system prompts injected with current environment data.
-7. **LLM Orchestration:** Agnostic provider support (OpenAI, Gemini, Groq, Ollama, OpenRouter).
-8. **Validation & Execution:** Safe tool execution loop (app launcher, system control, etc.) with hallucination prevention for small local models.
-9. **Text-to-Speech (TTS):** Edge TTS integration for natural neural voice output.
-
----
-
-## Features
-
-### Core Systems
-- **Agnostic LLM Engine:** Run the assistant using heavy cloud models (GPT-4o, Llama-3-70b via Groq) or local lightweight models (Llama-3-8b via Ollama) with robust context management.
-- **Autonomous Tool Execution:** The LLM can act upon the host system using predefined and registered Python tools.
-- **Context Hardening:** Advanced history sanitization for local LLMs, preventing infinite tool loops and JSON hallucinations.
-
-### Built-in Tools
-- **App Launcher:** Open and close specific desktop applications dynamically.
-- **System Control:** Manage system volume, screen lock, suspend, and shutdown.
-- **Web Research:** Perform web searches and scrape full webpage content dynamically.
-- **Environment Perception:** Access current date, time, weather, and system hardware metrics (CPU/RAM).
-
----
-
-## Directory Structure
+O repositório está organizado de forma modular em três pilares principais:
 
 ```text
-.
-├── config.py             # Global configurations and environment variables
-├── main.py               # Application entry point
-├── pyproject.toml        # Dependencies and project configurations
-├── .env.example          # Environment variables template
+assistente/
+├── 🖥️ Aplicações / Frontends
+│   ├── desktop/                 # Cliente nativo Desktop (Tauri 2.0 Rust + React 19)
+│   ├── web-chat/                # Cliente Web Mobile-First (React 19 + Vite -> Vercel)
+│   └── landing/                 # Landing Page institucional moderna (HTML/CSS/JS)
 │
-├── core/
-│   ├── engine.py         # Main assistant loop orchestration
-│   ├── memory.py         # Conversation history and tool result management
-│   └── pipeline.py       # 9-step processing pipeline
+├── 🧠 Backend & Cloud Brain
+│   ├── api/                     # FastAPI, REST, WebSockets, Vercel Serverless
+│   ├── core/                    # Engine, Pipeline de turnos e orquestração
+│   ├── brain/                   # Consolidação contínua de fatos e perfil do usuário
+│   ├── memory/                  # Vetores de embedding, Supabase & PostgreSQL
+│   ├── providers/               # Provedores agnósticos (Gemini, Groq, Ollama, OpenAI)
+│   ├── tools/                   # Ferramentas extensíveis (OS, Web, Mídia, Automação)
+│   └── audio/                   # STT, TTS e Wake-Word local para Windows
 │
-├── audio/
-│   ├── stt/              # Speech-to-Text (faster-whisper)
-│   ├── tts/              # Text-to-Speech (Edge TTS)
-│   └── wakeword/         # Wake word detection
+├── 📁 Suporte, Scripts & Governança
+│   ├── scripts/
+│   │   ├── db/                  # Manutenção de banco, migrações e inspeção
+│   │   ├── tests/               # Validações de isolamento e segurança
+│   │   └── tools/               # Geração de assets e utilitários
+│   ├── docs/
+│   │   ├── architecture/        # Mapeamento técnico detalhado (MODULOS.md)
+│   │   └── security/            # Auditorias de segurança e conformidade
+│   └── archive/                 # Protótipos históricos arquivados (Chainlit)
 │
-├── brain/
-│   ├── profile.py        # Personality and behavior constraints
-│   ├── router/           # Intent classification and routing
-│   ├── planner/          # Action planning and response validation
-│   └── prompts/          # System prompt builders
-│
-└── tools/
-    ├── registry.py       # Tool registration and schema generation
-    ├── app_launcher.py   # Application management tool
-    ├── system_control.py # OS-level controls (Volume, Power)
-    ├── web_search.py     # Search engine and web scraping integration
-    └── [...]             # Modular tools (Home Assistant, Weather, etc.)
+└── ⚡ Scripts Rápidos (Raiz)
+    ├── run_desktop.bat          # Inicializa API + Charlie Desktop em 1 clique
+    ├── deploy-web.bat           # Sincroniza e faz deploy na Vercel (Web-Charlie)
+    ├── iniciar_charlie.vbs      # Executa assistente em background sem terminal
+    └── adicionar_ao_startup.bat # Registra o Charlie na inicialização do Windows
 ```
+
+Para uma análise completa das responsabilidades e convenções de cada pasta, consulte [`docs/architecture/MODULOS.md`](docs/architecture/MODULOS.md).
 
 ---
 
-## Getting Started
+## 🚀 Como Executar
 
-### Requirements
-- Python >= 3.12
-- [uv](https://github.com/astral-sh/uv) (Package manager, highly recommended)
+### 1. Pré-requisitos
+- Python >= 3.12 (com [uv](https://github.com/astral-sh/uv) instalado)
+- Node.js >= 20 e npm
+- Rust & Tauri CLI (apenas se for compilar o Desktop nativo)
 
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/lucxslv/Assistente.git
-cd Assistente
-```
-
-2. Create the virtual environment and install dependencies:
-```bash
-uv sync
-```
-
-3. Setup environment configurations:
+### 2. Configuração de Variáveis de Ambiente
+Copie o modelo de variáveis e configure suas credenciais:
 ```bash
 cp .env.example .env
 ```
 
-4. Edit the `.env` file with your preferred API keys and LLM provider settings.
+---
 
-### Execution
-Run the assistant directly using the virtual environment:
+### 🖥️ 3. Charlie Desktop (Tauri + React)
+Para abrir o aplicativo nativo para Windows (com a API modular inicializada automaticamente na porta 8005):
+```cmd
+run_desktop.bat
+```
+Ou manualmente:
 ```bash
-uv run python main.py
+cd desktop
+npm run tauri dev
 ```
 
 ---
 
-## Roadmap
+### 🌐 4. Charlie Web Chat (Frontend Web Standalone)
+Para executar o cliente web localmente:
+```bash
+cd web-chat
+npm install
+npm run dev
+```
 
-- Fully integrated continuous Wake Word loop.
-- Local GUI dashboard for system monitoring.
-- Persistent SQLite-based conversational memory.
-- Multi-agent orchestration for complex local tasks.
-- Advanced keyboard/mouse automation modules.
+#### Deploy na Vercel (Repositório `Web-Charlie`):
+Sempre que fizer alterações na pasta `web-chat/`, basta rodar:
+```cmd
+deploy-web.bat
+```
+O script isola as alterações via `git subtree` e envia diretamente para o repositório [`lucxslv/Web-Charlie`](https://github.com/lucxslv/Web-Charlie.git), acionando o build de produção em [https://web-charlie.vercel.app](https://web-charlie.vercel.app).
+
+---
+
+### 🧠 5. Charlie Cloud Brain (API Backend)
+Para rodar apenas o servidor de API localmente:
+```bash
+uv run python -m api.main
+```
+A API expõe documentação interativa Swagger em `http://localhost:8005/docs`.
+
+---
+
+## 🔒 Segurança e Isolamento
+
+O sistema implementa governança de isolamento rigorosa:
+- Isolamento multi-tenant por usuário com validação de tokens JWT.
+- Criptografia e sanitização em tempo real de mensagens de chat.
+- Memória semântica seletiva (consolidação inteligente apenas de fatos e preferências relevantes).
+- Relatório de auditoria completo disponível em [`docs/security/AUDITORIA_SEGURANCA_CHARLIE.md`](docs/security/AUDITORIA_SEGURANCA_CHARLIE.md).
+
+---
+
+## 📄 Licença
+Projeto pessoal e confidencial. Todos os direitos reservados.
