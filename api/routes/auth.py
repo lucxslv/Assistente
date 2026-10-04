@@ -41,6 +41,8 @@ class UserResponse(BaseModel):
     id: str
     name: str
     email: str
+    is_admin: bool = False
+    role: str = "user"
 
 
 class AuthResponse(BaseModel):
@@ -75,10 +77,19 @@ async def verify_supabase_token(token: str) -> Optional[dict]:
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode())
+            u_email = data.get("email") or ""
+            from api.routes.admin import is_admin_email
+            is_adm = (
+                is_admin_email(u_email)
+                or data.get("app_metadata", {}).get("role") == "admin"
+                or data.get("user_metadata", {}).get("is_admin") is True
+            )
             user_info = {
                 "id": data.get("id"),
-                "email": data.get("email"),
-                "name": data.get("user_metadata", {}).get("name") or data.get("email", "").split("@")[0],
+                "email": u_email,
+                "name": data.get("user_metadata", {}).get("name") or u_email.split("@")[0],
+                "is_admin": is_adm,
+                "role": "admin" if is_adm else "user",
             }
             _TOKEN_CACHE[clean_token] = (now, user_info)
             return user_info
@@ -169,6 +180,7 @@ async def register(data: RegisterRequest):
         raise HTTPException(status_code=500, detail=f"Erro de conexão com o banco de autenticação: {str(e)}")
 
     user_id = signup_res.get("id") or signup_res.get("user", {}).get("id")
+    pool = await get_or_init_db_pool()
 
     # 2. Realiza o login para obter o token de sessão
     token = signup_res.get("access_token")
@@ -208,11 +220,15 @@ async def register(data: RegisterRequest):
         except Exception as e:
             logger.warning(f"Não foi possível sincronizar public.User no registro: {e}")
 
+    from api.routes.admin import is_admin_email
+    is_adm = is_admin_email(data.email)
     return AuthResponse(
         user=UserResponse(
             id=str(user_id),
             name=data.name.strip(),
             email=data.email,
+            is_admin=is_adm,
+            role="admin" if is_adm else "user",
         ),
         token=token,
     )
@@ -261,11 +277,19 @@ async def login(data: LoginRequest):
                 except Exception as e:
                     logger.warning(f"Não foi possível sincronizar public.User no login: {e}")
 
+            from api.routes.admin import is_admin_email
+            is_adm = (
+                is_admin_email(data.email)
+                or user_obj.get("app_metadata", {}).get("role") == "admin"
+                or user_obj.get("user_metadata", {}).get("is_admin") is True
+            )
             return AuthResponse(
                 user=UserResponse(
                     id=str(user_id),
                     name=name,
                     email=data.email,
+                    is_admin=is_adm,
+                    role="admin" if is_adm else "user",
                 ),
                 token=token,
             )
@@ -318,4 +342,6 @@ async def get_me(authorization: Optional[str] = Header(None)):
         id=user["id"],
         name=user["name"],
         email=user["email"],
+        is_admin=bool(user.get("is_admin", False)),
+        role=user.get("role", "user"),
     )

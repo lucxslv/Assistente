@@ -1,23 +1,29 @@
+import { User } from '../types/auth';
+
 /**
  * Utilitário de segurança e checagem de privilégio administrativo.
+ * Elimina e-mails pessoais hardcoded no cliente e delega a autorização
+ * para as claims/atributos validados pelo backend.
  */
+export function checkIsAdmin(userOrEmail?: User | string | null): boolean {
+  if (!userOrEmail) return false;
 
-// Permite múltiplos e-mails separados por vírgula em VITE_ADMIN_EMAIL
-const ADMIN_EMAIL_ENV = (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase().trim();
-
-const KNOWN_ADMINS = [
-  'lucassilvacosta060@gmail.com',
-  'lucassilvacosta062@gmail.com',
-];
-
-export function checkIsAdmin(email?: string | null): boolean {
-  if (!email) return false;
-  const clean = email.toLowerCase().trim();
-
-  if (ADMIN_EMAIL_ENV) {
-    const list = ADMIN_EMAIL_ENV.split(',').map((e: string) => e.trim());
-    if (list.includes(clean)) return true;
+  // Se o objeto User foi fornecido, verifica a claim retornada pelo backend
+  if (typeof userOrEmail === 'object') {
+    if (userOrEmail.is_admin === true || userOrEmail.role === 'admin') {
+      return true;
+    }
   }
 
-  return KNOWN_ADMINS.includes(clean);
+  const email = (typeof userOrEmail === 'string' ? userOrEmail : userOrEmail.email || '').toLowerCase().trim();
+  if (!email) return false;
+
+  // Suporte opcional à variável de ambiente para desenvolvimento sem hardcode
+  const adminEnv = (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase().trim();
+  if (adminEnv) {
+    const list = adminEnv.split(',').map((e: string) => e.trim());
+    if (list.includes(email)) return true;
+  }
+
+  return false;
 }
