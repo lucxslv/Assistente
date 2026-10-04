@@ -8,10 +8,16 @@ import { hapticFeedback } from '../../utils/haptics';
 interface MessageItemProps {
   message: Message;
   userName?: string;
-  onRetry?: () => void;
+  onRetryAssistant?: (message: Message) => void;
+  onResendUser?: (message: Message) => void;
 }
 
-export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'Você', onRetry }) => {
+export const MessageItem: React.FC<MessageItemProps> = ({
+  message,
+  userName = 'Você',
+  onRetryAssistant,
+  onResendUser,
+}) => {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -107,9 +113,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
             <div className="mt-2.5 flex items-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
               <span className="flex-1">{message.error}</span>
-              {onRetry && (
+              {onRetryAssistant && (
                 <button
-                  onClick={onRetry}
+                  onClick={() => {
+                    hapticFeedback.light();
+                    onRetryAssistant(message);
+                  }}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-white font-medium transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
@@ -141,14 +150,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, userName = 'V
                 </>
               )}
             </button>
-            {isUser && onRetry && (
+            {isUser && onResendUser && (
               <button
                 onClick={() => {
                   hapticFeedback.light();
-                  onRetry();
+                  onResendUser(message);
                 }}
                 className="min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center gap-1.5 px-2 py-1 sm:p-1 rounded-lg text-[11px] text-[#6B7280] hover:text-[#D1D5DB] hover:bg-white/[0.04] active:scale-95 transition-all cursor-pointer"
-                title="Reenviar esta mensagem"
+                title="Editar ou reenviar esta mensagem"
                 aria-label="Reenviar mensagem"
               >
                 <RotateCcw className="w-3 h-3" />

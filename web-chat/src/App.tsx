@@ -95,11 +95,13 @@ export const App: React.FC = () => {
     sendMessage,
     stopStreaming,
     regenerateLastMessage,
+    retryAssistantMessage,
+    resendUserMessage,
     clearCurrentChat,
     refreshThreads,
   } = useChat();
 
-  const isAdmin = checkIsAdmin(user?.email);
+  const isAdmin = checkIsAdmin(user);
 
   // Monitora alterações na URL para suporte a navegação por rota secreta
   useEffect(() => {
@@ -202,7 +204,11 @@ export const App: React.FC = () => {
         }}
         onRenameThread={(id, newName) => renameThread(id, newName)}
         onDeleteThread={(id) => deleteThread(id)}
-        onLogout={logout}
+        onLogout={() => {
+          logout();
+          setActiveThreadId(null);
+          clearCurrentChat();
+        }}
         onOpenAudit={() => navigateTo('audit')}
         isAdmin={isAdmin}
       />
@@ -239,7 +245,8 @@ export const App: React.FC = () => {
               charlieStatus={charlieStatus}
               isStreaming={isStreaming}
               onSelectPrompt={handleSelectStarterPrompt}
-              onRetryMessage={regenerateLastMessage}
+              onRetryAssistant={(failedMsg) => retryAssistantMessage(failedMsg.id)}
+              onResendUser={(userMsg) => resendUserMessage(userMsg)}
             />
 
             {/* Prompt Dock (Mobile-friendly Input) */}

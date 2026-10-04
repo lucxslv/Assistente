@@ -12,7 +12,8 @@ interface MessageFeedProps {
   charlieStatus: CharlieAIStatus;
   isStreaming: boolean;
   onSelectPrompt: (prompt: string) => void;
-  onRetryMessage?: () => void;
+  onRetryAssistant?: (msg: Message) => void;
+  onResendUser?: (msg: Message) => void;
 }
 
 export const MessageFeed: React.FC<MessageFeedProps> = ({
@@ -21,7 +22,8 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
   charlieStatus,
   isStreaming,
   onSelectPrompt,
-  onRetryMessage,
+  onRetryAssistant,
+  onResendUser,
 }) => {
   const { containerRef, isScrolledUp, unreadCount, scrollToBottom, onNewContent } =
     useAutoScroll<HTMLDivElement>();
@@ -112,7 +114,8 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
                 key={msg.id}
                 message={msg}
                 userName={userName}
-                onRetry={msg.role === 'user' ? onRetryMessage : undefined}
+                onRetryAssistant={onRetryAssistant}
+                onResendUser={onResendUser}
               />
             ))}
 
