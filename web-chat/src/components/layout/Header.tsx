@@ -11,6 +11,7 @@ import {
   X,
   FileCode,
   Shield,
+  SquarePen,
 } from 'lucide-react';
 import { ConnectionStatus, CharlieAIStatus, Thread, Message } from '../../types/chat';
 import { Badge } from '../ui/Badge';
@@ -110,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="min-h-14 pt-[env(safe-area-inset-top,0px)] border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between z-10 select-none flex-shrink-0">
+    <header className="sticky top-0 z-30 w-full min-h-14 pt-[env(safe-area-inset-top,0px)] border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between select-none flex-shrink-0">
       {/* Left: Sidebar Toggle & Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
@@ -125,20 +126,31 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Mobile Header: App Brand with Logo + Subtle Status Indicator */}
-        <div className="flex md:hidden items-center gap-2 min-w-0">
+        {/* Mobile Header: App Brand with Logo + Active Thread Title + Subtle Status Indicator */}
+        <div className="flex md:hidden items-center gap-2 min-w-0 flex-1">
           <div className="w-6 h-6 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-0.5 flex-shrink-0 shadow-sm">
             <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
           </div>
-          <span className="text-sm font-semibold tracking-tight text-[#F3F4F6]">Charlie</span>
-          <span
-            className={`w-2 h-2 rounded-full ${
-              connectionStatus === 'online'
-                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                : 'bg-red-400'
-            }`}
-            title={connectionStatus === 'online' ? 'Online' : 'Offline'}
-          />
+          <div className="flex flex-col min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-semibold tracking-tight text-[#F3F4F6] truncate max-w-[150px] sm:max-w-xs">
+                {activeThread?.name || 'Nova Conversa'}
+              </span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  connectionStatus === 'online'
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                    : 'bg-red-400'
+                }`}
+                title={connectionStatus === 'online' ? 'Online' : 'Offline'}
+              />
+            </div>
+            {charlieStatus !== 'idle' && (
+              <span className="text-[10px] text-primary font-mono truncate animate-pulse leading-none mt-0.5">
+                {charlieStatus === 'thinking' ? 'pensando...' : 'respondendo...'}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Desktop Header: Renameable Thread Title */}
@@ -183,7 +195,20 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-1 sm:gap-2">
+      <div className="flex items-center gap-0.5 sm:gap-2">
+        {/* Mobile: Quick New Chat Button */}
+        <button
+          onClick={() => {
+            hapticFeedback.light();
+            onNewThread();
+          }}
+          className="md:hidden min-h-[44px] min-w-[44px] text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+          title="Nova Conversa"
+          aria-label="Iniciar nova conversa"
+        >
+          <SquarePen className="w-4 h-4" />
+        </button>
+
         {/* Charlie Status (Desktop) */}
         {charlieStatus === 'thinking' && (
           <Badge variant="info" dot className="hidden md:inline-flex text-[10px]">

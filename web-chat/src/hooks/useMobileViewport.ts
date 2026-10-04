@@ -20,15 +20,17 @@ export function useMobileViewport() {
 
       setViewportHeight(currentHeight);
 
-      // Detecta se o teclado virtual está aberto (diferença de altura perceptível > 120px)
+      // Detecta se o teclado virtual está ativo (diferença ou proporção da tela)
       const diff = windowHeight - currentHeight;
-      const keyboardActive = diff > 120;
+      const keyboardActive = diff > 120 || (screenHeight > 0 && currentHeight < screenHeight * 0.72);
       setIsKeyboardOpen(keyboardActive);
 
-      // Garante que o window não tenha scroll residual que desloque o cabeçalho
+      // Garante que o window permaneça travado em (0, 0)
       if (window.scrollX !== 0 || window.scrollY !== 0) {
         window.scrollTo(0, 0);
       }
+      if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+      if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
 
       // Atualiza variáveis CSS no root do documento para adaptação instantânea
       document.documentElement.style.setProperty('--app-height', `${currentHeight}px`);
@@ -39,6 +41,16 @@ export function useMobileViewport() {
     };
 
     handleUpdate();
+
+    const lockWindowScroll = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+      if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+    };
+
+    window.addEventListener('scroll', lockWindowScroll, { passive: true });
 
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleUpdate);
@@ -61,6 +73,7 @@ export function useMobileViewport() {
     window.addEventListener('touchmove', preventBounce, { passive: false });
 
     return () => {
+      window.removeEventListener('scroll', lockWindowScroll);
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', handleUpdate);
         window.visualViewport.removeEventListener('scroll', handleUpdate);
