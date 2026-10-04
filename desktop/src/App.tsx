@@ -4,6 +4,7 @@ import { ChatArea } from "./components/ChatArea";
 import { SettingsModal } from "./components/SettingsModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
+import { MobilePairModal } from "./components/MobilePairModal";
 import { AuthGatekeeper } from "./components/AuthGatekeeper";
 import { Message, Settings, Thread, ToolCallInfo } from "./types";
 import { listen } from "@tauri-apps/api/event";
@@ -47,6 +48,7 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isMobilePairOpen, setIsMobilePairOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => getStoredUser());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -629,6 +631,7 @@ export function App() {
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         user={currentUser}
         onOpenAuth={() => setIsSettingsOpen(true)}
+        onOpenMobilePair={() => setIsMobilePairOpen(true)}
         isConnected={isConnected}
         systemStatus={systemStatus}
         localMetrics={localMetrics}
@@ -691,6 +694,12 @@ export function App() {
         settings={settings}
         user={currentUser}
         onLogout={handleLogout}
+      />
+
+      {/* Modal de Pareamento Mobile (QR Code & PIN) */}
+      <MobilePairModal
+        isOpen={isMobilePairOpen}
+        onClose={() => setIsMobilePairOpen(false)}
       />
 
       {/* Central de Atalhos (Ctrl + /) */}
