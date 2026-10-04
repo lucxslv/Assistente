@@ -105,6 +105,9 @@ class AssistantPipeline:
             from api.routes.auth import current_user_id_var, current_user_name_var
             uid = user_id or current_user_id_var.get()
             uname = user_name or current_user_name_var.get()
+            current_user_id_var.set(uid)
+            if uname:
+                current_user_name_var.set(uname)
         except Exception:
             uid = user_id or "default"
             uname = user_name
@@ -153,13 +156,38 @@ class AssistantPipeline:
         # Etapa 5: Recuperador de Memória Contínua (UserMemory / UserPreference) com isolamento estrito
         user_facts = []
         user_prefs = {}
+        cross_chat_context = ""
         try:
             from api.db import get_or_init_db_pool
-            from api.services.chat_persistence import get_user_memory_facts, get_user_preferences_dict
+            from api.services.chat_persistence import get_user_memory_facts, get_user_preferences_dict, search_user_chat_history
             pool = await get_or_init_db_pool()
-            if pool and uid:
+            if pool and uid and uid != "default":
                 user_facts = await get_user_memory_facts(pool, uid, limit=15)
                 user_prefs = await get_user_preferences_dict(pool, uid)
+
+                # Etapa 5.1: Cross-Chat Context proativo (busca automática se usuário fizer menção a outros chats)
+                cross_triggers = [
+                    "outro chat", "outros chats", "outra conversa", "outras conversas",
+                    "chat anterior", "conversa passada", "conversamos antes", "falamos no outro",
+                    "falamos na outra", "no outro", "na outra", "nos outros"
+                ]
+                if user_text and any(t in user_text.lower() for t in cross_triggers):
+                    try:
+                        past_matches = await search_user_chat_history(
+                            pool=pool,
+                            user_id=uid,
+                            query=user_text,
+                            exclude_session_id=thread_id,
+                            limit=4,
+                        )
+                        if past_matches:
+                            lines = []
+                            for pm in past_matches:
+                                lines.append(f"- Chat \"{pm['session_title']}\" ({pm['date']}) [{pm['role']}]: {pm['content']}")
+                            cross_chat_context = "\n".join(lines)
+                            logger.info(f"[pipeline] Cross-chat context carregado: {len(past_matches)} trechos encontrados")
+                    except Exception as cc_err:
+                        logger.debug(f"Aviso cross-chat prefetch: {cc_err}")
         except Exception as mem_err:
             logger.warning(f"Aviso ao carregar memórias ativas para o prompt: {mem_err}")
 
@@ -177,6 +205,7 @@ class AssistantPipeline:
             user_text=user_text,
             user_facts=user_facts,
             user_preferences=user_prefs,
+            cross_chat_context=cross_chat_context,
         )
 
         active_tools = self.tools.get_schemas()
