@@ -412,6 +412,10 @@ async def get_user_memory_facts(
     if not pool or not user_id:
         return []
     try:
+        limit = int(float(limit)) if limit else 15
+    except (ValueError, TypeError):
+        limit = 15
+    try:
         async with _db_connection_scope(pool) as conn:
             rows = await conn.fetch(
                 """
@@ -476,6 +480,11 @@ async def load_chat_history(
         return []
 
     try:
+        limit = int(float(limit)) if limit else 30
+    except (ValueError, TypeError):
+        limit = 30
+
+    try:
         s_uuid = uuid.UUID(session_id)
     except (ValueError, TypeError):
         return []
@@ -535,6 +544,11 @@ async def search_user_chat_history(
     """
     if not pool or not user_id or not query or not query.strip():
         return []
+
+    try:
+        limit = int(float(limit)) if limit else 5
+    except (ValueError, TypeError):
+        limit = 5
 
     clean_q = query.strip()
     exc_uuid = None
@@ -662,6 +676,11 @@ async def get_chat_session_details(
     """Recupera mensagens de uma sessão/chat específico do usuário por ID ou por busca no título."""
     if not pool or not user_id:
         return {}
+
+    try:
+        limit = int(float(limit)) if limit else 15
+    except (ValueError, TypeError):
+        limit = 15
 
     target_sid = None
     target_title = None

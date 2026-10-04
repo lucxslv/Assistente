@@ -231,10 +231,15 @@ class AssistantPipeline:
                     if chunk.tool_calls:
                         tool_calls.extend(chunk.tool_calls)
                     if chunk.text:
-                        iteration_reply += chunk.text
+                        chunk_text = chunk.text
+                        stripped = chunk_text.strip()
+                        if stripped.startswith("Chamando ferramenta:") or stripped.startswith("ToolCall("):
+                            logger.warning(f"[pipeline] Suprimindo vazamento de ferramenta no stream: {stripped[:80]}")
+                            continue
+                        iteration_reply += chunk_text
                         if not chunk.tool_calls:
                             emitted_any_token = True
-                            yield StreamEvent(type="token", data={"token": chunk.text})
+                            yield StreamEvent(type="token", data={"token": chunk_text})
             except Exception as e:
                 logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
                 fallback_model = config.gemini_model
@@ -248,10 +253,15 @@ class AssistantPipeline:
                         if chunk.tool_calls:
                             tool_calls.extend(chunk.tool_calls)
                         if chunk.text:
-                            iteration_reply += chunk.text
+                            chunk_text = chunk.text
+                            stripped = chunk_text.strip()
+                            if stripped.startswith("Chamando ferramenta:") or stripped.startswith("ToolCall("):
+                                logger.warning(f"[pipeline] Suprimindo vazamento de ferramenta no stream fallback: {stripped[:80]}")
+                                continue
+                            iteration_reply += chunk_text
                             if not chunk.tool_calls:
                                 emitted_any_token = True
-                                yield StreamEvent(type="token", data={"token": chunk.text})
+                                yield StreamEvent(type="token", data={"token": chunk_text})
                 else:
                     raise
 
@@ -317,9 +327,11 @@ class AssistantPipeline:
 
         import re
         final_reply = re.sub(r'<[^>]+>', '', final_reply).strip()
+        final_reply = re.sub(r'Chamando ferramenta:[^\n]*', '', final_reply).strip()
+        final_reply = re.sub(r'ToolCall\([^\)]*\)', '', final_reply).strip()
         final_reply = re.sub(r'\{.*?"name".*?\}', '', final_reply, flags=re.DOTALL).strip()
         final_reply = re.sub(r'\{.*?"action".*?\}', '', final_reply, flags=re.DOTALL).strip()
-        if not final_reply:
+        if not final_reply or final_reply.startswith("Chamando ferramenta:"):
             final_reply = "Ação concluída com sucesso."
 
         if not self.planner.validate_response(final_reply):
