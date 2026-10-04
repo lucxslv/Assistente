@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Message, Thread, FileAttachment, ConnectionStatus, CharlieAIStatus } from '../types/chat';
 import { ThreadsService } from '../services/threadsService';
 import { StorageService } from '../services/storage';
-import { chatStream } from '../services/chatStream';
+import { chatStream, ImageAttachmentPayload } from '../services/chatStream';
 import { api } from '../services/api';
 import { generateUUID } from '../utils/formatters';
 
@@ -18,6 +18,9 @@ export function useChat() {
   
   const abortControllerRef = useRef<AbortController | null>(null);
   const isFirstLoadRef = useRef<boolean>(true);
+  const messagesRef = useRef<Message[]>([]);
+  messagesRef.current = messages;
+  const streamingThreadIdRef = useRef<string | null>(null);
 
   // Monitor connection status
   useEffect(() => {
@@ -83,12 +86,20 @@ export function useChat() {
       const savedDraft = StorageService.getDraft(activeThreadId);
       setDraftState(savedDraft);
 
+      // Race condition guard: If this thread was just created and is actively streaming,
+      // do not overwrite in-flight optimistic user & assistant messages with empty DB results
+      if (streamingThreadIdRef.current === activeThreadId && messagesRef.current.length > 0) {
+        return;
+      }
+
       // Load messages
       setIsLoadingMessages(true);
       try {
         const msgs = await ThreadsService.getMessages(activeThreadId);
         if (!isCancelled) {
-          setMessages(msgs);
+          if (streamingThreadIdRef.current !== activeThreadId) {
+            setMessages(msgs);
+          }
         }
       } catch (err) {
         console.warn('Erro ao carregar mensagens da conversa:', err);
@@ -163,7 +174,22 @@ export function useChat() {
     }
     setIsStreaming(false);
     setCharlieStatus('idle');
-  }, []);
+    streamingThreadIdRef.current = null;
+
+    setMessages((prev) => {
+      const hasStreaming = prev.some((m) => m.isStreaming || m.status === 'streaming');
+      if (!hasStreaming) return prev;
+      const updated = prev.map((msg) =>
+        msg.isStreaming || msg.status === 'streaming'
+          ? { ...msg, isStreaming: false, status: 'done' as const }
+          : msg
+      );
+      if (activeThreadId) {
+        StorageService.setCachedMessages(activeThreadId, updated);
+      }
+      return updated;
+    });
+  }, [activeThreadId]);
 
   // Send message
   const sendMessage = useCallback(
@@ -181,6 +207,9 @@ export function useChat() {
         const newThread = await createNewThread(newThreadTitle);
         targetThreadId = newThread.id;
       }
+
+      // Mark this thread as actively streaming to shield against loadThreadData race condition
+      streamingThreadIdRef.current = targetThreadId;
 
       // Format full prompt including text attachments if any
       let finalPrompt = trimmedText;
@@ -240,11 +269,34 @@ export function useChat() {
 
       let accumulatedReply = '';
 
-      // Extrai histórico recente da conversa para garantir continuidade contextual
-      const conversationHistory = messages
+      // Snapshot fresco e atômico via messagesRef.current (elimina Stale Closure)
+      const currentMessages = messagesRef.current;
+      const conversationHistory = currentMessages
         .filter((m) => m.content && m.content.trim())
         .slice(-20)
         .map((m) => ({ role: m.role, content: m.content }));
+
+      // Extrai anexos de imagem para payload multimodal real
+      const imagePayloads: ImageAttachmentPayload[] = attachments
+        .filter((att) => att.isImage && att.dataUrl)
+        .map((att) => {
+          let b64 = att.dataUrl || '';
+          let mime = 'image/png';
+          if (b64.startsWith('data:')) {
+            const matches = b64.match(/^data:([^;]+);base64,(.+)$/);
+            if (matches) {
+              mime = matches[1];
+              b64 = matches[2];
+            } else if (b64.includes(',')) {
+              b64 = b64.split(',')[1];
+            }
+          }
+          return {
+            name: att.name,
+            mime_type: mime,
+            data: b64,
+          };
+        });
 
       try {
         await chatStream.send({
@@ -252,6 +304,7 @@ export function useChat() {
           threadId: targetThreadId,
           skipTts: true,
           history: conversationHistory,
+          images: imagePayloads.length > 0 ? imagePayloads : undefined,
           signal: abortController.signal,
           onToken: (token) => {
             setCharlieStatus('speaking');
@@ -267,6 +320,7 @@ export function useChat() {
           onDone: (fullReply) => {
             setIsStreaming(false);
             setCharlieStatus('idle');
+            streamingThreadIdRef.current = null;
             abortControllerRef.current = null;
             const finalContent = fullReply || accumulatedReply;
 
@@ -304,6 +358,7 @@ export function useChat() {
           onError: (errorMsg) => {
             setIsStreaming(false);
             setCharlieStatus('error');
+            streamingThreadIdRef.current = null;
             abortControllerRef.current = null;
             setMessages((prev) =>
               prev.map((msg) =>
@@ -323,6 +378,7 @@ export function useChat() {
       } catch (err: unknown) {
         setIsStreaming(false);
         setCharlieStatus('error');
+        streamingThreadIdRef.current = null;
         abortControllerRef.current = null;
         const msg = (err as Error)?.message || 'Erro inesperado ao comunicar com o Charlie.';
         setMessages((prev) =>
@@ -340,7 +396,8 @@ export function useChat() {
   // Regenerate last message
   const regenerateLastMessage = useCallback(() => {
     if (messages.length === 0 || isStreaming) return;
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    const currentMsgs = messagesRef.current;
+    const lastUserMsg = [...currentMsgs].reverse().find((m) => m.role === 'user');
     if (!lastUserMsg) return;
 
     // Remove last assistant message
@@ -353,7 +410,41 @@ export function useChat() {
     });
 
     sendMessage(lastUserMsg.content, lastUserMsg.attachments);
-  }, [messages, isStreaming, sendMessage]);
+  }, [isStreaming, sendMessage]);
+
+  // Retry failed assistant message without duplicating questions
+  const retryAssistantMessage = useCallback(
+    (failedMsgId: string) => {
+      if (isStreaming) return;
+      const currentMsgs = messagesRef.current;
+      const failedIdx = currentMsgs.findIndex((m) => m.id === failedMsgId);
+      if (failedIdx === -1) return;
+
+      // Find the preceding user message
+      let userMsg: Message | null = null;
+      for (let i = failedIdx - 1; i >= 0; i--) {
+        if (currentMsgs[i].role === 'user') {
+          userMsg = currentMsgs[i];
+          break;
+        }
+      }
+      if (!userMsg) return;
+
+      // Remove the failed assistant message so it can be cleanly re-executed
+      setMessages((prev) => prev.filter((m) => m.id !== failedMsgId));
+      sendMessage(userMsg.content, userMsg.attachments, activeThreadId || undefined);
+    },
+    [isStreaming, sendMessage, activeThreadId]
+  );
+
+  // Resend or edit user message
+  const resendUserMessage = useCallback(
+    (userMsg: Message) => {
+      if (isStreaming) return;
+      setDraft(userMsg.content);
+    },
+    [isStreaming, setDraft]
+  );
 
   // Clear current chat
   const clearCurrentChat = useCallback(async () => {
@@ -382,6 +473,8 @@ export function useChat() {
     sendMessage,
     stopStreaming,
     regenerateLastMessage,
+    retryAssistantMessage,
+    resendUserMessage,
     clearCurrentChat,
     refreshThreads,
   };
