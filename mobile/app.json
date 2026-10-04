@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Charlie",
+    "slug": "charlie-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "charlie",
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": { "typedRoutes": true },
+    "android": { "package": "com.charlie.mobile" },
+    "ios": { "bundleIdentifier": "com.charlie.mobile" }
+  }
+}

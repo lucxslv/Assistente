@@ -1,0 +1,175 @@
+import * as SecureStore from 'expo-secure-store';
+import { setApiUrl } from '@/src/lib/config';
+import { session } from '@/src/lib/session';
+
+export interface ServerProfile {
+  id: string;
+  name: string;
+  url: string;
+  token?: string;
+  isDefault?: boolean;
+  createdAt?: string;
+}
+
+const STORAGE_SERVERS_KEY = 'charlie.servers.list';
+const STORAGE_ACTIVE_ID_KEY = 'charlie.servers.active_id';
+
+const FALLBACK_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://assistente-xi.vercel.app/api';
+
+/** Normaliza URLs removendo barras finais e garantindo protocolo */
+export function normalizeServerUrl(rawUrl: string): string {
+  let url = rawUrl.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) {
+    url = `http://${url}`;
+  }
+  return url;
+}
+
+/** Perfil padrão caso nenhum ambiente esteja configurado */
+export function getDefaultServerProfile(): ServerProfile {
+  return {
+    id: 'default-cloud',
+    name: 'Nuvem Padrão',
+    url: normalizeServerUrl(FALLBACK_URL),
+    isDefault: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Serviço de gerenciamento e persistência de múltiplos servidores e ambientes do Charlie.
+ * Armazena perfis e tokens com criptografia via Expo SecureStore.
+ */
+class ServerConfigService {
+  /**
+   * Retorna a lista de todos os servidores cadastrados.
+   * Se vazia, inicializa com o servidor padrão.
+   */
+  async listServers(): Promise<ServerProfile[]> {
+    try {
+      const json = await SecureStore.getItemAsync(STORAGE_SERVERS_KEY);
+      if (json) {
+        const parsed = JSON.parse(json) as ServerProfile[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignora erro de leitura e usa fallback
+    }
+
+    const defaultServer = getDefaultServerProfile();
+    await this.persistList([defaultServer]);
+    return [defaultServer];
+  }
+
+  /**
+   * Retorna o servidor ativo no momento.
+   */
+  async getActiveServer(): Promise<ServerProfile> {
+    const servers = await this.listServers();
+    try {
+      const activeId = await SecureStore.getItemAsync(STORAGE_ACTIVE_ID_KEY);
+      if (activeId) {
+        const found = servers.find((s) => s.id === activeId);
+        if (found) return found;
+      }
+    } catch {
+      // Fallback para o primeiro servidor
+    }
+
+    const selected = servers.find((s) => s.isDefault) ?? servers[0] ?? getDefaultServerProfile();
+    await this.setActiveServer(selected.id);
+    return selected;
+  }
+
+  /**
+   * Define o servidor ativo e sincroniza as configurações globais da API e token.
+   */
+  async setActiveServer(id: string): Promise<ServerProfile> {
+    const servers = await this.listServers();
+    const target = servers.find((s) => s.id === id);
+
+    if (!target) {
+      throw new Error(`Servidor com ID "${id}" não encontrado.`);
+    }
+
+    await SecureStore.setItemAsync(STORAGE_ACTIVE_ID_KEY, target.id);
+
+    // Sincroniza a URL no config global da API
+    await setApiUrl(target.url);
+
+    // Se o perfil trouxer token associado, sincroniza na sessão
+    if (target.token) {
+      await session.setToken(target.token);
+    }
+
+    return target;
+  }
+
+  /**
+   * Salva ou atualiza um perfil de servidor.
+   */
+  async saveServer(
+    profile: Omit<ServerProfile, 'id'> & { id?: string; makeActive?: boolean }
+  ): Promise<ServerProfile> {
+    const servers = await this.listServers();
+    const id = profile.id ?? `srv-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+    const normalizedUrl = normalizeServerUrl(profile.url);
+
+    const newProfile: ServerProfile = {
+      id,
+      name: profile.name.trim() || 'Servidor Charlie',
+      url: normalizedUrl,
+      token: profile.token?.trim(),
+      isDefault: Boolean(profile.isDefault),
+      createdAt: new Date().toISOString(),
+    };
+
+    const existingIndex = servers.findIndex((s) => s.id === id || s.url === normalizedUrl);
+
+    let updatedList: ServerProfile[];
+    if (existingIndex >= 0) {
+      updatedList = [...servers];
+      updatedList[existingIndex] = {
+        ...updatedList[existingIndex],
+        ...newProfile,
+      };
+    } else {
+      updatedList = [newProfile, ...servers];
+    }
+
+    await this.persistList(updatedList);
+
+    if (profile.makeActive || updatedList.length === 1) {
+      await this.setActiveServer(newProfile.id);
+    }
+
+    return newProfile;
+  }
+
+  /**
+   * Remove um perfil de servidor.
+   */
+  async deleteServer(id: string): Promise<void> {
+    const servers = await this.listServers();
+    const filtered = servers.filter((s) => s.id !== id);
+
+    if (filtered.length === 0) {
+      filtered.push(getDefaultServerProfile());
+    }
+
+    await this.persistList(filtered);
+
+    const activeId = await SecureStore.getItemAsync(STORAGE_ACTIVE_ID_KEY);
+    if (activeId === id) {
+      await this.setActiveServer(filtered[0].id);
+    }
+  }
+
+  private async persistList(servers: ServerProfile[]): Promise<void> {
+    await SecureStore.setItemAsync(STORAGE_SERVERS_KEY, JSON.stringify(servers));
+  }
+}
+
+export const serverConfigService = new ServerConfigService();
