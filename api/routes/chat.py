@@ -284,6 +284,10 @@ async def chat_stream_sse(
             ):
                 if ev.type == "token":
                     final_reply += ev.data.get("token", "")
+                elif ev.type == "reset_and_fallback":
+                    final_reply = ""
+                    if ev.data.get("fallback_model"):
+                        final_model = ev.data.get("fallback_model")
                 elif ev.type == "done":
                     final_reply = ev.data.get("reply", final_reply)
                     if ev.data.get("model"):
@@ -406,6 +410,10 @@ async def chat_ws(websocket: WebSocket):
                     async for ev in pipeline.run_pipeline_stream(text, thread_id=thread_id, user_id=str(ws_user["id"])):
                         if ev.type == "token":
                             final_reply += ev.data.get("token", "")
+                        elif ev.type == "reset_and_fallback":
+                            final_reply = ""
+                            if ev.data.get("fallback_model"):
+                                final_model = ev.data.get("fallback_model")
                         elif ev.type == "done":
                             final_reply = ev.data.get("reply", final_reply)
                             if ev.data.get("model"):

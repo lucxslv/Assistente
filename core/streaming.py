@@ -4,7 +4,17 @@ from dataclasses import dataclass
 import json
 from typing import Any, Dict, Literal
 
-StreamEventType = Literal["status", "token", "tool_start", "tool_end", "done", "error"]
+StreamEventType = Literal[
+    "status",
+    "token",
+    "tool_start",
+    "tool_end",
+    "done",
+    "error",
+    "reset_and_fallback",
+    "client_tool_request",
+    "client_tool_call",
+]
 
 
 @dataclass
