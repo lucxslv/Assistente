@@ -1,0 +1,8 @@
+{
+  "name": "@charlie/shared",
+  "version": "1.0.0",
+  "description": "Shared contracts, types, and design tokens for the Charlie ecosystem (Desktop, Web Chat, Mobile, and Cloud Brain)",
+  "main": "index.ts",
+  "types": "index.ts",
+  "private": true
+}

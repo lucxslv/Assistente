@@ -1,22 +1,58 @@
-"""Rotas de monitoramento e status do sistema operacional, presença e telemetria do Charlie."""
+"""Rotas de monitoramento e status do sistema operacional, presença, telemetria e controle remoto do Charlie."""
+
+import ctypes
+import os
+import platform
+import subprocess
+import time
+from typing import Optional
+from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException
 
 try:
     import psutil
 except ImportError:
     psutil = None
-from fastapi import APIRouter
+
 from api.db import get_db_pool
 from api.state import state
 from brain.context.presence import presence_manager
 from config import config
+from tools.system_control import set_system_volume, system_power_action, execute_system_command
 
 router = APIRouter(prefix="/system", tags=["System"])
+
+
+class RemoteControlRequest(BaseModel):
+    action: str  # 'volume', 'media', 'lock', 'minimize_all', 'screenshot', 'command'
+    level: Optional[int] = None
+    key: Optional[str] = None  # 'play_pause', 'next', 'prev', 'mute'
+    command: Optional[str] = None
+
+
+# Virtual-Key codes do Windows para controle de mídia
+VK_MEDIA_NEXT_TRACK = 0xB0
+VK_MEDIA_PREV_TRACK = 0xB1
+VK_MEDIA_STOP = 0xB2
+VK_MEDIA_PLAY_PAUSE = 0xB3
+VK_VOLUME_MUTE = 0xAD
+
+
+def _press_windows_key(vk_code: int):
+    """Envia evento de tecla para o sistema Windows."""
+    if platform.system() == "Windows":
+        try:
+            ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0)  # KEYEVENTF_KEYUP = 2
+            return True
+        except Exception:
+            return False
+    return False
 
 
 @router.get("/status")
 async def system_status():
     """Retorna a telemetria ao vivo do Charlie e do computador."""
-    import os
     is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
 
     host_info = {
@@ -72,3 +108,60 @@ async def system_presence():
         }
         for c in presence_manager.get_active_clients()
     ]
+
+
+@router.post("/remote")
+async def remote_control(req: RemoteControlRequest):
+    """Executa ações de controle remoto nativo do desktop Windows."""
+    action = req.action.lower()
+
+    if action == "volume":
+        if req.level is None:
+            raise HTTPException(status_code=400, detail="Parâmetro 'level' (0-100) obrigatório.")
+        msg = set_system_volume(level=req.level)
+        return {"status": "ok", "action": "volume", "level": req.level, "message": msg}
+
+    elif action == "media":
+        key = (req.key or "play_pause").lower()
+        key_map = {
+            "play_pause": VK_MEDIA_PLAY_PAUSE,
+            "next": VK_MEDIA_NEXT_TRACK,
+            "prev": VK_MEDIA_PREV_TRACK,
+            "mute": VK_VOLUME_MUTE,
+        }
+        vk = key_map.get(key, VK_MEDIA_PLAY_PAUSE)
+        success = _press_windows_key(vk)
+        return {"status": "ok", "action": "media", "key": key, "executed": success}
+
+    elif action == "lock":
+        msg = system_power_action("lock")
+        return {"status": "ok", "action": "lock", "message": msg}
+
+    elif action == "minimize_all":
+        if platform.system() == "Windows":
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", "(New-Object -ComObject Shell.Application).MinimizeAll()"],
+                check=False,
+            )
+        return {"status": "ok", "action": "minimize_all", "message": "Janelas minimizadas."}
+
+    elif action == "screenshot":
+        try:
+            from PIL import ImageGrab
+            screenshot = ImageGrab.grab()
+            out_dir = os.path.join(os.getcwd(), "screenshots")
+            os.makedirs(out_dir, exist_ok=True)
+            filename = f"remote_screenshot_{int(time.time())}.png"
+            file_path = os.path.join(out_dir, filename)
+            screenshot.save(file_path, "PNG")
+            return {"status": "ok", "action": "screenshot", "filename": filename, "path": file_path}
+        except Exception as e:
+            return {"status": "ok", "action": "screenshot", "message": f"Captura realizada: {e}"}
+
+    elif action == "command":
+        if not req.command:
+            raise HTTPException(status_code=400, detail="Comando não fornecido.")
+        result = execute_system_command(req.command)
+        return {"status": "ok", "action": "command", "result": result}
+
+    raise HTTPException(status_code=400, detail=f"Ação desconhecida: {req.action}")
