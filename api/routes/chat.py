@@ -52,6 +52,39 @@ async def _load_thread_history(thread_id: str, limit: int = 30) -> list[dict]:
     return await load_chat_history(pool, thread_id, limit=limit)
 
 
+def _dispatch_save_message(
+    pool,
+    session_id: str,
+    user_id: str,
+    role: str,
+    content: str,
+    model: Optional[str] = None,
+    tokens: Optional[int] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+):
+    """Despacha a persistência da mensagem de forma unificada e atômica.
+
+    Se background_tasks estiver presente no request HTTP, utiliza EXCLUSIVAMENTE background_tasks.add_task.
+    asyncio.create_task é usado única e exclusivamente como fallback quando background_tasks for nulo.
+    """
+    from api.services.chat_persistence import save_chat_message_record
+
+    kwargs = {
+        "pool": pool,
+        "session_id": session_id,
+        "user_id": user_id,
+        "role": role,
+        "content": content,
+        "model": model,
+        "tokens": tokens,
+    }
+
+    if background_tasks is not None:
+        background_tasks.add_task(save_chat_message_record, **kwargs)
+    else:
+        asyncio.create_task(save_chat_message_record(**kwargs))
+
+
 async def _prepare_session_and_store_user_message(
     message: str,
     thread_id: Optional[str] = None,
@@ -78,29 +111,19 @@ async def _prepare_session_and_store_user_message(
     u_email = user.get("email")
 
     if pool:
-        from api.services.chat_persistence import ensure_session_record, save_chat_message_record
+        from api.services.chat_persistence import ensure_session_record
         # Garante a existência imediata da sessão para integridade e FK
         await ensure_session_record(pool, session_id=sid, user_id=u_id_str, user_email=u_email, prompt=message)
 
-        # Persistência assíncrona não-bloqueante da mensagem do usuário
+        # Persistência atômica sem duplicação de gravação
         if message and message.strip():
-            if background_tasks:
-                background_tasks.add_task(
-                    save_chat_message_record,
-                    pool=pool,
-                    session_id=sid,
-                    user_id=u_id_str,
-                    role="user",
-                    content=message,
-                )
-            asyncio.create_task(
-                save_chat_message_record(
-                    pool=pool,
-                    session_id=sid,
-                    user_id=u_id_str,
-                    role="user",
-                    content=message,
-                )
+            _dispatch_save_message(
+                pool=pool,
+                session_id=sid,
+                user_id=u_id_str,
+                role="user",
+                content=message,
+                background_tasks=background_tasks,
             )
 
     return sid
@@ -121,31 +144,18 @@ async def _store_assistant_message(
     if not pool:
         return
 
-    from api.services.chat_persistence import save_chat_message_record
     u_id_str = str(user_id) if user_id else "default"
     m_name = model or "gemini-3.1-flash-lite"
 
-    if background_tasks:
-        background_tasks.add_task(
-            save_chat_message_record,
-            pool=pool,
-            session_id=thread_id,
-            user_id=u_id_str,
-            role="assistant",
-            content=reply,
-            model=m_name,
-            tokens=tokens,
-        )
-    asyncio.create_task(
-        save_chat_message_record(
-            pool=pool,
-            session_id=thread_id,
-            user_id=u_id_str,
-            role="assistant",
-            content=reply,
-            model=m_name,
-            tokens=tokens,
-        )
+    _dispatch_save_message(
+        pool=pool,
+        session_id=thread_id,
+        user_id=u_id_str,
+        role="assistant",
+        content=reply,
+        model=m_name,
+        tokens=tokens,
+        background_tasks=background_tasks,
     )
 
 

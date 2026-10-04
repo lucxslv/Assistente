@@ -68,6 +68,15 @@ class ToolRegistry:
         if handler is None:
             return f"Ferramenta '{name}' não encontrada."
 
+        # Sandbox & Proteção contra Comandos Perigosos
+        if name in ("execute_command", "run_command", "execute_system_command"):
+            cmd = arguments.get("command", "")
+            from tools.system_control import validate_system_command
+            is_valid, reason = validate_system_command(cmd)
+            if not is_valid:
+                logger.warning(f"[AUDIT DE SEGURANÇA] Comando bloqueado no registro de ferramentas: {cmd} (Motivo: {reason})")
+                return f"Segurança: O comando '{cmd}' foi bloqueado pelas políticas de proteção do Charlie por conter instruções potencialmente destrutivas ({reason})."
+
         scope = self.get_scope(name)
 
         # Se for ferramenta local de dispositivo

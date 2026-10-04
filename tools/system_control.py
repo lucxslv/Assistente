@@ -2,9 +2,11 @@
 
 import logging
 import os
+import re
 import subprocess
 import ctypes
 from ctypes import cast, POINTER
+from typing import Optional
 
 # Tentamos importar pycaw para gerenciar áudio
 try:
@@ -13,6 +15,33 @@ except ImportError:
     AudioUtilities = None
 
 logger = logging.getLogger(__name__)
+
+BLOCKED_COMMAND_PATTERNS = [
+    (r"\b(?:rmdir|rd)\s+/[sS]\b", "remoção recursiva de diretórios via CMD"),
+    (r"\bformat\b", "formatação de unidade de disco"),
+    (r"\bdel\s+(?:/[a-zA-Z0-9_-]+\s+)*[cC]:", "exclusão em massa na raiz do disco C:"),
+    (r"\bRemove-Item\b.*-Recurse\b.*[cC]:", "exclusão recursiva do PowerShell visando o disco C:"),
+    (r"\brm\s+-r(?:f)?\s+[cC]:", "exclusão recursiva visando o disco C:"),
+    (r"\bClear-Disk\b", "limpeza/formatação de disco físico"),
+    (r"\bStop-Computer\b", "desligamento forçado de máquina via PowerShell"),
+    (r"\bdiskpart\b", "manipulação de partições em baixo nível"),
+    (r"\bbcdedit\b", "alteração dos registros de boot do Windows"),
+    (r"\bvssadmin\s+delete\s+shadows\b", "exclusão de cópias de sombra"),
+    (r"\b(?:rm\s+-rf\s+/|mkfs\b|dd\s+if=)", "comandos destrutivos de formato/disco"),
+]
+
+
+def validate_system_command(command: str) -> tuple[bool, Optional[str]]:
+    """Valida se uma instrução contém comandos perigosos ou destrutivos."""
+    if not command or not command.strip():
+        return True, None
+
+    cmd_normalized = command.strip()
+    for pattern, reason in BLOCKED_COMMAND_PATTERNS:
+        if re.search(pattern, cmd_normalized, re.IGNORECASE):
+            return False, reason
+
+    return True, None
 
 def set_system_volume(level: int = None, mute: bool = None) -> str:
     """Altera o volume do sistema do Windows ou muta/desmuta.
@@ -94,7 +123,12 @@ def system_power_action(action: str) -> str:
 
 
 def execute_system_command(command: str, cwd: str = None) -> str:
-    """Executa um comando no PowerShell ou CMD do computador Windows do usuário."""
+    """Executa um comando no PowerShell ou CMD do computador Windows do usuário com validação de segurança."""
+    is_valid, reason = validate_system_command(command)
+    if not is_valid:
+        logger.warning(f"[AUDIT DE SEGURANÇA] Tentativa de execução de comando perigoso bloqueada: {command} (Motivo: {reason})")
+        return f"Segurança: O comando foi bloqueado pelas políticas de proteção do Charlie por conter instruções potencialmente destrutivas ({reason})."
+
     is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
     if is_cloud:
         return f"Comando '{command}' despachado para execução no PowerShell do computador Windows do usuário via Charlie Desktop."

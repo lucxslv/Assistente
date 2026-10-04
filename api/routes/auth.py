@@ -5,6 +5,7 @@ import logging
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from typing import Dict, Optional
 from fastapi import APIRouter, Header, HTTPException, status, Request, Response
 from pydantic import BaseModel
@@ -22,8 +23,46 @@ current_user_id_var: ContextVar[str] = ContextVar("current_user_id", default="de
 current_user_email_var: ContextVar[str] = ContextVar("current_user_email", default="")
 current_user_name_var: ContextVar[str] = ContextVar("current_user_name", default="")
 
-# Cache simples em memória para tokens validados (TTL: 60 segundos)
-_TOKEN_CACHE: Dict[str, tuple[float, dict]] = {}
+
+class TokenCache:
+    """Cache LRU delimitado com TTL de expiração para tokens validados contra vazamento de memória."""
+
+    def __init__(self, max_size: int = 500, ttl_seconds: float = 60.0):
+        self._cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+        self._max_size = max_size
+        self._ttl_seconds = ttl_seconds
+
+    def get(self, token: str) -> Optional[dict]:
+        now = time.time()
+        if token in self._cache:
+            cached_time, user_info = self._cache[token]
+            if now - cached_time < self._ttl_seconds:
+                self._cache.move_to_end(token)
+                return user_info
+            else:
+                del self._cache[token]
+        return None
+
+    def set(self, token: str, user_info: dict) -> None:
+        now = time.time()
+        if token in self._cache:
+            del self._cache[token]
+        elif len(self._cache) >= self._max_size:
+            self._purge_expired(now)
+            while len(self._cache) >= self._max_size:
+                self._cache.popitem(last=False)
+        self._cache[token] = (now, user_info)
+
+    def _purge_expired(self, now: float) -> None:
+        expired = [k for k, (t, _) in self._cache.items() if now - t >= self._ttl_seconds]
+        for k in expired:
+            self._cache.pop(k, None)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+
+_token_cache = TokenCache(max_size=500, ttl_seconds=60.0)
 
 
 class RegisterRequest(BaseModel):
@@ -56,13 +95,11 @@ async def verify_supabase_token(token: str) -> Optional[dict]:
         return None
 
     clean_token = token.replace("Bearer ", "").strip()
-    now = time.time()
 
-    # 1. Verifica cache em memória
-    if clean_token in _TOKEN_CACHE:
-        cached_time, cached_user = _TOKEN_CACHE[clean_token]
-        if now - cached_time < 60:
-            return cached_user
+    # 1. Verifica cache LRU em memória com TTL
+    cached_user = _token_cache.get(clean_token)
+    if cached_user:
+        return cached_user
 
     # 2. Validação pela API oficial do Supabase
     user_url = f"{config.supabase_url}/auth/v1/user"
@@ -91,7 +128,7 @@ async def verify_supabase_token(token: str) -> Optional[dict]:
                 "is_admin": is_adm,
                 "role": "admin" if is_adm else "user",
             }
-            _TOKEN_CACHE[clean_token] = (now, user_info)
+            _token_cache.set(clean_token, user_info)
             return user_info
     except Exception as e:
         logger.warning(f"Falha na validação do token com o Supabase Auth ({e}). Acesso negado por segurança.")
