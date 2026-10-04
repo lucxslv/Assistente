@@ -219,7 +219,23 @@ class GeminiProvider(BaseLLMProvider):
                     normalized.append({"role": "model", "parts": parts})
                     
             elif role == "user":
+                parts = []
                 if msg.get("content"):
-                    normalized.append({"role": "user", "parts": [str(msg.get("content"))]})
+                    parts.append(str(msg.get("content")))
+                if msg.get("images"):
+                    for img in msg["images"]:
+                        if isinstance(img, dict) and img.get("data"):
+                            b64 = img["data"]
+                            if "," in b64:
+                                b64 = b64.split(",", 1)[1]
+                            mime = img.get("mime_type") or "image/png"
+                            parts.append({
+                                "inline_data": {
+                                    "mime_type": mime,
+                                    "data": b64,
+                                }
+                            })
+                if parts:
+                    normalized.append({"role": "user", "parts": parts})
                     
         return normalized
