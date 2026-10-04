@@ -48,6 +48,16 @@ export interface StreamEventData {
 }
 
 export interface StreamEvent {
-  type: 'token' | 'done' | 'error' | 'state' | 'tool_call' | 'ping' | 'pong';
+  type:
+    | 'token'
+    | 'done'
+    | 'error'
+    | 'state'
+    | 'tool_call'
+    | 'ping'
+    | 'pong'
+    | 'reset_and_fallback'
+    | 'status'
+    | 'client_tool_request';
   data?: StreamEventData;
 }

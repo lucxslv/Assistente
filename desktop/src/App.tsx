@@ -459,6 +459,12 @@ export function App() {
                 m.id === assistantMsgId ? { ...m, content: m.content + ev.data.token } : m
               )
             );
+          } else if (ev.type === "reset_and_fallback") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId ? { ...m, content: "", tools: [] } : m
+              )
+            );
           } else if (ev.type === "tool_start") {
             agentRuntimeStore.addLog("TOOL", `Invocando ${ev.data.name}`, ev.data.args);
             if (ev.data.args?.path) {

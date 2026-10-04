@@ -21,6 +21,7 @@ export interface SendMessageOptions {
   images?: ImageAttachmentPayload[];
   onToken: (token: string) => void;
   onToolCall?: (name: string, args: Record<string, unknown>) => void;
+  onResetAndFallback?: (fallbackModel?: string, reason?: string) => void;
   onDone: (fullReply: string) => void;
   onError: (error: string) => void;
   signal?: AbortSignal;
@@ -47,6 +48,7 @@ export class SSEChatTransport implements ChatTransport {
       images,
       onToken,
       onToolCall,
+      onResetAndFallback,
       onDone,
       onError,
       signal,
@@ -142,6 +144,12 @@ export class SSEChatTransport implements ChatTransport {
                 const token = data.token || '';
                 accumulatedReply += token;
                 onToken(token);
+              } else if (currentEventType === 'reset_and_fallback' || data.type === 'reset_and_fallback') {
+                accumulatedReply = '';
+                onResetAndFallback?.(
+                  typeof data.fallback_model === 'string' ? data.fallback_model : undefined,
+                  typeof data.reason === 'string' ? data.reason : undefined
+                );
               } else if (currentEventType === 'tool_call' || data.name !== undefined) {
                 onToolCall?.(data.name || 'ferramenta', data.args || {});
               } else if (currentEventType === 'done' || data.reply !== undefined) {
@@ -185,6 +193,7 @@ export class WebSocketChatTransport implements ChatTransport {
     string,
     {
       onToken: (token: string) => void;
+      onResetAndFallback?: (fallbackModel?: string, reason?: string) => void;
       onDone: (reply: string) => void;
       onError: (err: string) => void;
     }
@@ -254,6 +263,11 @@ export class WebSocketChatTransport implements ChatTransport {
             this.activeWsHandlers.forEach((handler) => {
               if (data.type === 'token' && data.data?.token) {
                 handler.onToken(data.data.token);
+              } else if (data.type === 'reset_and_fallback') {
+                handler.onResetAndFallback?.(
+                  typeof data.data?.fallback_model === 'string' ? data.data.fallback_model : undefined,
+                  typeof data.data?.reason === 'string' ? data.data.reason : undefined
+                );
               } else if (data.type === 'done') {
                 handler.onDone(data.data?.reply || '');
               } else if (data.type === 'error') {
@@ -286,7 +300,7 @@ export class WebSocketChatTransport implements ChatTransport {
   }
 
   public async send(options: SendMessageOptions): Promise<void> {
-    const { message, threadId, onToken, onDone, onError } = options;
+    const { message, threadId, onToken, onResetAndFallback, onDone, onError } = options;
     try {
       const socket = await this.getOrConnectWebSocket();
       const requestId = `${threadId}-${Date.now()}`;
@@ -296,6 +310,10 @@ export class WebSocketChatTransport implements ChatTransport {
         onToken: (tok) => {
           accumulated += tok;
           onToken(tok);
+        },
+        onResetAndFallback: (fbModel, reason) => {
+          accumulated = '';
+          onResetAndFallback?.(fbModel, reason);
         },
         onDone: (reply) => {
           this.activeWsHandlers.delete(requestId);
