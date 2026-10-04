@@ -2,6 +2,8 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  is_admin?: boolean;
+  role?: string;
   avatarUrl?: string;
 }
 
@@ -28,6 +30,8 @@ export interface AuthResponse {
     id: string;
     name: string;
     email: string;
+    is_admin?: boolean;
+    role?: string;
   };
   token: string;
 }
