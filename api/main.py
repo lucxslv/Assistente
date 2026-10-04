@@ -40,26 +40,39 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS seguro e abrangente para desktop Tauri (Windows/Mac/Linux), localhost e web
+# CORS seguro e restrito para desktop Tauri, localhost e domínios oficiais na Vercel
+ALLOWED_ORIGINS = [
+    # Web Dev & Vite / React
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8005",
+    "http://127.0.0.1:8005",
+    # Mobile Dev (Expo / React Native)
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "http://localhost:19006",
+    "http://127.0.0.1:19006",
+    # Tauri Desktop Local Schemes
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
+    # Ambientes de Produção Oficiais
+    "https://web-charlie.vercel.app",
+    "https://assistente-xi.vercel.app",
+]
+
+ALLOWED_ORIGIN_REGEX = r"^https:\/\/(?:assistente-[a-zA-Z0-9_-]+|web-charlie-[a-zA-Z0-9_-]+)\.vercel\.app$|^tauri:\/\/localhost$"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8005",
-        "http://127.0.0.1:8005",
-        "http://localhost",
-        "http://127.0.0.1",
-        "http://tauri.localhost",
-        "https://tauri.localhost",
-        "tauri://localhost",
-        "null",
-    ],
-    allow_origin_regex=r"https?://.*|tauri://.*",
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=86400,
