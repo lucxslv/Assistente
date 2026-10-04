@@ -287,6 +287,18 @@ export function useChat() {
       abortControllerRef.current = abortController;
 
       let accumulatedReply = '';
+      let rafId: number | null = null;
+
+      const flushTokensToState = () => {
+        setCharlieStatus('speaking');
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === asstMsgId
+              ? { ...msg, content: accumulatedReply, status: 'streaming' }
+              : msg
+          )
+        );
+      };
 
       // Snapshot fresco e atômico via messagesRef.current (elimina Stale Closure)
       const currentMessages = messagesRef.current;
@@ -326,17 +338,34 @@ export function useChat() {
           images: imagePayloads.length > 0 ? imagePayloads : undefined,
           signal: abortController.signal,
           onToken: (token) => {
-            setCharlieStatus('speaking');
             accumulatedReply += token;
+            if (!rafId) {
+              rafId = requestAnimationFrame(() => {
+                rafId = null;
+                flushTokensToState();
+              });
+            }
+          },
+          onResetAndFallback: () => {
+            if (rafId) {
+              cancelAnimationFrame(rafId);
+              rafId = null;
+            }
+            accumulatedReply = '';
+            setCharlieStatus('thinking');
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === asstMsgId
-                  ? { ...msg, content: accumulatedReply, status: 'streaming' }
+                  ? { ...msg, content: '', status: 'streaming' }
                   : msg
               )
             );
           },
           onDone: (fullReply) => {
+            if (rafId) {
+              cancelAnimationFrame(rafId);
+              rafId = null;
+            }
             setIsStreaming(false);
             setCharlieStatus('idle');
             streamingThreadIdRef.current = null;
@@ -375,6 +404,10 @@ export function useChat() {
             );
           },
           onError: (errorMsg) => {
+            if (rafId) {
+              cancelAnimationFrame(rafId);
+              rafId = null;
+            }
             setIsStreaming(false);
             setCharlieStatus('error');
             streamingThreadIdRef.current = null;
@@ -398,6 +431,10 @@ export function useChat() {
           },
         });
       } catch (err: unknown) {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
         setIsStreaming(false);
         setCharlieStatus('error');
         streamingThreadIdRef.current = null;

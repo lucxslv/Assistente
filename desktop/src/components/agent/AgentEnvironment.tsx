@@ -221,6 +221,14 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   : msg
               )
             );
+          } else if (event.type === "reset_and_fallback") {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMsgId
+                  ? { ...msg, content: "", tools: [] }
+                  : msg
+              )
+            );
           } else if (event.type === "tool_start") {
             const toolCall: ToolCallInfo = {
               name: event.data?.name || "ferramenta",

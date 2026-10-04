@@ -190,6 +190,12 @@ export const SpotlightApp: React.FC = () => {
                 m.id === assistantId ? { ...m, content: m.content + ev.data.token } : m
               )
             );
+          } else if (ev.type === "reset_and_fallback") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: "", tools: [] } : m
+              )
+            );
           } else if (ev.type === "tool_start") {
             executeDeviceTool(ev.data.name, ev.data.args || {}).catch(() => {});
             setMessages((prev) =>

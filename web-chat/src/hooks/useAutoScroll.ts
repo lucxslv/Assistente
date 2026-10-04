@@ -4,6 +4,8 @@ export function useAutoScroll<T extends HTMLElement>() {
   const containerRef = useRef<T | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const isScrolledUpRef = useRef<boolean>(false);
+  const scrollRafRef = useRef<number | null>(null);
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (containerRef.current) {
@@ -11,6 +13,7 @@ export function useAutoScroll<T extends HTMLElement>() {
         top: containerRef.current.scrollHeight,
         behavior: smooth ? 'smooth' : 'auto',
       });
+      isScrolledUpRef.current = false;
       setIsScrolledUp(false);
       setUnreadCount(0);
     }
@@ -20,12 +23,14 @@ export function useAutoScroll<T extends HTMLElement>() {
     const el = containerRef.current;
     if (!el) return;
 
-    // Tolerance of 60px from the bottom
+    // Histerese estável: considera rolado para cima em > 80px, volta para baixo em <= 30px
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const isUp = distanceFromBottom > 60;
-    setIsScrolledUp(isUp);
-
-    if (!isUp) {
+    if (distanceFromBottom > 80) {
+      isScrolledUpRef.current = true;
+      setIsScrolledUp(true);
+    } else if (distanceFromBottom <= 30) {
+      isScrolledUpRef.current = false;
+      setIsScrolledUp(false);
       setUnreadCount(0);
     }
   }, []);
@@ -35,22 +40,39 @@ export function useAutoScroll<T extends HTMLElement>() {
     if (!el) return;
 
     el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
   }, [handleScroll]);
 
   // Method to invoke on new token or new message
   const onNewContent = useCallback(
     (isStreamingToken = false) => {
-      if (isScrolledUp) {
+      if (isScrolledUpRef.current) {
         if (!isStreamingToken) {
           setUnreadCount((c) => c + 1);
         }
       } else {
-        // Only smooth scroll on message start, fast auto follow during streaming tokens
-        scrollToBottom(!isStreamingToken);
+        if (isStreamingToken) {
+          // Throttled follow via rAF para prevenir layout thrashing em alta taxa de tokens
+          if (!scrollRafRef.current) {
+            scrollRafRef.current = requestAnimationFrame(() => {
+              scrollRafRef.current = null;
+              if (!isScrolledUpRef.current && containerRef.current) {
+                containerRef.current.scrollTop = containerRef.current.scrollHeight;
+              }
+            });
+          }
+        } else {
+          scrollToBottom(true);
+        }
       }
     },
-    [isScrolledUp, scrollToBottom]
+    [scrollToBottom]
   );
 
   return {

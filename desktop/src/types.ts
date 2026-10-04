@@ -23,7 +23,16 @@ export interface Message {
 }
 
 export interface StreamEvent {
-  type: "token" | "tool_start" | "tool_end" | "status" | "done" | "error";
+  type:
+    | "token"
+    | "tool_start"
+    | "tool_end"
+    | "status"
+    | "done"
+    | "error"
+    | "reset_and_fallback"
+    | "client_tool_request"
+    | "client_tool_call";
   data: any;
 }
 
