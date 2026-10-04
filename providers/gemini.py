@@ -171,10 +171,13 @@ class GeminiProvider(BaseLLMProvider):
                     failed = True
                     break
 
-            if failed and current_model_name == models_to_try[-1]:
-                logger.exception("Erro definitivo no streaming do Gemini")
-                yield StreamChunk(text=f"Desculpe, ocorreu um erro ao consultar o Gemini: {val}", is_done=True)
-                return
+            if failed:
+                if got_any_chunk:
+                    # Se já transmitiu dados parciais ao cliente, lança erro para o pipeline coordenar reset e fallback limpo
+                    raise RuntimeError(f"Falha mid-stream no modelo {current_model_name}: {val}")
+                if current_model_name == models_to_try[-1]:
+                    logger.exception("Erro definitivo no streaming do Gemini")
+                    raise RuntimeError(f"Erro em todos os modelos do Gemini: {val}")
 
 
     @staticmethod

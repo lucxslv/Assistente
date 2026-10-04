@@ -252,27 +252,53 @@ class AssistantPipeline:
             except Exception as e:
                 logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
                 fallback_model = config.gemini_model
+                if fallback_model == route_decision.model_name:
+                    fallback_model = "gemini-2.5-flash" if route_decision.model_name != "gemini-2.5-flash" else "gemini-3.1-flash-lite"
+
                 if fallback_model != route_decision.model_name:
-                    async for chunk in self.llm.chat_stream(
-                        system_prompt=system_prompt,
-                        messages=req_memory.get_messages(),
-                        tools=active_tools,
-                        model_override=fallback_model,
-                    ):
-                        if chunk.tool_calls:
-                            tool_calls.extend(chunk.tool_calls)
-                        if chunk.text:
-                            chunk_text = chunk.text
-                            stripped = chunk_text.strip()
-                            if stripped.startswith("Chamando ferramenta:") or stripped.startswith("ToolCall("):
-                                logger.warning(f"[pipeline] Suprimindo vazamento de ferramenta no stream fallback: {stripped[:80]}")
-                                continue
-                            iteration_reply += chunk_text
-                            if not chunk.tool_calls:
-                                emitted_any_token = True
-                                yield StreamEvent(type="token", data={"token": chunk_text})
+                    if emitted_any_token:
+                        logger.info(f"[pipeline] Falha mid-stream detectada ({len(iteration_reply)} chars). Emitindo reset_and_fallback.")
+                        yield StreamEvent(
+                            type="reset_and_fallback",
+                            data={
+                                "reason": f"Fallback ativado após erro no modelo {route_decision.model_name}: {e}",
+                                "fallback_model": fallback_model,
+                            },
+                        )
+                    iteration_reply = ""
+                    tool_calls.clear()
+                    emitted_any_token = False
+                    self.last_model_used = fallback_model
+
+                    try:
+                        async for chunk in self.llm.chat_stream(
+                            system_prompt=system_prompt,
+                            messages=req_memory.get_messages(),
+                            tools=active_tools,
+                            model_override=fallback_model,
+                        ):
+                            if chunk.tool_calls:
+                                tool_calls.extend(chunk.tool_calls)
+                            if chunk.text:
+                                chunk_text = chunk.text
+                                stripped = chunk_text.strip()
+                                if stripped.startswith("Chamando ferramenta:") or stripped.startswith("ToolCall("):
+                                    logger.warning(f"[pipeline] Suprimindo vazamento de ferramenta no stream fallback: {stripped[:80]}")
+                                    continue
+                                iteration_reply += chunk_text
+                                if not chunk.tool_calls:
+                                    emitted_any_token = True
+                                    yield StreamEvent(type="token", data={"token": chunk_text})
+                    except Exception as fb_err:
+                        logger.error(f"[pipeline] Falha também no modelo de fallback {fallback_model}: {fb_err}")
+                        yield StreamEvent(type="error", data={"error": f"Erro nos modelos de linguagem: {fb_err}"})
+                        final_reply = "Desculpe, ocorreu uma instabilidade temporária na comunicação com os modelos de IA. Por favor, tente novamente em instantes."
+                        break
                 else:
-                    raise
+                    logger.error(f"[pipeline] Rota {route_decision.model_name} falhou sem modelo alternativo: {e}")
+                    yield StreamEvent(type="error", data={"error": str(e)})
+                    final_reply = "Desculpe, ocorreu um erro ao gerar a resposta. Por favor, tente novamente."
+                    break
 
             if not tool_calls:
                 final_reply = iteration_reply or "Ação concluída."

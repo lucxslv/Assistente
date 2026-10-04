@@ -50,14 +50,15 @@ async def init_db_pool() -> Optional[asyncpg.Pool]:
         try:
             _pool = await asyncpg.create_pool(
                 db_url,
-                min_size=1,
-                max_size=3,
-                command_timeout=15,
+                min_size=2,
+                max_size=10,
+                command_timeout=20,
                 timeout=10,
+                max_inactive_connection_lifetime=60.0,
                 statement_cache_size=0,
             )
             _last_db_error = None
-            logger.info("Pool de conexões Supabase estabelecido com sucesso.")
+            logger.info("Pool de conexões Supabase estabelecido com sucesso (min=2, max=10, timeout=20s).")
 
             # Inicializa schema de auditoria e telemetria de custos de forma assíncrona
             try:
