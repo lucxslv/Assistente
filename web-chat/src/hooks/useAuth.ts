@@ -72,10 +72,12 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(() => {
+    const currentUserId = user?.id;
+    StorageService.purgeAllUserData(currentUserId);
     AuthService.logout();
     setUser(null);
     setToken(null);
-  }, []);
+  }, [user]);
 
   return {
     user,
