@@ -728,6 +728,11 @@ class ToolRegistry:
             pass
 
         try:
+            int_limit = int(float(limit)) if limit else 5
+        except (ValueError, TypeError):
+            int_limit = 5
+
+        try:
             from api.db import get_or_init_db_pool
             from api.services.chat_persistence import search_user_chat_history
             pool = await get_or_init_db_pool()
@@ -737,7 +742,7 @@ class ToolRegistry:
                     user_id=uid,
                     query=clean_q,
                     exclude_session_id=current_sid,
-                    limit=limit or 5,
+                    limit=int_limit,
                 )
                 if not results:
                     return f"Nenhuma mensagem encontrada nos outros chats para a busca '{clean_q}'."
@@ -762,6 +767,11 @@ class ToolRegistry:
         limit: int = 12,
     ) -> str:
         try:
+            int_limit = int(float(limit)) if limit else 12
+        except (ValueError, TypeError):
+            int_limit = 12
+
+        try:
             from api.routes.auth import current_user_id_var
             uid = current_user_id_var.get()
         except Exception:
@@ -777,7 +787,7 @@ class ToolRegistry:
                     user_id=uid,
                     session_id=session_id,
                     session_title=session_title,
-                    limit=limit or 12,
+                    limit=int_limit,
                 )
                 if not res or not res.get("messages"):
                     return f"Não foi possível encontrar mensagens para a sessão indicada."

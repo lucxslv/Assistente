@@ -184,34 +184,42 @@ class GeminiProvider(BaseLLMProvider):
             role = msg.get("role", "user")
             
             if role == "tool":
-                # Resposta de uma tool executada
+                # Resposta de uma tool executada: formata claramente como observação interna do sistema
                 func_name = msg.get("name", "unknown")
-                try:
-                    # Tenta converter o conteúdo string para um JSON válido (o Gemini prefere dicts)
-                    result_dict = {"result": msg.get("content", "")}
-                except:
-                    result_dict = {"result": str(msg.get("content"))}
-                    
+                content = str(msg.get("content", ""))
                 normalized.append({
-                    "role": "user",  # O Gemini lida com roles 'user' e 'model' (tool responses são enviadas como user ou part específica, mas vamos usar um part de function_response para ser exato se fosse possível, mas a forma mais robusta na v1.5+ é enviar como user)
-                    "parts": [f"Resultado da ferramenta {func_name}:\n{result_dict}"]
+                    "role": "user",
+                    "parts": [
+                        f"[Observação interna do sistema - Retorno da ferramenta '{func_name}']:\n{content}\n"
+                        f"(Instrução: use o retorno acima para formular sua resposta ao usuário de forma natural, fluida e conversacional. "
+                        f"JAMAIS repita comandos de ferramentas, JSON ou strings como 'Chamando ferramenta:' na sua resposta.)"
+                    ]
                 })
                 
             elif role == "assistant":
-                # Pode ter content ou tool_calls
                 parts = []
-                if msg.get("content"):
-                    parts.append(msg.get("content"))
-                if "tool_calls" in msg:
+                content = msg.get("content")
+                if content and str(content).strip():
+                    clean_content = str(content).strip()
+                    # Remove eventuais resíduos de chamadas de ferramenta acidentais
+                    if not clean_content.startswith("Chamando ferramenta:"):
+                        parts.append(clean_content)
+                if "tool_calls" in msg and not parts:
+                    # Chamada de ferramenta sem texto conversacional: registra como ação interna executada
+                    tool_names = []
                     for tc in msg["tool_calls"]:
-                        func = tc.get("function", {})
-                        parts.append(f"Chamando ferramenta: {func.get('name')} com {func.get('arguments')}")
+                        if isinstance(tc, dict):
+                            fname = tc.get("function", {}).get("name") or tc.get("name")
+                            if fname:
+                                tool_names.append(fname)
+                    actions_str = ", ".join(tool_names) if tool_names else "ferramentas internas"
+                    parts.append(f"[Ação do assistente: consulta realizada aos sistemas via {actions_str}]")
                 
                 if parts:
                     normalized.append({"role": "model", "parts": parts})
                     
             elif role == "user":
                 if msg.get("content"):
-                    normalized.append({"role": "user", "parts": [msg.get("content")]})
+                    normalized.append({"role": "user", "parts": [str(msg.get("content"))]})
                     
         return normalized
