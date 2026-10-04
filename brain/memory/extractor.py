@@ -19,22 +19,45 @@ from memory.database import db
 
 logger = logging.getLogger("charlie.brain.extractor")
 
-EXTRACTION_SYSTEM_PROMPT = """Você é o Extrator de Memória e Analista Comportamental do assistente Charlie.
+EXTRACTION_SYSTEM_PROMPT = """Você é o Extrator de Memória e Analista Comportamental de Alta Precisão do assistente Charlie.
 Sua função é analisar o último turno da conversa (mensagem do usuário e resposta do Charlie) e produzir um JSON com:
-1. Novas memórias duradouras que merecem ser lembradas (semânticas ou episódicas).
-2. Ajustes graduais no modelo de comunicação do usuário (comportamento e preferências de estilo).
-3. Estado atualizado da Working Memory (tópico, tarefa, entidades em discussão).
+1. Memórias duradouras ESTRUTURAIS E DE ALTO VALOR (se houver alguma).
+2. Ajustes graduais no modelo de comunicação do usuário (User Model).
+3. Estado atualizado da Working Memory da conversa ativa.
 
-# CRITÉRIOS DE MEMORIZAÇÃO
-- NÃO guarde saudações ou bate-papos triviais descartáveis (ex: "oi", "tudo bem").
-- Guarde FATOS relevantes sobre o usuário (projetos, profissão, ferramentas usadas, problemas recorrentes).
-- Guarde PREFERÊNCIAS EXPLÍCITAS ou REGRAS ditas pelo usuário (ex: "odeio respostas longas", "prefiro Python").
-- Guarde EPISÓDIOS (marcos alcançados, decisões de arquitetura tomadas, acontecimentos de impacto).
-- Associe cada memória a:
-  - type: "semantic_preference", "semantic_fact", "semantic_learning", "episodic_event"
-  - confidence: 0.1 a 1.0 (afirmações explícitas têm confiança alta >= 0.85; deduções têm confiança moderada 0.4-0.7)
-  - importance: 0.1 a 1.0 (relevância futura de 0 a 1)
-  - action: "reinforce" (fato novo ou reforço de preferência) OU "supersede" (se contradizer, anular ou substituir uma preferência/hábito anterior)
+# REGRA DE OURO DA MEMÓRIA DE LONGO PRAZO (CRÍTICO):
+A memória permanente (UserMemory) NÃO é um log de conversas e NÃO é um diário de atividades diárias.
+O assistente JÁ armazena o histórico completo de mensagens de todos os chats no banco de dados. Portanto, a memória permanente serve EXCLUSIVAMENTE para fatos centrais que afetam o futuro a longo prazo do usuário.
+Na imensa maioria das interações normais (85%+ das conversas), NÃO há nenhuma memória duradoura a ser salva. Se for esse o caso, retorne SEM HESITAR: "memories": [].
+
+# O QUE NUNCA MEMORIZAR (DESCARTA IMEDIATAMENTE):
+1. Acontecimentos cotidianos, temporais, efêmeros ou rotineiros:
+   - "treinou no sábado", "foi para a academia hoje", "almoçou pizza", "está com sono", "acordou tarde", "choveu na cidade".
+2. Tarefas, intenções e vontades momentâneas da sessão atual:
+   - "está animado para mexer no chat web hoje", "vai trabalhar no assistente agora", "está depurando o erro X", "vai testar uma função".
+3. Fofocas ou menções soltas de terceiros sem impacto estrutural:
+   - "amigo Rian joga no tigrinho", "conhecido mandou um abraço", "fulano fez uma piada", "o amigo Thiago fez uma saudação".
+4. Metalinguagem e postura efêmera da conversa:
+   - "usuário usou a gíria cria", "usuário foi simpático", "usuário riu", "usuário foi descontraído". (Isso pertence ao User Model Feedback, NUNCA às memórias de fatos!).
+5. Dúvidas pontuais, perguntas de curiosidade ou explicações gerais:
+   - "o usuário perguntou como funciona uma esteira", "o usuário quis saber sobre Docker".
+
+# O QUE MEMORIZAR (APENAS ALTA RELEVÂNCIA ESTRUTURAL, importance >= 0.75):
+1. Identidade e Perfil Permanente:
+   - Nome real ("O nome do usuário é Lucas"), profissão, cidade/localização, academia/time oficial ("Treina Jiu-Jitsu na equipe GFTeam").
+2. Projetos Contínuos Estruturais:
+   - Projetos de longo prazo e suas tecnologias-chave ("Criador e arquiteto do projeto Charlie", "Desenvolve o projeto escolar MetalSense com ESP32").
+3. Preferências Técnicas e Regras Declaradas:
+   - Regras explícitas e definitivas ("Odeia respostas prolixas", "Prefere código Python sem type hints", "Utiliza Windows 11 como sistema operacional de desenvolvimento").
+4. Restrições Pessoais/Éticas Inegociáveis:
+   - "Não consome bebidas alcoólicas", "Possui intolerância alimentar a glúten", "Recusa pedidos de ferramentas maliciosas".
+
+# ATRIBUTOS DA MEMÓRIA:
+- content: Descrição clara, atômica e independente em 3ª pessoa ("O usuário se chama...", "O usuário prefere...").
+- type: "semantic_preference", "semantic_fact", "semantic_learning", "episodic_event"
+- confidence: 0.75 a 1.0 (apenas alta certeza)
+- importance: 0.75 a 1.0 (apenas relevância contínua futura real)
+- action: "reinforce" | "supersede"
 
 # FEEDBACK COMPORTAMENTAL (USER MODEL)
 Analise se o usuário deu pistas sobre como prefere que o Charlie se comunique:
@@ -51,7 +74,7 @@ Retorne ESTRITAMENTE um JSON no seguinte formato (sem blocos de markdown adicion
       "content": "Descrição clara e independente da memória",
       "type": "semantic_preference | semantic_fact | semantic_learning | episodic_event",
       "confidence": 0.85,
-      "importance": 0.75,
+      "importance": 0.80,
       "action": "reinforce | supersede"
     }
   ],
@@ -89,7 +112,8 @@ class MemoryExtractor:
     ) -> None:
         """Executa a análise em segundo plano de forma desacoplada."""
         # Se for uma mensagem muito curta ou irrelevante (ex: "ok", "valeu"), pula extração pesada
-        if len(user_text.strip()) < 5 and user_text.lower().strip() in ["ok", "beleza", "sim", "não", "valeu", "show"]:
+        clean_text = user_text.strip().lower()
+        if len(clean_text) < 6 or clean_text in ["ok", "beleza", "sim", "não", "valeu", "show", "obrigado", "tmj"]:
             return
 
         try:
@@ -105,7 +129,7 @@ CHARLIE: {assistant_reply[:500]}
                 try:
                     model = genai.GenerativeModel(
                         model_name=m_name,
-                        generation_config={"response_mime_type": "application/json", "temperature": 0.2},
+                        generation_config={"response_mime_type": "application/json", "temperature": 0.1},
                         system_instruction=EXTRACTION_SYSTEM_PROMPT,
                     )
                     res = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
@@ -121,8 +145,19 @@ CHARLIE: {assistant_reply[:500]}
             raw_json = res.text.strip()
             data = json.loads(raw_json)
 
-            # 1. Processa memórias candidatas com deduplicação e reforço
+            # 1. Processa memórias candidatas com rigoroso filtro de importância e ruído efêmero
             memories = data.get("memories", [])
+            ephemeral_blacklist = [
+                "treinou no", "treinou na", "treinou ontem", "treinou hoje", "treinou fisicamente",
+                "almoçou", "vai almoçar", "dormiu", "acordou", "com sono",
+                "no sábado", "no domingo", "na segunda", "na terça", "na quarta", "na quinta", "na sexta",
+                "ontem", "hoje", "nesta manhã", "nesta tarde", "nesta noite",
+                "usou a gíria", "linguagem informal", "atitude descontraída",
+                "está animado para", "está querendo trabalhar", "vamos trabalhar em você",
+                "demonstrou interesse em focar no desenvolvimento", "focado em realizar melhorias no chat",
+            ]
+
+            saved_count = 0
             for m in memories:
                 content = m.get("content", "").strip()
                 if not content or len(content) < 8:
@@ -131,6 +166,17 @@ CHARLIE: {assistant_reply[:500]}
                 conf = float(m.get("confidence", 0.8))
                 imp = float(m.get("importance", 0.5))
 
+                # Filtro 1: Somente fatos com relevância e confiança altas
+                if imp < 0.75 or conf < 0.75:
+                    logger.debug(f"[MemoryExtractor] Descartando memória com baixa relevância ({imp}) ou confiança ({conf}): '{content}'")
+                    continue
+
+                # Filtro 2: Descarte de ruídos cotidianos e tarefas da sessão atual
+                content_lower = content.lower()
+                if any(bad_phrase in content_lower for bad_phrase in ephemeral_blacklist):
+                    logger.info(f"[MemoryExtractor] Memória efêmera/cotidiana descartada por filtro de qualidade: '{content}'")
+                    continue
+
                 action = m.get("action", "reinforce")
                 saved_via_pool = False
                 try:
@@ -138,7 +184,14 @@ CHARLIE: {assistant_reply[:500]}
                     from api.services.chat_persistence import save_user_memory_entry
                     pool = await get_or_init_db_pool()
                     if pool:
-                        res_id = await save_user_memory_entry(pool, user_id=user_id, fact=content, category=m_type)
+                        res_id = await save_user_memory_entry(
+                            pool,
+                            user_id=user_id,
+                            fact=content,
+                            category=m_type,
+                            importance=imp,
+                            confidence=conf,
+                        )
                         saved_via_pool = bool(res_id)
                 except Exception as p_err:
                     logger.debug(f"Erro pool MemoryExtractor: {p_err}")
@@ -152,6 +205,7 @@ CHARLIE: {assistant_reply[:500]}
                         user_id=user_id,
                         action=action,
                     )
+                saved_count += 1
 
             # 2. Atualiza User Model (Aprendizado Comportamental Gradual via EMA)
             feedback = data.get("user_model_feedback", {})

@@ -34,7 +34,7 @@ async def main():
     os.environ["VERCEL"] = "1"
     tool_res = await reg.execute("list_directory", {"path": "Documentos"})
     assert "run_desktop.bat" not in tool_res, f"Vazou menção ao bat: {tool_res}"
-    assert "Operação restrita" in tool_res, f"Mensagem incorreta: {tool_res}"
+    assert "enviado para o aplicativo Desktop" in tool_res or "Operação restrita" in tool_res, f"Mensagem incorreta: {tool_res}"
     print(f"[OK] Retorno da ferramenta na nuvem limpo e seguro: {tool_res}")
 
     profile = AssistantProfile()

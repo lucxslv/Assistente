@@ -19,6 +19,7 @@ def build_system_prompt(
     user_text: Optional[str] = None,
     user_facts: Optional[list[str]] = None,
     user_preferences: Optional[dict[str, str]] = None,
+    cross_chat_context: Optional[str] = None,
 ) -> str:
     """Constrói o system prompt dinâmico baseado no perfil, modelo do usuário, contexto e memórias."""
     
@@ -28,6 +29,10 @@ def build_system_prompt(
     working_memory = working_memory_store.get(thread_id=thread_id)
     adaptation_section = user_model.format_adaptation_prompt(core=charlie_core)
     wm_section = ("\n\n" + working_memory.format_for_prompt()) if working_memory.format_for_prompt() else ""
+
+    cross_chat_section = ""
+    if cross_chat_context and cross_chat_context.strip():
+        cross_chat_section = f"\n\n# [CONTEXTO DE OUTROS CHATS DO USUÁRIO]\n{cross_chat_context.strip()}\n"
 
     # Formatação padronizada do bloco [MEMÓRIA DO USUÁRIO] com isolamento estrito
     facts_list = user_facts if user_facts is not None else []
@@ -301,13 +306,24 @@ O princípio orientador é:
 - **Transparência de Ação**: Quando você inspecionar pastas, ler arquivos ou executar ações no computador, faça isso de forma integrada à conversa. O usuário acompanha as etapas no painel lateral de trabalho enquanto dialoga com você no chat.
 - **Sentimento transmitido**: O usuário deve sentir: *"Estou conversando com uma inteligência autônoma que pode agir ao meu lado"*, e não *"Estou enviando tarefas para uma fila de comandos"*.
 
-## APRENDIZADO CONTÍNUO E MOTOR DE MEMÓRIA (MANDATÓRIO)
+## APRENDIZADO CONTÍNUO E MOTOR DE MEMÓRIA (MANDATÓRIO & ALTAMENTE SELETIVO)
 
-Sempre que o usuário declarar preferências pessoais, detalhes sobre seu fluxo de trabalho, ferramentas que utiliza, projetos ou rotinas, invoque silenciosamente a ferramenta `save_user_memory` ou `save_user_preference` vinculada ao `user_id` autenticado.
+A memória permanente de longo prazo (`UserMemory`) serve EXCLUSIVAMENTE para reter fatos estruturais, permanentes e de altíssimo valor para o usuário.
+- **O QUE NUNCA MEMORIZAR:** NUNCA salve acontecimentos cotidianos efêmeros ("treinou no sábado", "almoçou pizza", "vai dormir"), tarefas da sessão presente ("quer mexer no chat web hoje", "vai testar função X") ou fofocas/menções soltas de terceiros.
+- **O QUE MEMORIZAR (SOMENTE SE FOR DURADOURO E IMPORTANTE):**
+  * Identidade e perfil permanente (Nome, profissão, academia/equipe oficial).
+  * Projetos contínuos estruturais (ex: Projeto Charlie, Projeto MetalSense com ESP32).
+  * Preferências técnicas duradouras declaradas (ex: sistema operacional principal, regras absolutas de código).
+- **Preferências (`save_user_preference`):** Invoque quando o usuário declarar preferências de estilo de comunicação ou ambiente (`tom_de_voz: direto`, `sistema_operacional: Windows`).
+- **Fatos e Projetos (`save_user_memory`):** Invoque SOMENTE para fatos permanentes essenciais. Na dúvida, não memorize. O histórico do chat já preserva todas as conversas na íntegra.
 
-- **Preferências (`save_user_preference`):** Invoque quando o usuário explicitar preferências de comunicação ou ambiente de desenvolvimento (ex: `tom_de_voz: formal`, `sistema_operacional: Linux`, `estilo_respostas: direto`).
-- **Fatos e Projetos (`save_user_memory`):** Invoque quando o usuário relatar projetos em andamento, tecnologias adotadas, rotinas ou fatos pessoais duradouros.
-- **Naturalidade:** Execute essas ferramentas silenciosamente sem anunciar tecnicalidades. Mantenha a resposta calorosa, empática e focada na solicitação do usuário.
+## CONSULTA DE OUTROS CHATS E HISTÓRICO PASSADO (CROSS-CHAT MEMORY)
+
+Você possui acesso unificado às conversas anteriores do usuário:
+- Se o usuário perguntar sobre coisas discutidas em conversas passadas (ex: "o que combinamos no outro chat?", "lembra daquele código no outro chat?", "qual decisão tomamos sobre X?"):
+  * Chame imediatamente a ferramenta `search_chat_history(query=...)` para localizar mensagens de outros chats por tema ou palavra-chave.
+  * Se precisar ler o histórico completo daquela conversa passada, chame `get_chat_session_context(session_id=... ou session_title=...)`.
+- Responda trazendo o contexto exato e demonstrando continuidade inteligente entre as conversas.
 
 ## REGRAS DE FERRAMENTAS
 
@@ -363,7 +379,7 @@ Charlie deve parecer uma pessoa com personalidade — não uma personalidade ten
 - Fatos conhecidos:
 {user_facts_formatted}
 - Preferências:
-{user_prefs_formatted}
+{user_prefs_formatted}{cross_chat_section}
 
 # CONTEXTO SEMÂNTICO COMPLEMENTAR (RAG)
 {memory_summary}

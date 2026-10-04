@@ -323,6 +323,49 @@ class ToolRegistry:
             scope=ToolScope.CLOUD,
         )
         self.register(
+            name="search_chat_history",
+            handler=self._wrap_search_chat_history,
+            description="Busca em outros chats e conversas anteriores do usuário por palavra-chave, código ou assunto. Use quando o usuário perguntar sobre o que foi discutido em outro chat (ex: 'o que combinamos no outro chat?', 'lembra do código que fizemos na outra conversa?', 'qual decisão tomamos sobre X?') ou quando você precisar de contexto prévio de sessões passadas.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Termo de busca, tópico ou palavra-chave para encontrar mensagens em outros chats do usuário.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Número máximo de mensagens/chats relevantes a retornar (padrão 5).",
+                    },
+                },
+                "required": ["query"],
+            },
+            scope=ToolScope.CLOUD,
+        )
+        self.register(
+            name="get_chat_session_context",
+            handler=self._wrap_get_chat_session_context,
+            description="Recupera as mensagens de uma sessão/conversa específica anterior do usuário usando o session_id ou o título do chat. Use após search_chat_history para inspecionar em detalhes uma conversa inteira do usuário.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "ID UUID da sessão/chat que deseja consultar.",
+                    },
+                    "session_title": {
+                        "type": "string",
+                        "description": "Título aproximado do chat se não souber o ID.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Quantidade de mensagens daquela conversa a carregar (padrão 12).",
+                    },
+                },
+            },
+            scope=ToolScope.CLOUD,
+        )
+        self.register(
             name="search_web",
             handler=web_search.search_web,
             description="Pesquisa na internet usando um motor de busca e retorna um resumo dos sites encontrados. Ideal para buscar notícias, tirar dúvidas ou descobrir sites.",
@@ -666,3 +709,86 @@ class ToolRegistry:
 
     async def _wrap_memorize_pref(self, key: str, value: str) -> str:
         return await self._wrap_save_user_preference(key=key, value=value)
+
+    async def _wrap_search_chat_history(self, query: str, limit: int = 5) -> str:
+        clean_q = (query or "").strip()
+        if not clean_q:
+            return "Erro: O termo de busca não pode ser vazio."
+        try:
+            from api.routes.auth import current_user_id_var
+            uid = current_user_id_var.get()
+        except Exception:
+            uid = "default"
+
+        current_sid = None
+        try:
+            from api.state import state
+            current_sid = getattr(state, "active_thread_id", None)
+        except Exception:
+            pass
+
+        try:
+            from api.db import get_or_init_db_pool
+            from api.services.chat_persistence import search_user_chat_history
+            pool = await get_or_init_db_pool()
+            if pool and uid and uid != "default":
+                results = await search_user_chat_history(
+                    pool=pool,
+                    user_id=uid,
+                    query=clean_q,
+                    exclude_session_id=current_sid,
+                    limit=limit or 5,
+                )
+                if not results:
+                    return f"Nenhuma mensagem encontrada nos outros chats para a busca '{clean_q}'."
+
+                output = [f"Resultados da busca por '{clean_q}' em outros chats:\n"]
+                for idx, r in enumerate(results, 1):
+                    output.append(
+                        f"{idx}. Chat: \"{r['session_title']}\" (ID: {r['session_id']}) - {r['date']}\n"
+                        f"   [{r['role'].upper()}]: {r['content']}\n"
+                    )
+                return "\n".join(output)
+        except Exception as e:
+            logger.warning(f"Erro em search_chat_history: {e}")
+            return f"Erro ao consultar outros chats: {e}"
+
+        return "Histórico de chats indisponível ou nenhum chat anterior encontrado."
+
+    async def _wrap_get_chat_session_context(
+        self,
+        session_id: Optional[str] = None,
+        session_title: Optional[str] = None,
+        limit: int = 12,
+    ) -> str:
+        try:
+            from api.routes.auth import current_user_id_var
+            uid = current_user_id_var.get()
+        except Exception:
+            uid = "default"
+
+        try:
+            from api.db import get_or_init_db_pool
+            from api.services.chat_persistence import get_chat_session_details
+            pool = await get_or_init_db_pool()
+            if pool and uid and uid != "default":
+                res = await get_chat_session_details(
+                    pool=pool,
+                    user_id=uid,
+                    session_id=session_id,
+                    session_title=session_title,
+                    limit=limit or 12,
+                )
+                if not res or not res.get("messages"):
+                    return f"Não foi possível encontrar mensagens para a sessão indicada."
+
+                output = [f"Histórico do Chat \"{res['title']}\" (ID: {res['session_id']}):\n"]
+                for m in res["messages"]:
+                    output.append(f"[{m['role'].upper()}]: {m['content']}")
+                return "\n".join(output)
+        except Exception as e:
+            logger.warning(f"Erro em get_chat_session_context: {e}")
+            return f"Erro ao recuperar contexto da sessão: {e}"
+
+        return "Não foi possível carregar a sessão solicitada."
+

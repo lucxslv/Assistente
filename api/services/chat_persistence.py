@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import uuid
+import re
 from typing import Any, Dict, List, Optional
 import asyncpg
 
@@ -24,12 +25,32 @@ def generate_session_title(prompt: Optional[str]) -> str:
     return title.strip() or "Nova Conversa"
 
 
+class _db_connection_scope:
+    """Suporta tanto asyncpg.Pool quanto asyncpg.Connection transparente com context manager."""
+    def __init__(self, target):
+        self.target = target
+        self.conn = None
+
+    async def __aenter__(self):
+        if hasattr(self.target, "acquire"):
+            self.conn = await self.target.acquire()
+            return self.conn
+        return self.target
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.conn and hasattr(self.target, "release"):
+            try:
+                await self.target.release(self.conn)
+            except Exception:
+                pass
+
+
 async def ensure_chat_persistence_schema(pool: asyncpg.Pool) -> None:
     """Garante de forma idempotente que as tabelas de sessão, mensagens e memória estejam configuradas."""
     if not pool:
         return
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             # 1. Garante colunas de chat_sessions
             await conn.execute("""
                 ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS user_id TEXT;
@@ -80,7 +101,7 @@ async def ensure_session_record(
     now = datetime.datetime.now(datetime.timezone.utc)
 
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             # 1. chat_sessions
             existing = await conn.fetchrow("SELECT id, title, user_id FROM public.chat_sessions WHERE id = $1", s_uuid)
             if not existing:
@@ -173,7 +194,7 @@ async def save_chat_message_record(
     jsonb_tool_calls = json.dumps(tool_calls) if tool_calls else None
 
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             # Garante que a sessão exista para evitar violação de FK
             sess_exists = await conn.fetchval("SELECT 1 FROM public.chat_sessions WHERE id = $1", s_uuid)
             if not sess_exists:
@@ -223,14 +244,21 @@ async def save_user_memory_entry(
     user_id: str,
     fact: str,
     category: str = "general",
+    importance: float = 0.85,
+    confidence: float = 0.90,
 ) -> str:
-    """Salva um fato ou conhecimento duradouro sobre o usuário na tabela UserMemory com deduplicação semântica."""
+    """Salva um fato ou conhecimento duradouro sobre o usuário na tabela UserMemory com deduplicação semântica e filtro estrito de relevância."""
     if not pool or not fact or not fact.strip():
         return ""
 
     clean_fact = fact.strip()
     cat = (category or "general").strip()
     now = datetime.datetime.now(datetime.timezone.utc)
+
+    # Filtro de qualidade: descarta fatos que não atendem ao limiar mínimo de relevância
+    if float(importance) < 0.70 or float(confidence) < 0.70:
+        logger.debug(f"[chat_persistence] Descartando fato por baixa relevância ({importance}) ou certeza ({confidence}): '{clean_fact}'")
+        return ""
 
     vec_str = None
     try:
@@ -242,7 +270,7 @@ async def save_user_memory_entry(
         pass
 
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             # 1. Verifica se já existe um fato idêntico ou muito similar para este usuário
             existing = None
             if vec_str:
@@ -278,7 +306,7 @@ async def save_user_memory_entry(
                 old_conf = existing["confidence"] or 0.85
                 old_imp = existing["importance"] or 0.70
                 new_conf = min(0.99, round(float(old_conf) + 0.05, 3))
-                new_imp = max(float(old_imp), 0.70)
+                new_imp = max(float(old_imp), float(importance))
 
                 sim_meta = {}
                 try:
@@ -307,20 +335,23 @@ async def save_user_memory_entry(
                     """,
                     new_conf, new_imp, json.dumps(sim_meta), best_text, now, sim_id
                 )
-                logger.info(f"[chat_persistence] Memória reforçada (ID={sim_id}) para {user_id}: '{best_text[:50]}...' (conf={new_conf})")
+                logger.info(f"[chat_persistence] Memória reforçada (ID={sim_id}) para {user_id}: '{best_text[:50]}...' (conf={new_conf}, imp={new_imp})")
                 return str(sim_id)
 
-            # 2. Se for realmente nova, insere
+            # 2. Se for realmente nova e relevante, insere
             mem_id = uuid.uuid4()
+            final_conf = min(0.99, float(confidence))
+            final_imp = min(1.0, float(importance))
+
             if vec_str:
                 await conn.execute(
                     """
                     INSERT INTO public."UserMemory" (
                         id, user_id, content, fact, category, memory_type, confidence, importance, embedding, metadata, created_at, updated_at, last_confirmed_at
                     )
-                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', 0.90, 0.70, $5::vector, '{}', $6, $6, $6)
+                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', $5, $6, $7::vector, '{}', $8, $8, $8)
                     """,
-                    mem_id, str(user_id), clean_fact, cat, vec_str, now
+                    mem_id, str(user_id), clean_fact, cat, final_conf, final_imp, vec_str, now
                 )
             else:
                 await conn.execute(
@@ -328,11 +359,11 @@ async def save_user_memory_entry(
                     INSERT INTO public."UserMemory" (
                         id, user_id, content, fact, category, memory_type, confidence, importance, metadata, created_at, updated_at, last_confirmed_at
                     )
-                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', 0.90, 0.70, '{}', $5, $5, $5)
+                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', $5, $6, '{}', $7, $7, $7)
                     """,
-                    mem_id, str(user_id), clean_fact, cat, now
+                    mem_id, str(user_id), clean_fact, cat, final_conf, final_imp, now
                 )
-            logger.info(f"[chat_persistence] Novo fato gravado no UserMemory para {user_id}: '{clean_fact[:50]}'")
+            logger.info(f"[chat_persistence] Novo fato relevante gravado no UserMemory para {user_id}: '{clean_fact[:50]}' (imp={final_imp})")
             return str(mem_id)
     except Exception as e:
         logger.error(f"[chat_persistence] Falha ao gravar/reforçar UserMemory para {user_id}: {e}")
@@ -355,7 +386,7 @@ async def save_user_preference_entry(
     now = datetime.datetime.now(datetime.timezone.utc)
 
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             await conn.execute(
                 """
                 INSERT INTO public."UserPreference" (id, user_id, key, value, created_at, updated_at)
@@ -381,7 +412,7 @@ async def get_user_memory_facts(
     if not pool or not user_id:
         return []
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             rows = await conn.fetch(
                 """
                 SELECT COALESCE(fact, content) as content
@@ -419,7 +450,7 @@ async def get_user_preferences_dict(
     if not pool or not user_id:
         return {}
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             rows = await conn.fetch(
                 """
                 SELECT key, value
@@ -450,7 +481,7 @@ async def load_chat_history(
         return []
 
     try:
-        async with pool.acquire() as conn:
+        async with _db_connection_scope(pool) as conn:
             # 1. Tenta carregar prioritariamente de chat_messages
             rows = await conn.fetch(
                 """
@@ -490,3 +521,192 @@ async def load_chat_history(
     except Exception as e:
         logger.warning(f"[chat_persistence] Erro ao carregar histórico da sessão {session_id}: {e}")
         return []
+
+
+async def search_user_chat_history(
+    pool: asyncpg.Pool,
+    user_id: str,
+    query: str,
+    exclude_session_id: Optional[str] = None,
+    limit: int = 5,
+) -> list[dict]:
+    """Busca mensagens e conversas passadas do usuário em outros chats.
+    Filtra estritamente por user_id garantindo isolamento total multi-tenant.
+    """
+    if not pool or not user_id or not query or not query.strip():
+        return []
+
+    clean_q = query.strip()
+    exc_uuid = None
+    if exclude_session_id:
+        try:
+            exc_uuid = uuid.UUID(str(exclude_session_id))
+        except (ValueError, TypeError):
+            exc_uuid = None
+
+    pattern = f"%{clean_q}%"
+    try:
+        async with _db_connection_scope(pool) as conn:
+            # 1. Busca prioritária em chat_messages
+            rows = await conn.fetch(
+                """
+                SELECT 
+                    m.session_id,
+                    COALESCE(s.title, 'Conversa anterior') as session_title,
+                    m.role,
+                    m.content,
+                    m.created_at
+                FROM public.chat_messages m
+                LEFT JOIN public.chat_sessions s ON m.session_id = s.id
+                WHERE (m.user_id = $1 OR s.user_id = $1)
+                  AND ($2::uuid IS NULL OR m.session_id != $2::uuid)
+                  AND (m.content ILIKE $3 OR s.title ILIKE $3)
+                  AND m.role IN ('user', 'assistant')
+                ORDER BY m.created_at DESC
+                LIMIT $4
+                """,
+                str(user_id), exc_uuid, pattern, limit
+            )
+
+            # Se não encontrou por frase exata, tenta buscar por palavras-chave principais
+            if not rows and len(clean_q.split()) > 1:
+                keywords = [
+                    w for w in re.findall(r'\b\w+\b', clean_q.lower()) 
+                    if len(w) > 3 and w not in {"para", "como", "sobre", "qual", "quais", "outro", "outra", "chat", "conversa", "lembra", "falamos"}
+                ]
+                if keywords:
+                    kw_patterns = [f"%{k}%" for k in keywords[:4]]
+                    rows = await conn.fetch(
+                        """
+                        SELECT 
+                            m.session_id,
+                            COALESCE(s.title, 'Conversa anterior') as session_title,
+                            m.role,
+                            m.content,
+                            m.created_at
+                        FROM public.chat_messages m
+                        LEFT JOIN public.chat_sessions s ON m.session_id = s.id
+                        WHERE (m.user_id = $1 OR s.user_id = $1)
+                          AND ($2::uuid IS NULL OR m.session_id != $2::uuid)
+                          AND (m.content ILIKE ANY($3) OR s.title ILIKE ANY($3))
+                          AND m.role IN ('user', 'assistant')
+                        ORDER BY m.created_at DESC
+                        LIMIT $4
+                        """,
+                        str(user_id), exc_uuid, kw_patterns, limit
+                    )
+
+            results = []
+            for r in rows:
+                c = (r["content"] or "").strip()
+                if c:
+                    dt_str = r["created_at"].strftime("%d/%m/%Y %H:%M") if r["created_at"] else ""
+                    results.append({
+                        "session_id": str(r["session_id"]),
+                        "session_title": r["session_title"],
+                        "role": r["role"],
+                        "content": c,
+                        "date": dt_str,
+                    })
+
+            # 2. Se necessário, complementa com Step/Thread legados
+            if len(results) < limit:
+                needed = limit - len(results)
+                try:
+                    s_rows = await conn.fetch(
+                        """
+                        SELECT 
+                            st."threadId" as session_id,
+                            COALESCE(th.name, 'Conversa Desktop') as session_title,
+                            (CASE WHEN st.type = 'user_message' THEN 'user' ELSE 'assistant' END) as role,
+                            st.output as content,
+                            st."createdAt" as created_at
+                        FROM "Step" st
+                        JOIN "Thread" th ON st."threadId" = th.id
+                        WHERE (th."userId"::text = $1 OR th."userIdentifier" = $1)
+                          AND ($2::uuid IS NULL OR st."threadId" != $2::uuid)
+                          AND (st.output ILIKE $3 OR th.name ILIKE $3)
+                          AND st.type IN ('user_message', 'assistant_message')
+                        ORDER BY st."createdAt" DESC
+                        LIMIT $4
+                        """,
+                        str(user_id), exc_uuid, pattern, needed
+                    )
+                    for r in s_rows:
+                        c = (r["content"] or "").strip()
+                        if c:
+                            dt_str = r["created_at"].strftime("%d/%m/%Y %H:%M") if r["created_at"] else ""
+                            results.append({
+                                "session_id": str(r["session_id"]),
+                                "session_title": r["session_title"],
+                                "role": r["role"],
+                                "content": c,
+                                "date": dt_str,
+                            })
+                except Exception as st_err:
+                    logger.debug(f"[chat_persistence] Step/Thread query notice: {st_err}")
+
+            return results
+    except Exception as e:
+        logger.warning(f"[chat_persistence] Erro ao buscar em chats anteriores para {user_id}: {e}")
+        return []
+
+
+async def get_chat_session_details(
+    pool: asyncpg.Pool,
+    user_id: str,
+    session_id: Optional[str] = None,
+    session_title: Optional[str] = None,
+    limit: int = 15,
+) -> dict:
+    """Recupera mensagens de uma sessão/chat específico do usuário por ID ou por busca no título."""
+    if not pool or not user_id:
+        return {}
+
+    target_sid = None
+    target_title = None
+
+    try:
+        async with _db_connection_scope(pool) as conn:
+            if session_id:
+                try:
+                    s_uuid = uuid.UUID(str(session_id).strip())
+                    s_row = await conn.fetchrow(
+                        "SELECT id, title, created_at FROM public.chat_sessions WHERE id = $1 AND user_id = $2",
+                        s_uuid, str(user_id)
+                    )
+                    if s_row:
+                        target_sid = s_row["id"]
+                        target_title = s_row["title"]
+                except (ValueError, TypeError):
+                    pass
+
+            if not target_sid and session_title and session_title.strip():
+                t_pat = f"%{session_title.strip()}%"
+                s_row = await conn.fetchrow(
+                    """
+                    SELECT id, title, created_at 
+                    FROM public.chat_sessions 
+                    WHERE user_id = $1 AND title ILIKE $2 
+                    ORDER BY updated_at DESC LIMIT 1
+                    """,
+                    str(user_id), t_pat
+                )
+                if s_row:
+                    target_sid = s_row["id"]
+                    target_title = s_row["title"]
+
+            if not target_sid:
+                return {}
+
+            # Carrega mensagens
+            msgs = await load_chat_history(pool, str(target_sid), limit=limit)
+            return {
+                "session_id": str(target_sid),
+                "title": target_title or "Conversa",
+                "messages": msgs,
+            }
+    except Exception as e:
+        logger.warning(f"[chat_persistence] Erro ao recuperar detalhes do chat {session_id}: {e}")
+        return {}
+
