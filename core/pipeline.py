@@ -88,6 +88,7 @@ class AssistantPipeline:
         user_name: str | None = None,
         tool_results: list[dict] | None = None,
         history: list[dict] | None = None,
+        images: list[dict] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
         import os
@@ -135,6 +136,14 @@ class AssistantPipeline:
             # Se o histórico carregado do banco já continha a mensagem atual no final, não duplica
             if not existing_msgs or existing_msgs[-1].get("content") != user_text:
                 req_memory.add_user(user_text)
+                if images and req_memory.messages:
+                    req_memory.messages[-1]["images"] = images
+            elif images and req_memory.messages:
+                req_memory.messages[-1]["images"] = images
+        elif images:
+            req_memory.add_user("(Imagem enviada para análise visual)")
+            if req_memory.messages:
+                req_memory.messages[-1]["images"] = images
 
         # 3. Registra resultados de ferramentas enviadas pelo cliente Desktop se houver
         if tool_results:
@@ -367,6 +376,7 @@ class AssistantPipeline:
         user_id: str | None = None,
         user_name: str | None = None,
         history: list[dict] | None = None,
+        images: list[dict] | None = None,
     ) -> str:
         """Executa o pipeline completo e retorna a resposta montada."""
         full_text = ""
@@ -376,6 +386,7 @@ class AssistantPipeline:
             user_id=user_id,
             user_name=user_name,
             history=history,
+            images=images,
         ):
             if event.type == "done":
                 full_text = event.data.get("reply", "")

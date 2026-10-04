@@ -40,6 +40,7 @@ class ChatRequest(BaseModel):
     skip_tts: bool = True
     tool_results: Optional[list[dict]] = None
     history: Optional[list[dict]] = None
+    images: Optional[list[dict]] = None
 
 
 async def _load_thread_history(thread_id: str, limit: int = 30) -> list[dict]:
@@ -188,6 +189,7 @@ async def chat_post(
             user_id=str(user["id"]),
             user_name=user.get("name"),
             history=thread_history,
+            images=req.images,
         )
     except Exception as e:
         logger.exception("Erro no pipeline")
@@ -268,6 +270,7 @@ async def chat_stream_sse(
                 user_name=user.get("name"),
                 tool_results=req.tool_results,
                 history=thread_history,
+                images=req.images,
             ):
                 if ev.type == "token":
                     final_reply += ev.data.get("token", "")
