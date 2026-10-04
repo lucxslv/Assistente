@@ -181,7 +181,8 @@ export const App: React.FC = () => {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="flex h-full h-[var(--app-height,100dvh)] w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans"
+      style={{ height: 'var(--app-height, 100dvh)' }}
+      className="flex h-full w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans"
     >
       {/* Sidebar Navigation Drawer */}
       <Sidebar
@@ -210,7 +211,7 @@ export const App: React.FC = () => {
       {currentView === 'audit' && isAdmin ? (
         <AuditDashboard onBackToChat={() => navigateTo('chat')} />
       ) : (
-        <main className="flex-1 flex flex-col min-w-0 h-full relative bg-[#0A0B0E] overflow-hidden">
+        <main className="flex-1 min-h-0 flex flex-col min-w-0 h-full relative bg-[#0A0B0E] overflow-hidden">
           {/* Top Header */}
           <Header
             activeThread={activeThread}
@@ -230,8 +231,8 @@ export const App: React.FC = () => {
             isAdmin={isAdmin}
           />
 
-          {/* Message Feed */}
-          <div className="flex-1 overflow-hidden relative flex flex-col">
+          {/* Message Feed & Input Dock Container */}
+          <div className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
             <MessageFeed
               messages={messages}
               userName={user.name || 'Você'}

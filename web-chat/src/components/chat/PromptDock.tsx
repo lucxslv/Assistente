@@ -156,10 +156,13 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const canSend = value.trim().length > 0 || attachments.length > 0;
 
   const handleFocus = () => {
-    // Dá tempo para o teclado virtual do Android/iOS abrir e reposiciona suavemente
-    setTimeout(() => {
-      textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 280);
+    // Garante que o window permaneça rigorosamente no topo (0, 0)
+    // Previne que o navegador mobile role o body e empurre o cabeçalho para fora
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    }
   };
 
   return (
@@ -168,7 +171,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
         'w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-1 flex-shrink-0 transition-all duration-150',
         isKeyboardOpen
           ? 'pb-2 sm:pb-3'
-          : 'pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))] sm:pb-3'
+          : 'pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] sm:pb-3'
       )}
     >
       <div
