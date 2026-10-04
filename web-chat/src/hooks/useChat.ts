@@ -40,6 +40,25 @@ export function useChat() {
     };
   }, []);
 
+  // Cleanup on pagehide or beforeunload
+  useEffect(() => {
+    const handleExit = () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsStreaming(false);
+      setCharlieStatus('idle');
+    };
+
+    window.addEventListener('beforeunload', handleExit);
+    window.addEventListener('pagehide', handleExit);
+    return () => {
+      window.removeEventListener('beforeunload', handleExit);
+      window.removeEventListener('pagehide', handleExit);
+    };
+  }, []);
+
   // Fetch threads on mount
   const refreshThreads = useCallback(async () => {
     try {
@@ -360,6 +379,9 @@ export function useChat() {
             setCharlieStatus('error');
             streamingThreadIdRef.current = null;
             abortControllerRef.current = null;
+            setTimeout(() => {
+              setCharlieStatus((curr) => (curr === 'error' ? 'idle' : curr));
+            }, 3500);
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === asstMsgId
@@ -380,6 +402,9 @@ export function useChat() {
         setCharlieStatus('error');
         streamingThreadIdRef.current = null;
         abortControllerRef.current = null;
+        setTimeout(() => {
+          setCharlieStatus((curr) => (curr === 'error' ? 'idle' : curr));
+        }, 3500);
         const msg = (err as Error)?.message || 'Erro inesperado ao comunicar com o Charlie.';
         setMessages((prev) =>
           prev.map((m) =>

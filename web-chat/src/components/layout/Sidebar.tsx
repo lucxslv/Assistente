@@ -16,6 +16,7 @@ import { Thread, ConnectionStatus } from '../../types/chat';
 import { User } from '../../types/auth';
 import { groupThreadsByPeriod, formatTimeOrDate } from '../../utils/formatters';
 import { hapticFeedback } from '../../utils/haptics';
+import { RenameThreadModal } from './RenameThreadModal';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -49,23 +50,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isAdmin = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
+  const [threadToRename, setThreadToRename] = useState<Thread | null>(null);
   const [threadToDelete, setThreadToDelete] = useState<string | null>(null);
-  const editInputRef = useRef<HTMLInputElement>(null);
 
   // Drawer Touch Drag State (< 768px)
   const [drawerDragX, setDrawerDragX] = useState<number | null>(null);
   const drawerTouchRef = useRef<{ startX: number; startY: number } | null>(null);
   const isDraggingDrawer = useRef(false);
-
-  // Focus rename input
-  useEffect(() => {
-    if (editingThreadId && editInputRef.current) {
-      editInputRef.current.focus();
-      editInputRef.current.select();
-    }
-  }, [editingThreadId]);
 
   // Global Keyboard Shortcut [N] for new thread when not typing in an input
   useEffect(() => {
@@ -137,16 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleStartRename = (e: React.MouseEvent, thread: Thread) => {
     e.stopPropagation();
-    setEditingThreadId(thread.id);
-    setEditingName(thread.name);
-  };
-
-  const handleSaveRename = (threadId: string) => {
-    if (editingName.trim()) {
-      onRenameThread(threadId, editingName.trim());
-      hapticFeedback.light();
-    }
-    setEditingThreadId(null);
+    setThreadToRename(thread);
   };
 
   const handleConfirmDelete = (e: React.MouseEvent, threadId: string) => {
@@ -288,7 +270,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
                 {threadList.map((thread) => {
                   const isActive = activeThreadId === thread.id;
-                  const isEditing = editingThreadId === thread.id;
                   const isDeleting = threadToDelete === thread.id;
 
                   return (
@@ -296,25 +277,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       key={thread.id}
                       thread={thread}
                       isActive={isActive}
-                      isEditing={isEditing}
                       isDeleting={isDeleting}
-                      editingName={editingName}
-                      editInputRef={editInputRef}
                       onSelect={() => {
                         hapticFeedback.select();
                         onSelectThread(thread.id);
                         if (window.innerWidth < 768) onClose();
                       }}
                       onStartRename={(e) => handleStartRename(e, thread)}
-                      onSaveRename={() => handleSaveRename(thread.id)}
-                      onCancelRename={() => setEditingThreadId(null)}
                       onStartDelete={(e) => {
                         e.stopPropagation();
                         setThreadToDelete(thread.id);
                       }}
                       onConfirmDelete={(e) => handleConfirmDelete(e, thread.id)}
                       onCancelDelete={() => setThreadToDelete(null)}
-                      onChangeEditingName={setEditingName}
                     />
                   );
                 })}
@@ -370,6 +345,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Modal de Renomeação Otimizado para Mobile e Touch */}
+        <RenameThreadModal
+          isOpen={Boolean(threadToRename)}
+          initialName={threadToRename?.name || 'Nova Conversa'}
+          onClose={() => setThreadToRename(null)}
+          onSave={(newName) => {
+            if (threadToRename && newName.trim()) {
+              onRenameThread(threadToRename.id, newName.trim());
+              hapticFeedback.light();
+            }
+            setThreadToRename(null);
+          }}
+        />
       </aside>
     </>
   );
@@ -378,35 +367,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 interface SidebarThreadItemProps {
   thread: Thread;
   isActive: boolean;
-  isEditing: boolean;
   isDeleting: boolean;
-  editingName: string;
-  editInputRef: React.RefObject<HTMLInputElement | null>;
   onSelect: () => void;
   onStartRename: (e: React.MouseEvent) => void;
-  onSaveRename: () => void;
-  onCancelRename: () => void;
   onStartDelete: (e: React.MouseEvent) => void;
   onConfirmDelete: (e: React.MouseEvent) => void;
   onCancelDelete: () => void;
-  onChangeEditingName: (name: string) => void;
 }
 
 const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
   thread,
   isActive,
-  isEditing,
   isDeleting,
-  editingName,
-  editInputRef,
   onSelect,
   onStartRename,
-  onSaveRename,
-  onCancelRename,
   onStartDelete,
   onConfirmDelete,
   onCancelDelete,
-  onChangeEditingName,
 }) => {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -414,7 +391,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
   const isSwiping = useRef(false);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isEditing || isDeleting) return;
+    if (isDeleting) return;
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
     isSwiping.current = false;
@@ -427,7 +404,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || isEditing || isDeleting) return;
+    if (!touchStartRef.current || isDeleting) return;
     const touch = e.touches[0];
     const diffX = touch.clientX - touchStartRef.current.x;
     const diffY = touch.clientY - touchStartRef.current.y;
@@ -473,7 +450,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
       setSwipeOffset(0);
       return;
     }
-    if (!isEditing && !isDeleting) {
+    if (!isDeleting) {
       onSelect();
     }
   };
@@ -533,33 +510,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
               isActive ? 'text-primary' : 'text-[#6B7280]'
             }`}
           />
-          {isEditing ? (
-            <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
-              <input
-                ref={editInputRef}
-                type="text"
-                value={editingName}
-                onChange={(e) => onChangeEditingName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSaveRename();
-                  if (e.key === 'Escape') onCancelRename();
-                }}
-                className="bg-[#101217] border border-primary/50 text-[#F3F4F6] text-xs px-2 py-0.5 rounded w-full focus:outline-none"
-              />
-              <button
-                onClick={onSaveRename}
-                className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded cursor-pointer min-h-[28px] min-w-[28px] flex items-center justify-center"
-              >
-                <Check className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onCancelRename}
-                className="p-1 text-[#9CA3AF] hover:bg-white/[0.06] rounded cursor-pointer min-h-[28px] min-w-[28px] flex items-center justify-center"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : isDeleting ? (
+          {isDeleting ? (
             <div className="flex items-center gap-2 text-red-400 text-[11px]" onClick={(e) => e.stopPropagation()}>
               <span>Excluir?</span>
               <button
@@ -586,7 +537,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
         </div>
 
         {/* Hover Actions: Rename & Delete (Desktop) */}
-        {!isEditing && !isDeleting && (
+        {!isDeleting && (
           <div className="hidden sm:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               type="button"

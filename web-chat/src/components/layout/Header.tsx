@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ConnectionStatus, CharlieAIStatus, Thread, Message } from '../../types/chat';
 import { Badge } from '../ui/Badge';
+import { RenameThreadModal } from './RenameThreadModal';
 import { hapticFeedback } from '../../utils/haptics';
 
 interface HeaderProps {
@@ -45,21 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
   isAdmin = false,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editedTitle, setEditedTitle] = useState(activeThread?.name || '');
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setEditedTitle(activeThread?.name || 'Nova Conversa');
-  }, [activeThread]);
-
-  useEffect(() => {
-    if (isEditingTitle && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [isEditingTitle]);
 
   // Click outside menu listener
   useEffect(() => {
@@ -74,13 +62,8 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen]);
 
-  const handleSaveTitle = () => {
-    if (editedTitle.trim()) {
-      onRenameThread(editedTitle.trim());
-    } else {
-      setEditedTitle(activeThread?.name || 'Nova Conversa');
-    }
-    setIsEditingTitle(false);
+  const handleSaveTitle = (newName: string) => {
+    onRenameThread(newName);
   };
 
   const exportAsMarkdown = () => {
@@ -111,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 w-full min-h-14 pt-[env(safe-area-inset-top,0px)] border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between select-none flex-shrink-0">
+    <header className="relative z-30 w-full min-h-14 pt-[env(safe-area-inset-top,0px)] border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between select-none flex-shrink-0">
       {/* Left: Sidebar Toggle & Title */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
@@ -132,7 +115,13 @@ export const Header: React.FC<HeaderProps> = ({
             <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div
+              onClick={() => {
+                hapticFeedback.light();
+                setIsRenameModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 min-w-0 cursor-pointer active:opacity-70 transition-opacity"
+            >
               <span className="text-xs font-semibold tracking-tight text-[#F3F4F6] truncate max-w-[150px] sm:max-w-xs">
                 {activeThread?.name || 'Nova Conversa'}
               </span>
@@ -145,9 +134,14 @@ export const Header: React.FC<HeaderProps> = ({
                 title={connectionStatus === 'online' ? 'Online' : 'Offline'}
               />
             </div>
-            {charlieStatus !== 'idle' && (
+            {(charlieStatus === 'thinking' || charlieStatus === 'speaking') && (
               <span className="text-[10px] text-primary font-mono truncate animate-pulse leading-none mt-0.5">
                 {charlieStatus === 'thinking' ? 'pensando...' : 'respondendo...'}
+              </span>
+            )}
+            {charlieStatus === 'error' && (
+              <span className="text-[10px] text-red-400 font-mono truncate leading-none mt-0.5">
+                falha no envio
               </span>
             )}
           </div>
@@ -155,42 +149,17 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Desktop Header: Renameable Thread Title */}
         <div className="hidden md:flex items-center gap-2 min-w-0 flex-1">
-          {isEditingTitle ? (
-            <div className="flex items-center gap-1.5 max-w-md w-full">
-              <input
-                ref={inputRef}
-                type="text"
-                value={editedTitle}
-                onChange={(e) => setEditedTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveTitle();
-                  if (e.key === 'Escape') setIsEditingTitle(false);
-                }}
-                className="bg-[#181B22] border border-primary/50 text-[#F3F4F6] text-sm px-2.5 py-1 rounded-md focus:outline-none w-full"
-              />
-              <button
-                onClick={handleSaveTitle}
-                className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
-              >
-                <Check className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsEditingTitle(false)}
-                className="p-1 rounded text-[#9CA3AF] hover:bg-white/[0.06] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <h1
-              onClick={() => setIsEditingTitle(true)}
-              className="text-sm font-semibold text-[#F3F4F6] truncate max-w-md cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 group"
-              title="Clique para renomear"
-            >
-              <span>{activeThread?.name || 'Nova Conversa'}</span>
-              <Pencil className="w-3 h-3 text-[#6B7280] opacity-0 group-hover:opacity-100 transition-opacity" />
-            </h1>
-          )}
+          <h1
+            onClick={() => {
+              hapticFeedback.light();
+              setIsRenameModalOpen(true);
+            }}
+            className="text-sm font-semibold text-[#F3F4F6] truncate max-w-md cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 group"
+            title="Clique para renomear conversa"
+          >
+            <span>{activeThread?.name || 'Nova Conversa'}</span>
+            <Pencil className="w-3 h-3 text-[#6B7280] opacity-0 group-hover:opacity-100 transition-opacity" />
+          </h1>
         </div>
       </div>
 
@@ -218,6 +187,11 @@ export const Header: React.FC<HeaderProps> = ({
         {charlieStatus === 'speaking' && (
           <Badge variant="success" dot className="hidden md:inline-flex text-[10px]">
             Transmitindo
+          </Badge>
+        )}
+        {charlieStatus === 'error' && (
+          <Badge variant="danger" dot className="hidden md:inline-flex text-[10px]">
+            Erro
           </Badge>
         )}
 
@@ -261,7 +235,8 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={() => {
-                  setIsEditingTitle(true);
+                  hapticFeedback.light();
+                  setIsRenameModalOpen(true);
                   setIsMenuOpen(false);
                 }}
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-white/[0.06] text-left cursor-pointer"
@@ -321,6 +296,14 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal de Renomear Conversa (Universal para Mobile & Desktop) */}
+      <RenameThreadModal
+        isOpen={isRenameModalOpen}
+        initialName={activeThread?.name || 'Nova Conversa'}
+        onClose={() => setIsRenameModalOpen(false)}
+        onSave={handleSaveTitle}
+      />
     </header>
   );
 };
