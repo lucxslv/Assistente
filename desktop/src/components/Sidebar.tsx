@@ -9,6 +9,7 @@ import {
   Keyboard,
   User,
   Plus,
+  Smartphone,
 } from "lucide-react";
 import { Thread } from "../types";
 import { SystemStatus, LocalSystemMetrics, UserProfile } from "../services/api";
@@ -18,6 +19,7 @@ interface SidebarProps {
   threads: Thread[];
   activeThreadId: string | null;
   onSelectThread: (id: string) => void;
+  onOpenMobilePair?: () => void;
   onNewThread: () => void;
   onDeleteThread: (id: string, e: React.MouseEvent) => void;
   onRenameThread?: (id: string, newName: string) => void;
@@ -52,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCommandPalette,
   user,
   onOpenAuth,
+  onOpenMobilePair,
   isConnected,
   systemStatus,
   localMetrics,
@@ -520,8 +523,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* 5. Perfil do Usuário (Base fixa da barra lateral) */}
-      <div className="pt-2 border-t border-white/[0.06]">
+      {/* 5. Perfil do Usuário e Pareamento Mobile */}
+      <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
+        {onOpenMobilePair && (
+          <button
+            type="button"
+            onClick={onOpenMobilePair}
+            className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-[var(--radius-md)] bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 text-indigo-300 hover:text-indigo-200 transition-all text-[11px] font-medium cursor-pointer shadow-sm group"
+            title="Conectar aplicativo Mobile via QR Code ou PIN"
+          >
+            <span className="flex items-center gap-2">
+              <Smartphone className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <span>Parear Celular</span>
+            </span>
+            <span className="text-[10px] bg-indigo-500/20 px-1.5 py-0.5 rounded text-indigo-300 font-mono font-bold">QR / PIN</span>
+          </button>
+        )}
         {user ? (
           <button
             type="button"
