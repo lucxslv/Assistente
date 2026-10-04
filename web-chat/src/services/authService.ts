@@ -31,7 +31,13 @@ export const AuthService = {
     return user;
   },
 
-  logout(): void {
-    StorageService.clearSession();
+  async logout(): Promise<void> {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Ignora erro de rede no logout
+    } finally {
+      StorageService.clearSession();
+    }
   },
 };

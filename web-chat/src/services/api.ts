@@ -136,6 +136,7 @@ class ApiClient {
 
     try {
       const response = await fetch(url, {
+        credentials: 'include',
         ...options,
         headers,
       });
@@ -155,7 +156,7 @@ class ApiClient {
           this.hasTriedCloudFallback = true;
           const retryUrl = `${CLOUD_API}${cleanEndpoint}`;
           try {
-            const retryResp = await fetch(retryUrl, { ...options, headers });
+            const retryResp = await fetch(retryUrl, { credentials: 'include', ...options, headers });
             if (retryResp.ok) {
               this.setOnline(true);
               if (retryResp.status === 204) return {} as T;
