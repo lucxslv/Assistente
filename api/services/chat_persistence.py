@@ -224,13 +224,12 @@ async def save_user_memory_entry(
     fact: str,
     category: str = "general",
 ) -> str:
-    """Salva um fato ou conhecimento duradouro sobre o usuário na tabela UserMemory."""
+    """Salva um fato ou conhecimento duradouro sobre o usuário na tabela UserMemory com deduplicação semântica."""
     if not pool or not fact or not fact.strip():
         return ""
 
     clean_fact = fact.strip()
     cat = (category or "general").strip()
-    mem_id = uuid.uuid4()
     now = datetime.datetime.now(datetime.timezone.utc)
 
     vec_str = None
@@ -244,13 +243,82 @@ async def save_user_memory_entry(
 
     try:
         async with pool.acquire() as conn:
+            # 1. Verifica se já existe um fato idêntico ou muito similar para este usuário
+            existing = None
+            if vec_str:
+                existing = await conn.fetchrow(
+                    """
+                    SELECT id, confidence, importance, metadata, content
+                    FROM public."UserMemory"
+                    WHERE user_id = $1 AND (
+                        content ILIKE $2
+                        OR fact ILIKE $2
+                        OR (embedding IS NOT NULL AND embedding <=> $3::vector < 0.16)
+                    )
+                    ORDER BY (CASE WHEN content ILIKE $2 THEN 0 ELSE 1 END), updated_at DESC
+                    LIMIT 1
+                    """,
+                    str(user_id), clean_fact, vec_str
+                )
+            else:
+                existing = await conn.fetchrow(
+                    """
+                    SELECT id, confidence, importance, metadata, content
+                    FROM public."UserMemory"
+                    WHERE user_id = $1 AND (content ILIKE $2 OR fact ILIKE $2)
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    str(user_id), clean_fact
+                )
+
+            if existing:
+                # Reforça a memória existente aumentando confiança e contador em vez de criar duplicata
+                sim_id = existing["id"]
+                old_conf = existing["confidence"] or 0.85
+                old_imp = existing["importance"] or 0.70
+                new_conf = min(0.99, round(float(old_conf) + 0.05, 3))
+                new_imp = max(float(old_imp), 0.70)
+
+                sim_meta = {}
+                try:
+                    raw_meta = existing["metadata"]
+                    if raw_meta:
+                        sim_meta = json.loads(raw_meta) if isinstance(raw_meta, str) else dict(raw_meta)
+                except Exception:
+                    sim_meta = {}
+
+                sim_meta["reinforcement_count"] = int(sim_meta.get("reinforcement_count", 0)) + 1
+
+                # Mantém o texto mais detalhado
+                best_text = clean_fact if len(clean_fact) >= len(existing["content"] or "") else existing["content"]
+
+                await conn.execute(
+                    """
+                    UPDATE public."UserMemory"
+                    SET confidence = $1,
+                        importance = $2,
+                        metadata = $3,
+                        content = $4,
+                        fact = $4,
+                        updated_at = $5,
+                        last_confirmed_at = $5
+                    WHERE id = $6
+                    """,
+                    new_conf, new_imp, json.dumps(sim_meta), best_text, now, sim_id
+                )
+                logger.info(f"[chat_persistence] Memória reforçada (ID={sim_id}) para {user_id}: '{best_text[:50]}...' (conf={new_conf})")
+                return str(sim_id)
+
+            # 2. Se for realmente nova, insere
+            mem_id = uuid.uuid4()
             if vec_str:
                 await conn.execute(
                     """
                     INSERT INTO public."UserMemory" (
-                        id, user_id, content, fact, category, memory_type, confidence, importance, embedding, created_at, updated_at, last_confirmed_at
+                        id, user_id, content, fact, category, memory_type, confidence, importance, embedding, metadata, created_at, updated_at, last_confirmed_at
                     )
-                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', 0.90, 0.70, $5::vector, $6, $6, $6)
+                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', 0.90, 0.70, $5::vector, '{}', $6, $6, $6)
                     """,
                     mem_id, str(user_id), clean_fact, cat, vec_str, now
                 )
@@ -258,16 +326,16 @@ async def save_user_memory_entry(
                 await conn.execute(
                     """
                     INSERT INTO public."UserMemory" (
-                        id, user_id, content, fact, category, memory_type, confidence, importance, created_at, updated_at, last_confirmed_at
+                        id, user_id, content, fact, category, memory_type, confidence, importance, metadata, created_at, updated_at, last_confirmed_at
                     )
-                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', 0.90, 0.70, $5, $5, $5)
+                    VALUES ($1, $2, $3, $3, $4, 'semantic_fact', 0.90, 0.70, '{}', $5, $5, $5)
                     """,
                     mem_id, str(user_id), clean_fact, cat, now
                 )
-        logger.info(f"[chat_persistence] Fato gravado no UserMemory para {user_id}: '{clean_fact[:50]}'")
-        return str(mem_id)
+            logger.info(f"[chat_persistence] Novo fato gravado no UserMemory para {user_id}: '{clean_fact[:50]}'")
+            return str(mem_id)
     except Exception as e:
-        logger.error(f"[chat_persistence] Falha ao gravar UserMemory para {user_id}: {e}")
+        logger.error(f"[chat_persistence] Falha ao gravar/reforçar UserMemory para {user_id}: {e}")
         return ""
 
 
@@ -309,22 +377,35 @@ async def get_user_memory_facts(
     user_id: str,
     limit: int = 15,
 ) -> list[str]:
-    """Busca as memórias ativas mais recentes do usuário com isolamento estrito."""
+    """Busca as memórias ativas do usuário com isolamento estrito e deduplicação semântica em memória."""
     if not pool or not user_id:
         return []
     try:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT content
+                SELECT COALESCE(fact, content) as content
                 FROM public."UserMemory"
                 WHERE user_id = $1
-                ORDER BY created_at DESC
+                ORDER BY importance DESC, updated_at DESC
                 LIMIT $2
                 """,
-                str(user_id), limit
+                str(user_id), limit * 3
             )
-            return [r["content"] for r in rows if r["content"] and r["content"].strip()]
+            seen = set()
+            unique_facts = []
+            for r in rows:
+                c = (r["content"] or "").strip()
+                if not c:
+                    continue
+                # Normaliza para evitar repetições com pontuação ou caixa ligeiramente diferente
+                norm = " ".join(c.lower().rstrip(".").split())
+                if norm not in seen:
+                    seen.add(norm)
+                    unique_facts.append(c)
+                if len(unique_facts) >= limit:
+                    break
+            return unique_facts
     except Exception as e:
         logger.warning(f"[chat_persistence] Erro ao buscar UserMemory para {user_id}: {e}")
         return []

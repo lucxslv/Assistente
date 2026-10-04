@@ -132,23 +132,26 @@ CHARLIE: {assistant_reply[:500]}
                 imp = float(m.get("importance", 0.5))
 
                 action = m.get("action", "reinforce")
+                saved_via_pool = False
                 try:
                     from api.db import get_or_init_db_pool
                     from api.services.chat_persistence import save_user_memory_entry
                     pool = await get_or_init_db_pool()
                     if pool:
-                        await save_user_memory_entry(pool, user_id=user_id, fact=content, category=m_type)
+                        res_id = await save_user_memory_entry(pool, user_id=user_id, fact=content, category=m_type)
+                        saved_via_pool = bool(res_id)
                 except Exception as p_err:
                     logger.debug(f"Erro pool MemoryExtractor: {p_err}")
 
-                db.add_or_reinforce_memory(
-                    content=content,
-                    memory_type=m_type,
-                    importance=imp,
-                    confidence=conf,
-                    user_id=user_id,
-                    action=action,
-                )
+                if not saved_via_pool:
+                    db.add_or_reinforce_memory(
+                        content=content,
+                        memory_type=m_type,
+                        importance=imp,
+                        confidence=conf,
+                        user_id=user_id,
+                        action=action,
+                    )
 
             # 2. Atualiza User Model (Aprendizado Comportamental Gradual via EMA)
             feedback = data.get("user_model_feedback", {})

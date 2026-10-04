@@ -614,19 +614,22 @@ class ToolRegistry:
         except Exception:
             uid = "default"
 
+        saved_via_pool = False
         try:
             from api.db import get_or_init_db_pool
             from api.services.chat_persistence import save_user_memory_entry
             pool = await get_or_init_db_pool()
             if pool:
-                await save_user_memory_entry(pool, user_id=uid, fact=clean_fact, category=category)
+                res_id = await save_user_memory_entry(pool, user_id=uid, fact=clean_fact, category=category)
+                saved_via_pool = bool(res_id)
         except Exception as e:
             logger.warning(f"Erro ao salvar memória assíncrona: {e}")
 
-        try:
-            db.add_memory(clean_fact, category=category, user_id=uid)
-        except Exception as e:
-            logger.debug(f"Aviso sync db.add_memory: {e}")
+        if not saved_via_pool:
+            try:
+                db.add_memory(clean_fact, category=category, user_id=uid)
+            except Exception as e:
+                logger.debug(f"Aviso sync db.add_memory: {e}")
 
         return f"Fato memorizado com sucesso: {clean_fact}"
 
