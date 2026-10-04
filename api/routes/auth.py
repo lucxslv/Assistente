@@ -6,7 +6,7 @@ import time
 import urllib.error
 import urllib.request
 from typing import Dict, Optional
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status, Request, Response
 from pydantic import BaseModel
 from api.db import get_or_init_db_pool
 from config import config
@@ -98,15 +98,21 @@ async def verify_supabase_token(token: str) -> Optional[dict]:
         return None
 
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    """Dependency do FastAPI: exige autenticação obrigatória do usuário."""
-    if not authorization:
+async def get_current_user(request: Request, authorization: Optional[str] = Header(None)) -> dict:
+    """Dependency do FastAPI: exige autenticação obrigatória do usuário (Bearer token ou cookie HttpOnly)."""
+    token = None
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+    elif request and "charlie_session" in request.cookies:
+        token = request.cookies.get("charlie_session")
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token de autenticação ausente. Faça login para acessar seus dados.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = await verify_supabase_token(authorization)
+    user = await verify_supabase_token(token)
     if not user or not user.get("id"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -119,11 +125,17 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     return user
 
 
-async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[dict]:
-    """Dependency do FastAPI: extrai o usuário autenticado caso o header esteja presente."""
-    if not authorization:
+async def get_current_user_optional(request: Request, authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Dependency do FastAPI: extrai o usuário autenticado caso o header ou cookie esteja presente."""
+    token = None
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+    elif request and "charlie_session" in request.cookies:
+        token = request.cookies.get("charlie_session")
+
+    if not token:
         return None
-    user = await verify_supabase_token(authorization)
+    user = await verify_supabase_token(token)
     if user and user.get("id"):
         current_user_id_var.set(str(user["id"]))
         current_user_email_var.set(user.get("email") or "")
@@ -132,7 +144,7 @@ async def get_current_user_optional(authorization: Optional[str] = Header(None))
 
 
 @router.post("/register", response_model=AuthResponse)
-async def register(data: RegisterRequest):
+async def register(data: RegisterRequest, response: Response):
     """Cria uma nova conta de usuário no Supabase Auth."""
     if len(data.password) < 6:
         raise HTTPException(
@@ -222,6 +234,18 @@ async def register(data: RegisterRequest):
 
     from api.routes.admin import is_admin_email
     is_adm = is_admin_email(data.email)
+
+    if token:
+        response.set_cookie(
+            key="charlie_session",
+            value=token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 7,
+            path="/",
+        )
+
     return AuthResponse(
         user=UserResponse(
             id=str(user_id),
@@ -235,7 +259,7 @@ async def register(data: RegisterRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(data: LoginRequest):
+async def login(data: LoginRequest, response: Response):
     """Autentica o usuário com e-mail e senha via Supabase Auth."""
     login_url = f"{config.supabase_url}/auth/v1/token?grant_type=password"
     payload = {
@@ -283,6 +307,18 @@ async def login(data: LoginRequest):
                 or user_obj.get("app_metadata", {}).get("role") == "admin"
                 or user_obj.get("user_metadata", {}).get("is_admin") is True
             )
+
+            if token:
+                response.set_cookie(
+                    key="charlie_session",
+                    value=token,
+                    httponly=True,
+                    secure=True,
+                    samesite="lax",
+                    max_age=60 * 60 * 24 * 7,
+                    path="/",
+                )
+
             return AuthResponse(
                 user=UserResponse(
                     id=str(user_id),
@@ -313,13 +349,24 @@ async def login(data: LoginRequest):
                     # Tenta mais uma vez
                     with urllib.request.urlopen(req) as retry_resp:
                         retry_data = json.loads(retry_resp.read().decode())
+                        retry_token = retry_data["access_token"]
+                        if retry_token:
+                            response.set_cookie(
+                                key="charlie_session",
+                                value=retry_token,
+                                httponly=True,
+                                secure=True,
+                                samesite="lax",
+                                max_age=60 * 60 * 24 * 7,
+                                path="/",
+                            )
                         return AuthResponse(
                             user=UserResponse(
                                 id=str(retry_data.get("user", {}).get("id")),
                                 name=retry_data.get("user", {}).get("user_metadata", {}).get("name") or data.email.split("@")[0],
                                 email=data.email,
                             ),
-                            token=retry_data["access_token"],
+                            token=retry_token,
                         )
         except Exception:
             msg = "E-mail ou senha incorretos. Verifique suas credenciais."
@@ -329,10 +376,17 @@ async def login(data: LoginRequest):
         raise HTTPException(status_code=500, detail="Serviço de autenticação temporariamente indisponível.")
 
 
+@router.post("/logout")
+async def logout(response: Response):
+    """Encerra a sessão removendo o cookie HttpOnly."""
+    response.delete_cookie(key="charlie_session", path="/")
+    return {"ok": True, "message": "Sessão encerrada com sucesso."}
+
+
 @router.get("/me", response_model=UserResponse)
-async def get_me(authorization: Optional[str] = Header(None)):
-    """Retorna os dados do usuário autenticado a partir do token de sessão."""
-    user = await get_current_user_optional(authorization)
+async def get_me(request: Request, authorization: Optional[str] = Header(None)):
+    """Retorna os dados do usuário autenticado a partir do token de sessão ou cookie HttpOnly."""
+    user = await get_current_user_optional(request, authorization)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
