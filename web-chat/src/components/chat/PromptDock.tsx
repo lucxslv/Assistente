@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowRight, Paperclip, Square, Image as ImageIcon } from 'lucide-react';
+import { ArrowRight, Paperclip, Square, AlertCircle, X } from 'lucide-react';
 import { FileAttachment } from '../../types/chat';
 import { FilePreview } from './FilePreview';
 import { generateUUID } from '../../utils/formatters';
 import { cn } from '../../utils/cn';
 import { hapticFeedback } from '../../utils/haptics';
+import { mediaDb } from '../../services/mediaDb';
 
 interface PromptDockProps {
   value: string;
@@ -15,6 +16,10 @@ interface PromptDockProps {
   disabled?: boolean;
   isKeyboardOpen?: boolean;
 }
+
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_DOC_SIZE_BYTES = 2 * 1024 * 1024;    // 2 MB
+const MAX_ATTACHMENTS = 5;
 
 export const PromptDock: React.FC<PromptDockProps> = ({
   value,
@@ -27,6 +32,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
 }) => {
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -46,43 +52,75 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     adjustHeight();
   }, [value, adjustHeight]);
 
-  const handleProcessFiles = useCallback(async (files: FileList | File[]) => {
-    const newAttachments: FileAttachment[] = [];
+  const handleProcessFiles = useCallback(
+    async (files: FileList | File[]) => {
+      setValidationError(null);
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const isImg = file.type.startsWith('image/');
-      const attachment: FileAttachment = {
-        id: generateUUID(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        isImage: isImg,
-      };
-
-      if (isImg) {
-        // Read data URL
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve((e.target?.result as string) || '');
-          reader.readAsDataURL(file);
-        });
-        attachment.dataUrl = dataUrl;
-      } else if (file.size < 500 * 1024) {
-        // Read small text file
-        try {
-          const text = await file.text();
-          attachment.textPreview = text.slice(0, 15000);
-        } catch {
-          // Binary or unsupported
-        }
+      if (attachments.length + files.length > MAX_ATTACHMENTS) {
+        setValidationError(`Limite de no máximo ${MAX_ATTACHMENTS} anexos por mensagem.`);
+        hapticFeedback.warning();
+        return;
       }
 
-      newAttachments.push(attachment);
-    }
+      const newAttachments: FileAttachment[] = [];
 
-    setAttachments((prev) => [...prev, ...newAttachments]);
-  }, []);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const isImg = file.type.startsWith('image/');
+
+        // Validação estrita de tamanho
+        if (isImg && file.size > MAX_IMAGE_SIZE_BYTES) {
+          setValidationError(`A imagem "${file.name}" excede o limite máximo de 10 MB.`);
+          hapticFeedback.warning();
+          continue;
+        }
+
+        if (!isImg && file.size > MAX_DOC_SIZE_BYTES) {
+          setValidationError(`O arquivo "${file.name}" excede o limite máximo de 2 MB.`);
+          hapticFeedback.warning();
+          continue;
+        }
+
+        const attachmentId = generateUUID();
+        const attachment: FileAttachment = {
+          id: attachmentId,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          isImage: isImg,
+        };
+
+        if (isImg) {
+          // Ler DataURL
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve((e.target?.result as string) || '');
+            reader.readAsDataURL(file);
+          });
+          attachment.dataUrl = dataUrl;
+
+          // Salva no cache IndexedDB em segundo plano
+          mediaDb.saveMedia(attachmentId, dataUrl, file.type);
+        } else {
+          // Arquivos de texto ou código
+          try {
+            const text = await file.text();
+            attachment.textPreview = text.slice(0, 15000);
+          } catch {
+            // Binário não textual
+          }
+        }
+
+        newAttachments.push(attachment);
+      }
+
+      if (newAttachments.length > 0) {
+        hapticFeedback.light();
+        setAttachments((prev) => [...prev, ...newAttachments]);
+      }
+    },
+    [attachments.length]
+  );
 
   // Handle paste events (e.g. pasted screenshots)
   const handlePaste = useCallback(
@@ -141,6 +179,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     hapticFeedback.light();
     onSend(trimmed, attachments);
     setAttachments([]);
+    setValidationError(null);
     onChange('');
     if (textareaRef.current) {
       textareaRef.current.style.height = '44px';
@@ -151,17 +190,20 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const handleRemoveAttachment = (id: string) => {
     hapticFeedback.light();
     setAttachments((prev) => prev.filter((a) => a.id !== id));
+    mediaDb.deleteMedia(id);
   };
 
   const canSend = value.trim().length > 0 || attachments.length > 0;
 
   const handleFocus = () => {
-    // Garante que o window permaneça rigorosamente no topo (0, 0)
-    // Previne que o navegador mobile role o body e empurre o cabeçalho para fora
+    // Mantém window no topo sem deslocar cabeçalho
     if (typeof window !== 'undefined') {
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
       document.documentElement.scrollTop = 0;
+      requestAnimationFrame(() => {
+        if (window.scrollY !== 0) window.scrollTo(0, 0);
+      });
     }
   };
 
@@ -170,10 +212,26 @@ export const PromptDock: React.FC<PromptDockProps> = ({
       className={cn(
         'w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-1 flex-shrink-0 transition-all duration-150',
         isKeyboardOpen
-          ? 'pb-2 sm:pb-3'
-          : 'pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] sm:pb-3'
+          ? 'pb-[max(0.625rem,env(safe-area-inset-bottom,0px))] sm:pb-3'
+          : 'pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] sm:pb-3'
       )}
     >
+      {/* Alerta de Validação de Anexo */}
+      {validationError && (
+        <div className="mb-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between animate-slide-up">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{validationError}</span>
+          </div>
+          <button
+            onClick={() => setValidationError(null)}
+            className="p-1 hover:text-white cursor-pointer"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -195,8 +253,8 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
             className="min-h-[44px] min-w-[44px] p-2.5 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl transition-colors disabled:opacity-40 cursor-pointer flex items-center justify-center flex-shrink-0"
-            title="Anexar arquivo ou imagem"
-            aria-label="Anexar arquivo ou imagem"
+            title="Anexar imagem ou arquivo (máx. 10MB)"
+            aria-label="Anexar imagem ou arquivo"
           >
             <Paperclip className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
@@ -204,6 +262,7 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             ref={fileInputRef}
             type="file"
             multiple
+            accept="image/*,text/*,application/json,.pdf,.py,.js,.ts,.tsx,.jsx,.html,.css,.md"
             className="hidden"
             onChange={(e) => {
               if (e.target.files) handleProcessFiles(e.target.files);

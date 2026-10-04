@@ -1,9 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Copy, Check, RotateCcw, AlertTriangle, User as UserIcon } from 'lucide-react';
-import { Message } from '../../types/chat';
+import { Message, FileAttachment } from '../../types/chat';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatTimeOrDate } from '../../utils/formatters';
 import { hapticFeedback } from '../../utils/haptics';
+import { mediaDb } from '../../services/mediaDb';
+
+const AttachmentThumbnail: React.FC<{ att: FileAttachment }> = ({ att }) => {
+  const [dataUrl, setDataUrl] = useState<string | null>(att.dataUrl || null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (att.isImage && !att.dataUrl) {
+      mediaDb.getMedia(att.id).then((cached) => {
+        if (!isCancelled && cached) {
+          setDataUrl(cached);
+        }
+      });
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [att.id, att.isImage, att.dataUrl]);
+
+  if (att.isImage && dataUrl) {
+    return (
+      <img
+        src={dataUrl}
+        alt={att.name}
+        className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+        onClick={() => window.open(dataUrl, '_blank')}
+      />
+    );
+  }
+
+  return <span className="text-primary font-mono text-[11px] px-1">{att.name}</span>;
+};
 
 interface MessageItemProps {
   message: Message;
@@ -77,16 +109,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   key={att.id}
                   className="flex items-center gap-2 p-1.5 rounded-lg bg-black/30 border border-white/[0.06] text-xs"
                 >
-                  {att.isImage && att.dataUrl ? (
-                    <img
-                      src={att.dataUrl}
-                      alt={att.name}
-                      className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => window.open(att.dataUrl, '_blank')}
-                    />
-                  ) : (
-                    <span className="text-primary font-mono text-[11px] px-1">{att.name}</span>
-                  )}
+                  <AttachmentThumbnail att={att} />
                 </div>
               ))}
             </div>

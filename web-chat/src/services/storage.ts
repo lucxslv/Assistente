@@ -1,6 +1,7 @@
 import { User } from '../types/auth';
 import { Message, Thread } from '../types/chat';
 import { AppSettings, DEFAULT_SETTINGS } from '../types/settings';
+import { mediaDb } from './mediaDb';
 
 const BASE_KEYS = {
   TOKEN: 'charlie_web_auth_token',
@@ -176,6 +177,13 @@ export const StorageService = {
     toRemove.forEach((key) => localStorage.removeItem(key));
     localStorage.removeItem(BASE_KEYS.TOKEN);
     localStorage.removeItem(BASE_KEYS.USER);
+
+    // Expurga cache de mídias no IndexedDB
+    try {
+      mediaDb.clearUserMedia(targetId);
+    } catch {
+      // Ignora erro
+    }
   },
 
   // Clear session wrapper
