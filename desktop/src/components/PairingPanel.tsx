@@ -5,13 +5,11 @@ import {
   Check,
   Copy,
   RefreshCw,
-  Wifi,
   Globe,
   ShieldCheck,
   AlertTriangle,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
-import { getApiBase, getServerMode } from "../services/api";
+import { getApiBase } from "../services/api";
 
 export interface PairingPanelProps {
   onClose?: () => void;
@@ -94,130 +92,62 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
     setStatusMessage(null);
     soundPlayedRef.current = false;
 
-    // 1. Detecta IP local da máquina via comando nativo Rust (Tauri Win32)
-    let localIp = "127.0.0.1";
+    const serverUrl = "https://assistente-xi.vercel.app/api";
+
     try {
-      const ip = await invoke<string>("get_local_ip");
-      if (ip && !ip.startsWith("127.")) {
-        localIp = ip;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`${serverUrl}/pair/init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Desktop Principal",
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const payload = await res.json();
+        const rawPin = payload.pin;
+        const pairingId = payload.pairing_id || payload.id || payload.token;
+        const secret = payload.secret || payload.token;
+
+        const qrPayload: QRPayload = payload.qr_payload || payload.qrPayload || {
+          v: 1,
+          id: pairingId,
+          lan: serverUrl,
+          tunnel: serverUrl,
+          secret,
+          type: "charlie-pair",
+          pin: rawPin,
+          name: "Desktop Principal",
+        };
+
+        const resolved: PairingData = {
+          pin: rawPin,
+          formattedPin: payload.formatted_pin || `${rawPin.slice(0, 3)}-${rawPin.slice(3)}`,
+          pairingId,
+          lanUrl: serverUrl,
+          tunnelUrl: serverUrl,
+          secret,
+          expiresInSeconds: payload.expires_in || payload.expiresInSeconds || 300,
+          qrPayload,
+          source: "cloud",
+          apiBaseUrl: serverUrl,
+        };
+
+        setData(resolved);
+        setSecondsRemaining(resolved.expiresInSeconds);
+        setStatusMessage(null);
+      } else {
+        throw new Error(`Status ${res.status}`);
       }
     } catch {
-      // Fallback
-    }
-
-    const defaultLan = `http://${localIp}:8005`;
-    const apiBase = getApiBase().replace(/\/+$/, "");
-
-    const serverMode = getServerMode();
-
-    // Em modo Nuvem (padrão), prioriza a URL ativa na nuvem para pareamento WAN imediato
-    const candidateBases = (serverMode === "local"
-      ? [
-          "http://127.0.0.1:8005/api",
-          `${defaultLan}/api`,
-          apiBase,
-          "https://assistente-xi.vercel.app/api",
-        ]
-      : [
-          apiBase,
-          "https://assistente-xi.vercel.app/api",
-          "http://127.0.0.1:8005/api",
-          `${defaultLan}/api`,
-        ]
-    ).filter((v, idx, arr) => !!v && arr.indexOf(v) === idx);
-
-    const tryFetchInit = async (): Promise<PairingData | null> => {
-      for (const base of candidateBases) {
-        try {
-          const url = `${base}/pair/init`;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: "Desktop Principal",
-              port: 8005,
-              local_ip: localIp,
-            }),
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
-
-          if (res.ok) {
-            const payload = await res.json();
-            const rawPin = payload.pin;
-            const pairingId = payload.pairing_id || payload.id || payload.token;
-            const secret = payload.secret || payload.token;
-            const lanUrl = payload.lan_url || payload.lanUrl || defaultLan;
-            const tunnelUrl = payload.tunnel_url || payload.tunnelUrl || (base.includes("vercel.app") ? "https://assistente-xi.vercel.app/api" : null);
-
-            const qrPayload: QRPayload = payload.qr_payload || payload.qrPayload || {
-              v: 1,
-              id: pairingId,
-              lan: lanUrl,
-              tunnel: tunnelUrl,
-              secret,
-              type: "charlie-pair",
-              pin: rawPin,
-              name: "Desktop Principal",
-            };
-
-            return {
-              pin: rawPin,
-              formattedPin: payload.formatted_pin || `${rawPin.slice(0, 3)}-${rawPin.slice(3)}`,
-              pairingId,
-              lanUrl,
-              tunnelUrl,
-              secret,
-              expiresInSeconds: payload.expires_in || payload.expiresInSeconds || 300,
-              qrPayload,
-              source: base.includes("vercel.app") ? "cloud" : "local",
-              apiBaseUrl: base,
-            };
-          }
-        } catch {
-          // Continua para o próximo endpoint candidato
-        }
-      }
-      return null;
-    };
-
-    let resolvedData = await tryFetchInit();
-
-    // 2. Se não respondeu e estiver em modo local, tenta iniciar o backend local
-    if (!resolvedData && serverMode === "local") {
-      try {
-        await invoke("start_local_backend");
-      } catch {
-        // Ignora
-      }
-
-      setStatusMessage("Iniciando serviço Charlie API local (porta 8005)... Aguarde alguns instantes.");
-
-      for (let attempt = 1; attempt <= 8; attempt++) {
-        await new Promise((r) => setTimeout(r, 1200));
-        resolvedData = await tryFetchInit();
-        if (resolvedData) {
-          setStatusMessage(null);
-          break;
-        }
-      }
-    }
-
-    if (resolvedData) {
-      setData(resolvedData);
-      setSecondsRemaining(resolvedData.expiresInSeconds);
-      setStatusMessage(null);
-    } else {
       setData(null);
-      setStatusMessage(
-        serverMode === "local"
-          ? "Servidor Charlie API local (porta 8005) não detectado. Execute 'run_desktop.bat' ou inicie com 'uv run python -m api.main'."
-          : "Não foi possível conectar ao servidor Charlie na nuvem. Verifique sua conexão com a internet ou teste o status em Configurações > Servidor & Nuvem."
-      );
+      setStatusMessage("Não foi possível conectar ao servidor central Charlie. Verifique sua conexão com a internet.");
     }
     setLoading(false);
   }, []);
@@ -368,11 +298,9 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
         <div className="flex flex-col items-center justify-center py-12 gap-3 text-center rounded-2xl bg-amber-500/5 border border-amber-500/20 p-6">
           <AlertTriangle className="w-8 h-8 text-amber-400" />
           <div>
-            <h4 className="text-sm font-bold text-zinc-100">Serviço Local Charlie API Offline</h4>
+            <h4 className="text-sm font-bold text-zinc-100">Servidor Temporariamente Indisponível</h4>
             <p className="text-xs text-zinc-400 mt-1 max-w-md">
-              A porta 8005 não está respondendo. Certifique-se de que o backend Python foi iniciado com{' '}
-              <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded">run_desktop.bat</code> ou{' '}
-              <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded">uv run python -m api.main</code>.
+              Não foi possível conectar ao servidor central Charlie. Verifique sua conexão com a internet e tente novamente.
             </p>
           </div>
           <button
@@ -457,28 +385,18 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
             <div className="space-y-2 pt-3 border-t border-white/[0.06] text-[11px] text-zinc-400">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Endereço LAN:</span>
+                  <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Servidor:</span>
                 </div>
-                <span className="font-mono text-zinc-200">{data?.lanUrl || "Detectando..."}</span>
+                <span className="font-medium text-emerald-300">Servidor Oficial Conectado</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Modo de Rota:</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Criptografia:</span>
                 </div>
-                <span className="font-medium text-zinc-200">
-                  {data?.source === "local" ? "Direto Local (LAN)" : data?.source === "cloud" ? "Ponto de Pareamento Nuvem" : "Rede Local Direta"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Segurança:</span>
-                </div>
-                <span className="text-zinc-300">Troca de Chaves HMAC (32-bytes)</span>
+                <span className="text-zinc-300">Sessão Segura HMAC (32-bytes)</span>
               </div>
             </div>
           </div>

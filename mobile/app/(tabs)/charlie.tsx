@@ -170,7 +170,7 @@ export default function CharlieScreen() {
                   ]}
                 />
                 <Text style={styles.statusText}>
-                  API: {serverConn.isOnline ? 'Online' : 'Offline'}
+                  Servidor: {serverConn.isOnline ? 'Online' : 'Offline'}
                 </Text>
               </View>
 

@@ -47,126 +47,31 @@ export function humanizeErrorMessage(error: any): string {
   return "Não foi possível completar a ação no momento. Verifique sua conexão e tente novamente.";
 }
 
-export const LOCAL_API = "http://127.0.0.1:8005/api";
 export const CLOUD_API = "https://assistente-xi.vercel.app/api";
+export const LOCAL_API = CLOUD_API; // Mantido apenas para compatibilidade de tipagem
 
-// O servidor padrão oficial é a Nuvem Charlie (Vercel + Supabase)
-let activeApiBase: string = CLOUD_API;
-
-export function getServerMode(): "cloud" | "local" | "custom" {
-  if (typeof window === "undefined") return "cloud";
-  const custom = localStorage.getItem("charlie_api_url");
-  if (custom && custom.trim()) return "custom";
-  const mode = localStorage.getItem("charlie_server_mode");
-  if (mode === "local") return "local";
+export function getServerMode(): "cloud" {
   return "cloud";
 }
 
-export function setServerMode(mode: "cloud" | "local" | "custom", customUrl?: string): void {
-  if (typeof window === "undefined") return;
-  if (mode === "custom" && customUrl && customUrl.trim()) {
-    localStorage.setItem("charlie_server_mode", "custom");
-    const clean = customUrl.trim().replace(/\/+$/, "");
-    const finalUrl = clean.endsWith("/api") ? clean : `${clean}/api`;
-    localStorage.setItem("charlie_api_url", finalUrl);
-    activeApiBase = finalUrl;
-  } else if (mode === "local") {
-    localStorage.setItem("charlie_server_mode", "local");
-    localStorage.removeItem("charlie_api_url");
-    activeApiBase = LOCAL_API;
-  } else {
-    localStorage.setItem("charlie_server_mode", "cloud");
-    localStorage.removeItem("charlie_api_url");
-    activeApiBase = CLOUD_API;
-  }
+export function setServerMode(_mode?: string, _customUrl?: string): void {
+  // Conexão exclusiva com o servidor Charlie oficial
 }
 
-/**
- * Detecta a conectividade com o servidor preferido (Nuvem por padrão).
- * Caso a nuvem esteja inatingível e o motor local 8005 esteja rodando,
- * permite fallback resiliente.
- */
 export async function detectApiBase(): Promise<string> {
-  const mode = getServerMode();
-
-  if (mode === "custom") {
-    const custom = localStorage.getItem("charlie_api_url");
-    if (custom && custom.trim()) {
-      const clean = custom.trim().replace(/\/+$/, "");
-      activeApiBase = clean.endsWith("/api") ? clean : `${clean}/api`;
-      return activeApiBase;
-    }
-  }
-
-  if (mode === "local") {
-    activeApiBase = LOCAL_API;
-    return LOCAL_API;
-  }
-
-  // Modo Nuvem (Padrão Oficial)
-  try {
-    const res = await fetch(`${CLOUD_API}/health`, {
-      signal: AbortSignal.timeout(2500),
-    });
-    if (res.ok) {
-      activeApiBase = CLOUD_API;
-      return CLOUD_API;
-    }
-  } catch {
-    // Nuvem temporariamente inacessível, checa se há daemon local ativo
-    try {
-      const localRes = await fetch(`${LOCAL_API}/health`, {
-        signal: AbortSignal.timeout(1000),
-      });
-      if (localRes.ok) {
-        console.warn("[Charlie API] Nuvem indisponível. Usando servidor local temporariamente.");
-        activeApiBase = LOCAL_API;
-        return LOCAL_API;
-      }
-    } catch {
-      // Nenhum ativo no momento
-    }
-  }
-
-  activeApiBase = CLOUD_API;
   return CLOUD_API;
 }
 
-// Inicia detecção imediatamente e monitora a cada 5 segundos
-if (typeof window !== "undefined") {
-  detectApiBase();
-  setInterval(detectApiBase, 5000);
-}
-
 export function getApiBase(): string {
-  const mode = getServerMode();
-  if (mode === "custom") {
-    const custom = localStorage.getItem("charlie_api_url");
-    if (custom && custom.trim()) {
-      const clean = custom.trim().replace(/\/+$/, "");
-      return clean.endsWith("/api") ? clean : `${clean}/api`;
-    }
-  }
-  if (mode === "local") {
-    return LOCAL_API;
-  }
-  return activeApiBase || CLOUD_API;
+  return CLOUD_API;
 }
 
 export function getWsBase(): string {
-  const api = getApiBase();
-  if (api.startsWith("https://")) {
-    return api.replace(/^https:\/\//, "wss://");
-  }
-  return api.replace(/^http:\/\//, "ws://");
+  return CLOUD_API.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
 }
 
-export function setCustomApiUrl(url: string): void {
-  if (!url || !url.trim()) {
-    setServerMode("cloud");
-  } else {
-    setServerMode("custom", url);
-  }
+export function setCustomApiUrl(_url: string): void {
+  // Conexão exclusiva com o servidor Charlie oficial
 }
 
 export interface UserProfile {
@@ -226,40 +131,9 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
  * Executa requisições HTTP com fallback transparente e imediato entre motor local (8005) e Vercel Cloud.
  */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const currentBase = getApiBase();
   const fullPath = path.startsWith("/") ? path : `/${path}`;
-  const url = `${currentBase}${fullPath}`;
-
-  try {
-    let fetchOptions = options;
-    if (currentBase === LOCAL_API && !options.signal) {
-      // Evita bloqueio indefinido caso o backend local 8005 não esteja rodando
-      fetchOptions = { ...options, signal: AbortSignal.timeout(2000) };
-    }
-    const res = await fetch(url, fetchOptions);
-    if (!res.ok && currentBase === LOCAL_API && [502, 503, 504].includes(res.status)) {
-      throw new Error(`Local status ${res.status}`);
-    }
-    return res;
-  } catch (err: any) {
-    if (currentBase === LOCAL_API) {
-      console.warn(`[Charlie API] Backend local inacessível para ${path}. Alternando para a nuvem Vercel...`);
-      const cloudUrl = `${CLOUD_API}${fullPath}`;
-      return await fetch(cloudUrl, options);
-    } else if (currentBase === CLOUD_API) {
-      // Se a nuvem estiver indisponível e houver serviço local ativo, usa fallback
-      try {
-        const localCheck = await fetch(`${LOCAL_API}/health`, { signal: AbortSignal.timeout(1000) });
-        if (localCheck.ok) {
-          console.warn(`[Charlie API] Nuvem indisponível para ${path}. Usando fallback local...`);
-          return await fetch(`${LOCAL_API}${fullPath}`, options);
-        }
-      } catch {
-        // ignora
-      }
-    }
-    throw err;
-  }
+  const url = `${CLOUD_API}${fullPath}`;
+  return await fetch(url, options);
 }
 
 export async function registerUser(name: string, email: string, password: string): Promise<AuthResponse> {
@@ -443,29 +317,14 @@ export async function sendChatMessage(
   threadId: string | null,
   skipTts: boolean = true
 ): Promise<{ reply: string; thread_id: string; status: string }> {
-  let base = getApiBase();
-  try {
-    const res = await fetch(`${base}/chat`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
-    });
-    if (!res.ok) throw new Error("Falha ao enviar mensagem");
-    return res.json();
-  } catch (err) {
-    if (base === LOCAL_API) {
-      console.warn("Motor local inacessível, tentando nuvem Vercel...");
-      activeApiBase = CLOUD_API;
-      const res = await fetch(`${CLOUD_API}/chat`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
-      });
-      if (!res.ok) throw new Error("Falha ao enviar mensagem");
-      return res.json();
-    }
-    throw err;
-  }
+  const base = getApiBase();
+  const res = await fetch(`${base}/chat`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+  });
+  if (!res.ok) throw new Error("Falha ao enviar mensagem");
+  return res.json();
 }
 
 /**
@@ -478,8 +337,7 @@ export async function sendChatMessageStream(
   skipTts: boolean = true,
   toolResults?: Array<{ call_id: string; name: string; result: string }>
 ): Promise<void> {
-  let base = getApiBase();
-  let res: Response;
+  const base = getApiBase();
   const payload: any = {
     message,
     thread_id: threadId,
@@ -489,26 +347,11 @@ export async function sendChatMessageStream(
     payload.tool_results = toolResults;
   }
 
-  try {
-    res = await fetch(`${base}/chat/stream`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload),
-    });
-  } catch (err) {
-    if (base === LOCAL_API) {
-      console.warn("Motor local inacessível para streaming, tentando nuvem Vercel...");
-      activeApiBase = CLOUD_API;
-      base = CLOUD_API;
-      res = await fetch(`${base}/chat/stream`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-    } else {
-      throw err;
-    }
-  }
+  const res = await fetch(`${base}/chat/stream`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
 
   if (!res.ok || !res.body) {
     throw new Error(`Falha no streaming: ${res.statusText}`);

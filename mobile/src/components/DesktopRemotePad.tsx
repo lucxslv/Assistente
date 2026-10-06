@@ -230,7 +230,7 @@ export function DesktopRemotePad({ onActionExecuted }: DesktopRemotePadProps) {
                 ]}
               />
               <Text style={styles.subtitle}>
-                {isOnline ? 'PC Conectado (LAN / Nuvem)' : 'PC Desconectado'}
+                {isOnline ? 'PC Conectado' : 'PC Desconectado'}
               </Text>
             </View>
           </View>

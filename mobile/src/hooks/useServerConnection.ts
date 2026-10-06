@@ -172,27 +172,9 @@ export function useServerConnection(): ServerConnectionState {
 
   if (!checking) {
     if (health.status === 'online') {
-      const latencyStr = health.latencyMs ? `${health.latencyMs}ms` : '';
-      if (isRelayFailover) {
-        badgeColor = '#818CF8'; // Índigo suave
-        badgeText = `Relay Nuvem (${latencyStr})`;
-      } else {
-        badgeColor = '#22C55E'; // Verde neon
-        switch (health.networkType) {
-          case 'lan':
-            badgeText = `Conectado (LAN ${latencyStr})`;
-            break;
-          case 'tailscale':
-            badgeText = `Tailscale (${latencyStr})`;
-            break;
-          case 'tunnel':
-            badgeText = `Túnel (${latencyStr})`;
-            break;
-          default:
-            badgeText = `Nuvem (${latencyStr})`;
-            break;
-        }
-      }
+      const latencyStr = health.latencyMs ? ` (${health.latencyMs}ms)` : '';
+      badgeColor = '#22C55E'; // Verde
+      badgeText = `Conectado${latencyStr}`;
     } else {
       badgeColor = '#EF4444'; // Vermelho
       badgeText = 'Desconectado';
