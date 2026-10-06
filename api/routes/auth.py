@@ -90,13 +90,58 @@ class AuthResponse(BaseModel):
 
 
 async def verify_supabase_token(token: str) -> Optional[dict]:
-    """Valida o token JWT contra o serviço oficial de autenticação do Supabase."""
-    if not token or not config.supabase_url or not config.supabase_key:
+    """Valida tokens locais (dispositivos pareados e convidado) e JWTs do Supabase Auth."""
+    if not token:
         return None
 
     clean_token = token.replace("Bearer ", "").strip()
 
-    # 1. Verifica cache LRU em memória com TTL
+    # 1. Validação de credencial de dispositivo móvel pareado (independente de nuvem)
+    if clean_token.startswith("charlie_dev_"):
+        from api.routes.pair import get_authorized_device_by_token
+        device = get_authorized_device_by_token(clean_token)
+        if device:
+            dev_user = {
+                "id": f"device:{device['device_id']}",
+                "email": f"{device.get('device_name', 'mobile').lower().replace(' ', '_')}@device.charlie",
+                "name": device.get("device_name", "Dispositivo Móvel"),
+                "is_admin": False,
+                "role": "mobile_client",
+                "device_id": device["device_id"],
+            }
+            _token_cache.set(clean_token, dev_user)
+            return dev_user
+        return None
+
+    # 2. Modo Convidado / Demonstração Local (Lucas)
+    if clean_token == "charlie_guest_token":
+        guest_user = {
+            "id": "guest-lucas",
+            "email": "lucas@charlie.local",
+            "name": "Lucas (Demonstração)",
+            "is_admin": False,
+            "role": "guest",
+        }
+        _token_cache.set(clean_token, guest_user)
+        return guest_user
+
+    # 3. Modo Administrador Local (Lucas)
+    if clean_token == "charlie_admin_local_token":
+        admin_user = {
+            "id": "admin-lucas",
+            "email": config.admin_email or "lucassilvacosta060@gmail.com",
+            "name": config.admin_username or "Lucas (Admin)",
+            "is_admin": True,
+            "role": "admin",
+        }
+        _token_cache.set(clean_token, admin_user)
+        return admin_user
+
+    # 4. Se não houver configuração de nuvem do Supabase, não processa tokens remotos
+    if not config.supabase_url or not config.supabase_key:
+        return None
+
+    # 4. Verifica cache LRU em memória com TTL
     cached_user = _token_cache.get(clean_token)
     if cached_user:
         return cached_user
@@ -295,9 +340,78 @@ async def register(data: RegisterRequest, response: Response):
     )
 
 
+@router.post("/guest", response_model=AuthResponse)
+async def guest_login(response: Response):
+    """Inicia sessão local como convidado/demonstração imediatamente sem senha."""
+    token = "charlie_guest_token"
+    guest_user = {
+        "id": "guest-lucas",
+        "email": "lucas@charlie.local",
+        "name": "Lucas",
+        "is_admin": False,
+        "role": "guest",
+    }
+    _token_cache.set(token, guest_user)
+    response.set_cookie(
+        key="charlie_session",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+    )
+    return AuthResponse(
+        user=UserResponse(
+            id="guest-lucas",
+            name="Lucas",
+            email="lucas@charlie.local",
+            is_admin=False,
+            role="guest",
+        ),
+        token=token,
+    )
+
+
 @router.post("/login", response_model=AuthResponse)
 async def login(data: LoginRequest, response: Response):
-    """Autentica o usuário com e-mail e senha via Supabase Auth."""
+    """Autentica o usuário com e-mail e senha via Supabase Auth (com bypass local para admin)."""
+    # Bypass local se for o administrador local configurado no .env
+    clean_email = data.email.strip().lower()
+    admin_email = (config.admin_email or "").strip().lower()
+    admin_user_name = (config.admin_username or "").strip().lower()
+    admin_pass = config.admin_password or ""
+
+    if (clean_email == admin_email or clean_email == admin_user_name) and data.password == admin_pass:
+        local_token = "charlie_admin_local_token"
+        admin_user_obj = {
+            "id": "admin-lucas",
+            "email": config.admin_email or "lucassilvacosta060@gmail.com",
+            "name": config.admin_username or "Lucas",
+            "is_admin": True,
+            "role": "admin",
+        }
+        _token_cache.set(local_token, admin_user_obj)
+        response.set_cookie(
+            key="charlie_session",
+            value=local_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+            path="/",
+        )
+        return AuthResponse(
+            user=UserResponse(
+                id="admin-lucas",
+                name=config.admin_username or "Lucas",
+                email=config.admin_email or "lucassilvacosta060@gmail.com",
+                is_admin=True,
+                role="admin",
+            ),
+            token=local_token,
+        )
+
     login_url = f"{config.supabase_url}/auth/v1/token?grant_type=password"
     payload = {
         "email": data.email,

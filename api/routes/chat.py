@@ -346,14 +346,21 @@ async def chat_ws(websocket: WebSocket):
     await websocket.accept()
 
     client_id = f"ws-{uuid.uuid4().hex[:8]}"
+    client_type = (websocket.query_params.get("client_type") or "desktop").lower()
+    client_name = "Charlie Mobile Client" if client_type == "mobile" else "Charlie Desktop Client"
+    platform_name = "Mobile" if client_type == "mobile" else "Windows"
+
     presence_manager.register_or_heartbeat(
         client_id=client_id,
-        client_type="desktop",
-        name="Charlie Desktop Client",
-        platform="Windows",
+        client_type=client_type,
+        name=client_name,
+        platform=platform_name,
     )
 
-    device_broker.register_device_connection(websocket)
+    # Apenas o Desktop Tauri é registrado como executor de ferramentas nativas
+    is_desktop_broker_client = (client_type == "desktop")
+    if is_desktop_broker_client:
+        device_broker.register_device_connection(websocket)
 
     # Envia estado inicial do Charlie
     await websocket.send_json({"type": "state", "data": state.to_dict()})
@@ -385,14 +392,21 @@ async def chat_ws(websocket: WebSocket):
                 await websocket.send_json({"type": "pong"})
             elif msg_type == "auth":
                 auth_tok = data.get("token")
+                declared_type = data.get("client_type")
+                if declared_type:
+                    client_type = declared_type.lower()
+                    if client_type == "mobile" and is_desktop_broker_client:
+                        device_broker.unregister_device_connection(websocket)
+                        is_desktop_broker_client = False
                 if auth_tok:
                     from api.routes.auth import verify_supabase_token
                     ws_user = await verify_supabase_token(auth_tok)
                     await websocket.send_json({"type": "auth_status", "authenticated": ws_user is not None})
             elif msg_type == "device_tool_result":
-                call_id = data.get("call_id")
-                res = data.get("result")
-                device_broker.resolve_tool_result(call_id, res)
+                if is_desktop_broker_client:
+                    call_id = data.get("call_id")
+                    res = data.get("result")
+                    device_broker.resolve_tool_result(call_id, res)
             elif msg_type == "chat":
                 if not ws_user:
                     await websocket.send_json({"type": "error", "data": {"error": "Autenticação obrigatória para enviar mensagens."}})
@@ -437,8 +451,9 @@ async def chat_ws(websocket: WebSocket):
                             tokens=estimate_tokens(final_reply),
                         )
     except WebSocketDisconnect:
-        logger.info(f"Cliente WebSocket {client_id} desconectado.")
+        logger.info(f"Cliente WebSocket {client_id} ({client_type}) desconectado.")
     finally:
-        device_broker.unregister_device_connection(websocket)
+        if is_desktop_broker_client:
+            device_broker.unregister_device_connection(websocket)
         presence_manager.unregister(client_id)
         state.unsubscribe(on_state_change)

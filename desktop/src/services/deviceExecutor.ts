@@ -195,26 +195,41 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
       }
     }
 
-    if (name === "take_screenshot") {
-      try {
-        await openUrl("ms-screenclip:");
-        return "Ferramenta de captura e recorte de tela do Windows ativada com sucesso. A imagem foi enviada para a área de transferência e para sua pasta de Imagens.";
-      } catch (err: any) {
-        await openUrl("snippingtool:");
-        return `Captura de tela aberta: ${err?.message || ""}`;
-      }
+    if (name === "take_screenshot" || name === "screenshot") {
+      const b64 = await invoke<string>("take_screenshot");
+      return b64;
     }
 
-    if (name === "set_system_volume") {
-      const level = args.level !== undefined ? Number(args.level) : null;
-      const mute = args.mute !== undefined ? Boolean(args.mute) : null;
-      const res = await invoke<string>("set_system_volume_native", { level, mute });
+    if (name === "set_system_volume" || name === "volume") {
+      const level = args.level !== undefined ? Number(args.level) : 50;
+      const res = await invoke<string>("set_system_volume", { level });
       return res;
     }
 
-    if (name === "system_power_action") {
-      const action = String(args.action || "lock");
-      const res = await invoke<string>("system_power_action_native", { action });
+    if (name === "toggle_mute" || name === "mute") {
+      const res = await invoke<string>("toggle_mute");
+      return res;
+    }
+
+    if (name === "send_media_key" || name === "media") {
+      const key = String(args.key || "play_pause");
+      const res = await invoke<string>("send_media_key", { key });
+      return res;
+    }
+
+    if (name === "minimize_all" || name === "minimize_all_windows") {
+      const res = await invoke<string>("minimize_all_windows");
+      return res;
+    }
+
+    if (name === "open_path_or_app" || name === "open") {
+      const target = String(args.target || args.path || "");
+      const res = await invoke<string>("open_path_or_app", { target });
+      return res;
+    }
+
+    if (name === "lock_workstation" || name === "lock" || name === "system_power_action") {
+      const res = await invoke<string>("lock_workstation");
       return res;
     }
   } catch (err: any) {

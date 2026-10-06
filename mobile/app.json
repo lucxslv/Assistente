@@ -6,9 +6,26 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "charlie",
-    "plugins": ["expo-router", "expo-secure-store"],
-    "experiments": { "typedRoutes": true },
-    "android": { "package": "com.charlie.mobile" },
-    "ios": { "bundleIdentifier": "com.charlie.mobile" }
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita o acesso à câmera para escanear o QR Code de pareamento com o seu computador."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.charlie.mobile",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "ios": {
+      "bundleIdentifier": "com.charlie.mobile"
+    }
   }
 }

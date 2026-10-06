@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -14,80 +18,101 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/src/components/Screen';
-import { WidgetRegistry } from '@/src/components/widgets/WidgetRegistry';
-import { useChat } from '@/src/hooks/useChat';
+import { ChatHistoryModal } from '@/src/components/ChatHistoryModal';
+import { MessageItem } from '@/src/components/MessageItem';
+import { StreamingMessageBubble } from '@/src/components/StreamingMessageBubble';
+import { useChatStream } from '@/src/hooks/useChatStream';
+import { useServerConnection } from '@/src/hooks/useServerConnection';
+import { useDeviceConnection } from '@/src/hooks/useDeviceConnection';
 import { threadsService } from '@/src/services/threads';
 import { Thread } from '@/src/types/api';
-import { ChatMessage } from '@/src/types/chat';
-
-/** Conversa de demonstração inicial que replica a UI Generativa do design */
-const INITIAL_DEMO_MESSAGES: ChatMessage[] = [
-  {
-    id: 'demo-1',
-    role: 'user',
-    content: 'Charlie, verifica se a API está saudável.',
-    createdAt: new Date().toISOString(),
-    status: 'done',
-  },
-  {
-    id: 'demo-2',
-    role: 'assistant',
-    content: '',
-    createdAt: new Date().toISOString(),
-    status: 'done',
-    widgets: [
-      {
-        id: 'widget-server-health-demo',
-        type: 'server_health',
-        data: {
-          title: 'API saudável',
-          status: 'healthy',
-          cpuPercent: 18,
-          ramPercent: 42,
-          database: 'healthy',
-          webSocket: 'connected',
-          sse: 'connected',
-          actionLabel: 'Abrir monitor',
-        },
-      },
-    ],
-  },
-];
 
 export default function CharlieScreen() {
   const insets = useSafeAreaInsets();
+  const serverConn = useServerConnection();
+  const deviceConn = useDeviceConnection();
+
   const [thread, setThread] = useState<Thread | null>(null);
   const [input, setInput] = useState('');
   const [writing, setWriting] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Controle inteligente de auto-scroll
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   const {
-    messages: liveMessages,
+    messages,
     setMessages,
     send,
     isStreaming,
-  } = useChat(thread?.id ?? null);
+    isThinking,
+    thinkingSeconds,
+    streamingText,
+    activeTool,
+  } = useChatStream(thread?.id ?? null);
 
-  // Inicializa mensagens (ou utiliza demonstração rica caso vazio)
+  // Monitora teclado para dimensionamento dinâmico sem sobreposição
   useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Inicializa sessão de thread real (zero mocks)
+  useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
         const threads = await threadsService.list();
-        const active = threads[0] ?? (await threadsService.create('Conversa mobile'));
+        if (!mounted) return;
+        const active = threads[0] ?? (await threadsService.create('Conversa Principal'));
         setThread(active);
         const history = await threadsService.messages(active.id);
-        if (history && history.length > 0) {
-          setMessages(history);
-        } else {
-          setMessages(INITIAL_DEMO_MESSAGES);
-        }
+        if (!mounted) return;
+        setMessages(history || []);
       } catch {
-        setMessages(INITIAL_DEMO_MESSAGES);
+        if (mounted) setMessages([]);
       }
     })();
-  }, [setMessages]);
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const messages = liveMessages.length > 0 ? liveMessages : INITIAL_DEMO_MESSAGES;
+  // Auto-scroll não bloqueante: só rola se o usuário já estiver colado no fim
+  useEffect(() => {
+    if (isStreaming && isAtBottom) {
+      listRef.current?.scrollToEnd({ animated: true });
+    }
+  }, [streamingText, isStreaming, isAtBottom]);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 60;
+    const atBottom =
+      layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    setIsAtBottom(atBottom);
+    setShowScrollBottomBtn(!atBottom && isStreaming);
+  };
+
+  const scrollToBottom = () => {
+    Haptics.selectionAsync();
+    listRef.current?.scrollToEnd({ animated: true });
+    setIsAtBottom(true);
+    setShowScrollBottomBtn(false);
+  };
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -102,6 +127,28 @@ export default function CharlieScreen() {
     setWriting(true);
   };
 
+  const handleNewThread = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const newThread = await threadsService.create('Nova Conversa');
+      setThread(newThread);
+      setMessages([]);
+    } catch {
+      // Degradação graciosa
+    }
+  };
+
+  const handleSelectThread = async (selected: Thread) => {
+    Haptics.selectionAsync();
+    setThread(selected);
+    try {
+      const history = await threadsService.messages(selected.id);
+      setMessages(history || []);
+    } catch {
+      setMessages([]);
+    }
+  };
+
   return (
     <Screen>
       <KeyboardAvoidingView
@@ -109,53 +156,131 @@ export default function CharlieScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
       >
-        {/* Cabeçalho */}
+        {/* Cabeçalho com Status Desacoplado: Servidor API vs PC Físico */}
         <View style={styles.header}>
-          <Text style={styles.title}>Charlie</Text>
-          <Text style={styles.subtitle}>Conversa · online</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.title}>Charlie</Text>
+            <View style={styles.statusRow}>
+              {/* Status da API */}
+              <View style={styles.statusBadge}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: serverConn.isOnline ? '#22C55E' : '#EF4444' },
+                  ]}
+                />
+                <Text style={styles.statusText}>
+                  API: {serverConn.isOnline ? 'Online' : 'Offline'}
+                </Text>
+              </View>
+
+              {/* Status do Computador Físico */}
+              <View style={styles.statusBadge}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: deviceConn.isPcOnline ? '#22C55E' : '#64748B' },
+                  ]}
+                />
+                <Text style={styles.statusText}>
+                  {deviceConn.isPcOnline
+                    ? `${deviceConn.pcName} (${serverConn.latencyMs ? `${serverConn.latencyMs}ms` : 'Online'})`
+                    : `${deviceConn.pcName} (Offline)`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.headerActions}>
+            {/* Botão de Histórico de Conversas */}
+            <Pressable
+              style={({ pressed }) => [styles.headerIconButton, pressed && styles.iconButtonPressed]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setHistoryModalOpen(true);
+              }}
+            >
+              <Ionicons name="time-outline" size={20} color="#F5F7FA" />
+            </Pressable>
+
+            {/* Botão Nova Conversa */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.headerIconButton,
+                styles.headerNewButton,
+                pressed && styles.iconButtonPressed,
+              ]}
+              onPress={handleNewThread}
+            >
+              <Ionicons name="add" size={20} color="#818CF8" />
+            </Pressable>
+          </View>
         </View>
 
-        {/* Feed de Conversa com Generative UI */}
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-          contentContainerStyle={[styles.feed, { paddingBottom: 80 + insets.bottom }]}
-          renderItem={({ item }) => {
-            const isUser = item.role === 'user';
-            return (
-              <View style={[styles.messageWrap, isUser && styles.messageMine]}>
-                {item.content ? (
-                  <View style={[styles.bubble, isUser ? styles.bubbleMine : styles.bubbleTheirs]}>
-                    <Text style={[styles.messageText, isUser && styles.messageTextMine]}>
-                      {item.content}
+        {/* Feed de Mensagens com Toque para Fechar Teclado */}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.feedWrapper}>
+            <FlatList
+              ref={listRef}
+              data={messages}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+              onScroll={handleScroll}
+              scrollEventThrottle={32}
+              contentContainerStyle={[
+                styles.feed,
+                { paddingBottom: isKeyboardVisible ? 20 : 80 + insets.bottom },
+              ]}
+              renderItem={({ item }) => (
+                <MessageItem
+                  message={item}
+                  onOpenMonitor={() => router.push('/workspace')}
+                  onResend={(content) => send(content)}
+                />
+              )}
+              ListEmptyComponent={
+                !isStreaming ? (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="chatbubbles-outline" size={42} color="#334155" />
+                    <Text style={styles.emptyTitle}>Inicie uma conversa com o Charlie</Text>
+                    <Text style={styles.emptySubtitle}>
+                      Pergunte sobre código, monitore seu computador ou dê ordens de automação.
                     </Text>
-                    {item.status === 'streaming' && (
-                      <Text style={styles.streamingText}>ao vivo</Text>
-                    )}
                   </View>
-                ) : null}
+                ) : null
+              }
+              ListFooterComponent={
+                <StreamingMessageBubble
+                  isThinking={isThinking}
+                  thinkingSeconds={thinkingSeconds}
+                  text={streamingText}
+                  activeTool={activeTool}
+                />
+              }
+            />
 
-                {/* Renderização de Widgets Generativos */}
-                {item.role === 'assistant' && item.widgets && (
-                  <WidgetRegistry
-                    widgets={item.widgets}
-                    onOpenMonitor={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      router.push('/workspace');
-                    }}
-                  />
-                )}
-              </View>
-            );
-          }}
-        />
+            {/* Botão Flutuante de Auto-Scroll ao Final */}
+            {showScrollBottomBtn && (
+              <Pressable style={styles.floatingScrollBtn} onPress={scrollToBottom}>
+                <Ionicons name="arrow-down" size={13} color="#0D0F12" />
+                <Text style={styles.floatingScrollText}>Novas mensagens</Text>
+              </Pressable>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
 
         {/* Bloco de Entrada Primário */}
         {writing ? (
-          <View style={[styles.composerContainer, { paddingBottom: Math.max(10, insets.bottom) }]}>
+          <View
+            style={[
+              styles.composerContainer,
+              {
+                paddingBottom: isKeyboardVisible ? 8 : Math.max(12, insets.bottom),
+              },
+            ]}
+          >
             <TextInput
               autoFocus
               value={input}
@@ -175,10 +300,16 @@ export default function CharlieScreen() {
             </Pressable>
           </View>
         ) : (
-          <View style={[styles.dockCard, { marginBottom: Math.max(14, insets.bottom) }]}>
+          <View
+            style={[
+              styles.dockCard,
+              {
+                marginBottom: isKeyboardVisible ? 8 : Math.max(14, insets.bottom),
+              },
+            ]}
+          >
             <Text style={styles.dockPrompt}>Fale ou escreva para o Charlie...</Text>
             <View style={styles.dockActions}>
-              {/* Botão Falar */}
               <Pressable
                 style={({ pressed }) => [
                   styles.dockButton,
@@ -190,7 +321,6 @@ export default function CharlieScreen() {
                 <Text style={styles.dockButtonPrimaryText}>Falar</Text>
               </Pressable>
 
-              {/* Botão Texto */}
               <Pressable
                 style={({ pressed }) => [
                   styles.dockButton,
@@ -202,7 +332,6 @@ export default function CharlieScreen() {
                 <Text style={styles.dockButtonSecondaryText}>Texto</Text>
               </Pressable>
 
-              {/* Botão Câmera */}
               <Pressable
                 style={({ pressed }) => [
                   styles.dockButton,
@@ -217,6 +346,15 @@ export default function CharlieScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Drawer / Modal de Histórico de Conversas */}
+      <ChatHistoryModal
+        visible={historyModalOpen}
+        activeThreadId={thread?.id}
+        onClose={() => setHistoryModalOpen(false)}
+        onSelectThread={handleSelectThread}
+        onNewThread={handleNewThread}
+      />
     </Screen>
   );
 }
@@ -227,79 +365,172 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D0F12',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#1A202C',
   },
+  headerLeft: {
+    flex: 1,
+    gap: 4,
+  },
   title: {
     color: '#F5F7FA',
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-  subtitle: {
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#161A22',
+    borderColor: '#212631',
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
     color: '#8791A4',
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '500',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#161A22',
+    borderColor: '#212631',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerNewButton: {
+    borderColor: 'rgba(129, 140, 248, 0.3)',
+    backgroundColor: 'rgba(129, 140, 248, 0.1)',
+  },
+  iconButtonPressed: {
+    opacity: 0.7,
+  },
+  feedWrapper: {
+    flex: 1,
+    position: 'relative',
   },
   feed: {
     paddingHorizontal: 18,
     paddingVertical: 16,
     gap: 12,
   },
-  messageWrap: {
-    maxWidth: '88%',
-    alignSelf: 'flex-start',
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    gap: 12,
   },
-  messageMine: {
-    alignSelf: 'flex-end',
+  emptyTitle: {
+    color: '#F5F7FA',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  bubble: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 18,
+  emptySubtitle: {
+    color: '#64748B',
+    fontSize: 12,
+    textAlign: 'center',
+    maxWidth: 260,
+    lineHeight: 18,
   },
-  bubbleMine: {
+  floatingScrollBtn: {
+    position: 'absolute',
+    bottom: 16,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: '#818CF8',
-    borderBottomRightRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  bubbleTheirs: {
+  floatingScrollText: {
+    color: '#0D0F12',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  composerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
     backgroundColor: '#161A22',
-    borderBottomLeftRadius: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#212631',
+    gap: 10,
+  },
+  composerInput: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 100,
+    backgroundColor: '#0D0F12',
     borderColor: '#212631',
     borderWidth: 1,
-  },
-  messageText: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     color: '#F5F7FA',
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
   },
-  messageTextMine: {
-    color: '#0D0F12',
-    fontWeight: '600',
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#818CF8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  streamingText: {
-    color: '#818CF8',
-    fontSize: 11,
-    marginTop: 6,
-    fontWeight: '600',
+  sendButtonPressed: {
+    opacity: 0.8,
   },
   dockCard: {
+    marginHorizontal: 16,
     backgroundColor: '#161A22',
     borderColor: '#212631',
     borderWidth: 1,
     borderRadius: 20,
-    marginHorizontal: 18,
-    marginBottom: 14,
     padding: 14,
+    gap: 12,
   },
   dockPrompt: {
     color: '#8791A4',
     fontSize: 13,
-    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   dockActions: {
     flexDirection: 'row',
@@ -307,8 +538,8 @@ const styles = StyleSheet.create({
   },
   dockButton: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -318,52 +549,17 @@ const styles = StyleSheet.create({
   dockButtonSecondary: {
     backgroundColor: '#212631',
   },
+  dockButtonPressed: {
+    opacity: 0.8,
+  },
   dockButtonPrimaryText: {
     color: '#0D0F12',
-    fontSize: 13,
     fontWeight: '700',
+    fontSize: 13,
   },
   dockButtonSecondaryText: {
     color: '#F5F7FA',
-    fontSize: 13,
     fontWeight: '600',
-  },
-  dockButtonPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  composerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopColor: '#1E232E',
-    borderTopWidth: 1,
-    backgroundColor: '#0D0F12',
-    gap: 10,
-  },
-  composerInput: {
-    flex: 1,
-    minHeight: 42,
-    maxHeight: 120,
-    backgroundColor: '#161A22',
-    borderColor: '#212631',
-    borderWidth: 1,
-    borderRadius: 21,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: '#F5F7FA',
-    fontSize: 14,
-  },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#818CF8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonPressed: {
-    opacity: 0.8,
+    fontSize: 13,
   },
 });

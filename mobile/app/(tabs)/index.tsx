@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -14,80 +14,85 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/src/components/Screen';
 import { PairingModal } from '@/src/components/PairingModal';
 import { useServerConnection } from '@/src/hooks/useServerConnection';
-import { api } from '@/src/services/api';
-import { agentService } from '@/src/services/agent';
-import { SystemStatus } from '@/src/types/api';
-
-interface ActivitySummary {
-  runnerProcess: string;
-  runnerProgress: string;
-  isServerOnline: boolean;
-  serverLabel: string;
-  pendingTasksCount: number;
-}
+import { useDeviceConnection } from '@/src/hooks/useDeviceConnection';
+import { desktopControlService } from '@/src/services/desktopControl';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const serverConn = useServerConnection();
+  const deviceConn = useDeviceConnection();
   const [pairingModalOpen, setPairingModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [activity, setActivity] = useState<ActivitySummary>({
-    runnerProcess: 'Deploy Charlie API',
-    runnerProgress: '62%',
-    isServerOnline: true,
-    serverLabel: 'API online',
-    pendingTasksCount: 3,
-  });
+  const { refresh: refreshServer } = serverConn;
+  const { refresh: refreshDevice } = deviceConn;
 
-  const fetchData = useCallback(async () => {
+  const handlePullRefresh = useCallback(async () => {
+    setLoading(true);
     try {
-      const [sysStatus, agentData] = await Promise.allSettled([
-        api.get<SystemStatus>('/system/status'),
-        agentService.active(),
-      ]);
-
-      if (sysStatus.status === 'fulfilled' && sysStatus.value) {
-        setActivity((prev) => ({
-          ...prev,
-          isServerOnline: sysStatus.value.is_online,
-          serverLabel: sysStatus.value.is_online ? 'API online' : 'Servidor indisponível',
-          runnerProcess: sysStatus.value.current_process ?? prev.runnerProcess,
-        }));
-      }
-
-      if (agentData.status === 'fulfilled' && agentData.value?.session) {
-        const pending = agentData.value.session.nodes?.filter(
-          (n) => n.status !== 'SUCCESS' && n.status !== 'COMPLETED'
-        ).length ?? 0;
-
-        setActivity((prev) => ({
-          ...prev,
-          pendingTasksCount: pending > 0 ? pending : prev.pendingTasksCount,
-        }));
-      }
-    } catch {
-      // Degradação graciosa mantendo estados visíveis no Command Center
+      await Promise.allSettled([refreshServer(), refreshDevice()]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshServer, refreshDevice]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchData();
-      serverConn.refresh();
-    }, [fetchData, serverConn])
+      refreshServer();
+      refreshDevice();
+    }, [refreshServer, refreshDevice])
   );
-
-  useEffect(() => {
-    const timer = setInterval(fetchData, 8000);
-    return () => clearInterval(timer);
-  }, [fetchData]);
 
   const handleAction = (route: '/charlie' | '/workspace' | '/agent') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push(route);
+  };
+
+  const actionChips = [
+    { id: 'lock', label: 'Bloquear PC', icon: 'lock-closed-outline' as const, color: '#EF4444', hint: 'Win + L' },
+    { id: 'media', label: 'Pausar Mídia', icon: 'play-outline' as const, color: '#818CF8', hint: 'Play/Pause' },
+    { id: 'workspace', label: 'Workspace', icon: 'layers-outline' as const, color: '#818CF8', hint: 'Painel' },
+    { id: 'git_pull', label: 'Git Pull', icon: 'git-pull-request-outline' as const, color: '#F59E0B', hint: 'Sync' },
+    { id: 'runner', label: 'Runner', icon: 'hardware-chip-outline' as const, color: '#22C55E', hint: 'Agente' },
+    { id: 'chat', label: 'Nova Conversa', icon: 'chatbubble-ellipses-outline' as const, color: '#38BDF8', hint: 'Charlie' },
+  ];
+
+  const triggerQuickChip = async (chipId: string, label: string) => {
+    const isPcAction = chipId === 'lock' || chipId === 'media' || chipId === 'git_pull';
+
+    // Se a ação depender do PC físico e ele estiver offline, desabilita com feedback tátil
+    if (isPcAction && !deviceConn.isPcOnline) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setActionFeedback('PC Offline ou Suspenso');
+      setTimeout(() => setActionFeedback(null), 2500);
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      if (chipId === 'lock') {
+        await desktopControlService.lockPC();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setActionFeedback('PC Bloqueado!');
+      } else if (chipId === 'media') {
+        await desktopControlService.sendMediaKey('play_pause');
+        setActionFeedback('Mídia alternada');
+      } else if (chipId === 'workspace') {
+        router.push('/workspace');
+      } else if (chipId === 'git_pull') {
+        await desktopControlService.runQuickCommand('git pull');
+        setActionFeedback('Git Pull enviado!');
+      } else if (chipId === 'runner') {
+        router.push('/agent');
+      } else if (chipId === 'chat') {
+        router.push('/charlie');
+      }
+    } catch {
+      setActionFeedback(`Erro: ${label}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    setTimeout(() => setActionFeedback(null), 2500);
   };
 
   return (
@@ -99,32 +104,61 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={loading}
-            onRefresh={() => {
-              fetchData();
-              serverConn.refresh();
-            }}
+            onRefresh={handlePullRefresh}
             tintColor="#818CF8"
           />
         }
       >
-        {/* Cabeçalho Contextual com Indicador de Conexão Híbrida */}
+        {/* Cabeçalho com Separação Estrita de Status: API vs PC Físico */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerTitleWrap}>
             <Text style={styles.title}>Charlie</Text>
-            <Text style={styles.greeting}>Bom dia, Lucas</Text>
+            <View style={styles.headerStatusRow}>
+              {/* Badge 1: Servidor API */}
+              <View style={styles.headerStatusPill}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: serverConn.isOnline ? '#22C55E' : '#EF4444' },
+                  ]}
+                />
+                <Text style={styles.headerStatusText}>
+                  API: {serverConn.isOnline ? 'Online' : 'Offline'}
+                </Text>
+              </View>
+
+              {/* Badge 2: Computador Físico */}
+              <Pressable
+                style={styles.headerStatusPill}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setPairingModalOpen(true);
+                }}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: deviceConn.isPcOnline ? '#22C55E' : '#64748B' },
+                  ]}
+                />
+                <Text style={styles.headerStatusText}>
+                  {deviceConn.isPcOnline
+                    ? `${deviceConn.pcName} (${serverConn.latencyMs ? `${serverConn.latencyMs}ms` : 'Ativo'})`
+                    : `${deviceConn.pcName} (Offline)`}
+                </Text>
+                <Ionicons name="swap-horizontal" size={11} color="#8791A4" />
+              </Pressable>
+            </View>
           </View>
 
-          {/* Badge Interativo de Conexão (Abre o Modal de Pareamento) */}
           <Pressable
-            style={({ pressed }) => [styles.connectionBadge, pressed && styles.badgePressed]}
+            style={({ pressed }) => [styles.pairButton, pressed && styles.buttonPressed]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setPairingModalOpen(true);
             }}
           >
-            <View style={[styles.connectionDot, { backgroundColor: serverConn.badgeColor }]} />
-            <Text style={styles.connectionText}>{serverConn.badgeText}</Text>
-            <Ionicons name="swap-horizontal" size={13} color="#8791A4" />
+            <Ionicons name="qr-code-outline" size={20} color="#818CF8" />
           </Pressable>
         </View>
 
@@ -132,7 +166,6 @@ export default function HomeScreen() {
         <View style={styles.omnibarCard}>
           <Text style={styles.omnibarTitle}>O que você quer fazer?</Text>
           <View style={styles.omnibarActions}>
-            {/* Botão Falar (Principal destacado) */}
             <Pressable
               style={({ pressed }) => [
                 styles.omnibarButton,
@@ -144,7 +177,6 @@ export default function HomeScreen() {
               <Text style={styles.primaryButtonText}>Falar</Text>
             </Pressable>
 
-            {/* Botão Câmera */}
             <Pressable
               style={({ pressed }) => [
                 styles.omnibarButton,
@@ -156,7 +188,6 @@ export default function HomeScreen() {
               <Text style={styles.secondaryButtonText}>Câmera</Text>
             </Pressable>
 
-            {/* Botão Texto */}
             <Pressable
               style={({ pressed }) => [
                 styles.omnibarButton,
@@ -170,30 +201,63 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Secção Atividade Recente */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>ATIVIDADE</Text>
+        {/* Secção Telemetria Real do PC (Zero Mocks) */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>TELEMETRIA DO COMPUTADOR</Text>
+          <Text style={styles.deviceStatusLabel}>
+            {deviceConn.isPcOnline ? 'Sincronizado' : 'Suspenso'}
+          </Text>
         </View>
 
         <View style={styles.activityCard}>
-          {/* Item 1: Runner Executando */}
-          <Pressable
-            style={styles.activityItem}
-            onPress={() => handleAction('/agent')}
-          >
-            <View style={[styles.indicatorDot, { backgroundColor: '#818CF8' }]} />
+          {/* Item 1: CPU do PC Físico */}
+          <View style={styles.activityItem}>
+            <View
+              style={[
+                styles.indicatorDot,
+                { backgroundColor: deviceConn.isPcOnline ? '#818CF8' : '#64748B' },
+              ]}
+            />
             <View style={styles.activityInfo}>
-              <Text style={styles.activityItemTitle}>Runner executando</Text>
-              <Text style={styles.activityItemDetail}>{activity.runnerProcess}</Text>
+              <Text style={styles.activityItemTitle}>CPU ({deviceConn.pcName})</Text>
+              <Text style={styles.activityItemDetail}>
+                {deviceConn.isPcOnline
+                  ? `${deviceConn.telemetry?.cpu_percent?.toFixed(1) ?? '0.0'}% de carga no processador`
+                  : 'Computador desligado ou em suspensão'}
+              </Text>
             </View>
-            <Text style={styles.percentText}>{activity.runnerProgress}</Text>
-          </Pressable>
+            <Text style={styles.percentText}>
+              {deviceConn.isPcOnline
+                ? `${deviceConn.telemetry?.cpu_percent?.toFixed(0) ?? '0'}%`
+                : 'OFF'}
+            </Text>
+          </View>
 
-          {/* Item 2: Servidor */}
-          <Pressable
-            style={styles.activityItem}
-            onPress={() => handleAction('/workspace')}
-          >
+          {/* Item 2: Memória RAM Real */}
+          <View style={styles.activityItem}>
+            <View
+              style={[
+                styles.indicatorDot,
+                { backgroundColor: deviceConn.isPcOnline ? '#22C55E' : '#64748B' },
+              ]}
+            />
+            <View style={styles.activityInfo}>
+              <Text style={styles.activityItemTitle}>Memória RAM</Text>
+              <Text style={styles.activityItemDetail}>
+                {deviceConn.isPcOnline && deviceConn.telemetry
+                  ? `${(deviceConn.telemetry.memory_used_mb / 1024).toFixed(1)} GB de ${(deviceConn.telemetry.memory_total_mb / 1024).toFixed(1)} GB em uso`
+                  : 'Sem sinal de telemetria'}
+              </Text>
+            </View>
+            <Text style={[styles.percentText, { color: '#22C55E' }]}>
+              {deviceConn.isPcOnline && deviceConn.telemetry
+                ? `${deviceConn.telemetry.memory_percent.toFixed(0)}%`
+                : 'OFF'}
+            </Text>
+          </View>
+
+          {/* Item 3: Conexão da API */}
+          <Pressable style={styles.activityItem} onPress={() => handleAction('/workspace')}>
             <View
               style={[
                 styles.indicatorDot,
@@ -201,10 +265,10 @@ export default function HomeScreen() {
               ]}
             />
             <View style={styles.activityInfo}>
-              <Text style={styles.activityItemTitle}>Servidor</Text>
+              <Text style={styles.activityItemTitle}>Conexão API</Text>
               <Text style={styles.activityItemDetail}>
                 {serverConn.isOnline
-                  ? `${serverConn.activeServer?.name ?? 'API'} online`
+                  ? `${serverConn.activeServer?.name ?? 'API'} online (${serverConn.networkType.toUpperCase()})`
                   : 'Servidor desconectado'}
               </Text>
             </View>
@@ -214,70 +278,62 @@ export default function HomeScreen() {
               color={serverConn.isOnline ? '#22C55E' : '#EF4444'}
             />
           </Pressable>
-
-          {/* Item 3: Charlie Tarefas */}
-          <Pressable
-            style={styles.activityItem}
-            onPress={() => handleAction('/charlie')}
-          >
-            <View style={[styles.indicatorDot, { backgroundColor: '#F59E0B' }]} />
-            <View style={styles.activityInfo}>
-              <Text style={styles.activityItemTitle}>Charlie</Text>
-              <Text style={styles.activityItemDetail}>
-                {activity.pendingTasksCount} tarefas aguardando
-              </Text>
-            </View>
-            <Text style={styles.countText}>{activity.pendingTasksCount}</Text>
-          </Pressable>
         </View>
 
-        {/* Secção Ações Rápidas */}
-        <View style={styles.sectionHeader}>
+        {/* Secção Ações Rápidas (Carrossel Dinâmico de Action Chips) */}
+        <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>AÇÕES RÁPIDAS</Text>
+          {actionFeedback && (
+            <View style={styles.feedbackToast}>
+              <Ionicons name="flash" size={11} color="#22C55E" />
+              <Text style={styles.feedbackToastText}>{actionFeedback}</Text>
+            </View>
+          )}
         </View>
 
-        <View style={styles.quickActionsContainer}>
-          {/* Linha 1: Backup | Logs | Runner */}
-          <View style={styles.quickActionsRow}>
-            <Pressable
-              style={({ pressed }) => [styles.quickActionPill, pressed && styles.pillPressed]}
-              onPress={() => handleAction('/workspace')}
-            >
-              <Text style={styles.quickActionText}>Backup</Text>
-            </Pressable>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsScrollContent}
+        >
+          {actionChips.map((chip) => {
+            const isPcAction = chip.id === 'lock' || chip.id === 'media' || chip.id === 'git_pull';
+            const isDisabled = isPcAction && !deviceConn.isPcOnline;
 
-            <Pressable
-              style={({ pressed }) => [styles.quickActionPill, pressed && styles.pillPressed]}
-              onPress={() => handleAction('/workspace')}
-            >
-              <Text style={styles.quickActionText}>Logs</Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.quickActionPill, pressed && styles.pillPressed]}
-              onPress={() => handleAction('/agent')}
-            >
-              <Text style={styles.quickActionText}>Runner</Text>
-            </Pressable>
-          </View>
-
-          {/* Linha 2: Conversas | Ferramentas */}
-          <View style={styles.quickActionsRow}>
-            <Pressable
-              style={({ pressed }) => [styles.quickActionPill, pressed && styles.pillPressed]}
-              onPress={() => handleAction('/charlie')}
-            >
-              <Text style={styles.quickActionText}>Conversas</Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.quickActionPill, pressed && styles.pillPressed]}
-              onPress={() => handleAction('/workspace')}
-            >
-              <Text style={styles.quickActionText}>Ferramentas</Text>
-            </Pressable>
-          </View>
-        </View>
+            return (
+              <Pressable
+                key={chip.id}
+                style={({ pressed }) => [
+                  styles.actionChip,
+                  isDisabled && styles.actionChipDisabled,
+                  pressed && styles.actionChipPressed,
+                ]}
+                onPress={() => triggerQuickChip(chip.id, chip.label)}
+              >
+                <View
+                  style={[
+                    styles.chipIconWrapper,
+                    { backgroundColor: isDisabled ? 'rgba(100, 116, 139, 0.15)' : `${chip.color}1F` },
+                  ]}
+                >
+                  <Ionicons
+                    name={chip.icon}
+                    size={18}
+                    color={isDisabled ? '#64748B' : chip.color}
+                  />
+                </View>
+                <View>
+                  <Text style={[styles.chipLabel, isDisabled && styles.chipLabelDisabled]}>
+                    {chip.label}
+                  </Text>
+                  <Text style={styles.chipHint}>
+                    {isDisabled ? 'PC Suspenso' : chip.hint}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </ScrollView>
 
       {/* Modal de Pareamento via QR Code ou Entrada Manual */}
@@ -285,8 +341,8 @@ export default function HomeScreen() {
         visible={pairingModalOpen}
         onClose={() => setPairingModalOpen(false)}
         onPairSuccess={() => {
-          fetchData();
-          serverConn.refresh();
+          refreshServer();
+          refreshDevice();
         }}
       />
     </Screen>
@@ -301,6 +357,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,
+    paddingBottom: 28,
   },
   header: {
     flexDirection: 'row',
@@ -308,55 +365,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  headerTitleWrap: {
+    flex: 1,
+    gap: 4,
+  },
   title: {
     color: '#F5F7FA',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-  greeting: {
-    color: '#8791A4',
-    fontSize: 13,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  connectionBadge: {
+  headerStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  headerStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: '#161A22',
     borderColor: '#212631',
     borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  badgePressed: {
-    opacity: 0.7,
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  connectionDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  connectionText: {
-    color: '#DCE2EF',
-    fontSize: 11,
+  headerStatusText: {
+    color: '#8791A4',
+    fontSize: 10,
     fontWeight: '700',
+  },
+  pairButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#161A22',
+    borderColor: '#212631',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
   omnibarCard: {
     backgroundColor: '#161A22',
     borderColor: '#212631',
     borderWidth: 1,
     borderRadius: 20,
-    padding: 16,
+    padding: 18,
     marginBottom: 22,
+    gap: 14,
   },
   omnibarTitle: {
-    color: '#F5F7FA',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 14,
+    color: '#8791A4',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
   omnibarActions: {
     flexDirection: 'row',
@@ -364,8 +436,8 @@ const styles = StyleSheet.create({
   },
   omnibarButton: {
     flex: 1,
-    height: 42,
-    borderRadius: 21,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -377,27 +449,31 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#0D0F12',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
   secondaryButtonText: {
     color: '#F5F7FA',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
   },
-  buttonPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
-  },
-  sectionHeader: {
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 10,
-    marginTop: 6,
+    marginTop: 4,
   },
   sectionTitle: {
     color: '#8791A4',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.2,
+  },
+  deviceStatusLabel: {
+    color: '#818CF8',
+    fontSize: 10,
+    fontWeight: '700',
   },
   activityCard: {
     backgroundColor: '#161A22',
@@ -436,34 +512,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  countText: {
-    color: '#F59E0B',
+  feedbackToast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  feedbackToastText: {
+    color: '#22C55E',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chipsScrollContent: {
+    gap: 10,
+    paddingRight: 10,
+  },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#161A22',
+    borderColor: '#212631',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 135,
+  },
+  actionChipDisabled: {
+    opacity: 0.5,
+  },
+  actionChipPressed: {
+    backgroundColor: '#212631',
+    transform: [{ scale: 0.97 }],
+  },
+  chipIconWrapper: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipLabel: {
+    color: '#F5F7FA',
     fontSize: 13,
     fontWeight: '700',
   },
-  quickActionsContainer: {
-    gap: 10,
+  chipLabelDisabled: {
+    color: '#8791A4',
   },
-  quickActionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  quickActionPill: {
-    flex: 1,
-    height: 42,
-    backgroundColor: '#212631',
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  pillPressed: {
-    backgroundColor: '#282F3D',
-    transform: [{ scale: 0.98 }],
-  },
-  quickActionText: {
-    color: '#F5F7FA',
-    fontSize: 12,
-    fontWeight: '600',
+  chipHint: {
+    color: '#8791A4',
+    fontSize: 10,
+    marginTop: 1,
   },
 });

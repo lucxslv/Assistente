@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { checkServerHealth, NetworkType, ServerHealthResult } from '@/src/services/apiClient';
 import { ServerProfile, serverConfigService } from '@/src/services/serverConfig';
@@ -11,6 +11,7 @@ export interface ServerConnectionState {
   badgeText: string;
   badgeColor: string;
   isOnline: boolean;
+  isRelayFailover: boolean;
   refresh: () => Promise<void>;
   switchServer: (id: string) => Promise<void>;
 }
@@ -23,15 +24,62 @@ export function useServerConnection(): ServerConnectionState {
     networkType: 'remote',
   });
   const [checking, setChecking] = useState(true);
+  const [isRelayFailover, setIsRelayFailover] = useState(false);
+
+  const applyServer = useCallback((server: ServerProfile) => {
+    setActiveServerState((prev) => {
+      if (prev && prev.id === server.id && prev.url === server.url && prev.name === server.name) {
+        return prev;
+      }
+      return server;
+    });
+  }, []);
+
+  const applyHealth = useCallback((result: ServerHealthResult) => {
+    setHealth((prev) => {
+      if (
+        prev.status === result.status &&
+        prev.latencyMs === result.latencyMs &&
+        prev.networkType === result.networkType &&
+        prev.error === result.error
+      ) {
+        return prev;
+      }
+      return result;
+    });
+  }, []);
 
   const checkConnection = useCallback(async () => {
     try {
       const server = await serverConfigService.getActiveServer();
-      setActiveServerState(server);
+      applyServer(server);
       const result = await checkServerHealth(server.url);
-      setHealth(result);
+
+      if (result.status === 'online') {
+        // Se a rota primária (LAN/Túnel) está online, desativa qualquer relay failover
+        setIsRelayFailover(false);
+        applyHealth(result);
+        return;
+      }
+
+      // Se o servidor primário configurado está offline e não é a nuvem, testa a nuvem como failover volátil
+      if (result.status === 'offline' && !server.url.includes('vercel.app')) {
+        const cloudHealth = await checkServerHealth('https://assistente-xi.vercel.app/api');
+        if (cloudHealth.status === 'online') {
+          // Failover volátil EM MEMÓRIA: NÃO sobrescreve o servidor padrão no SecureStore
+          setIsRelayFailover(true);
+          applyHealth({
+            ...cloudHealth,
+            networkType: 'remote',
+          });
+          return;
+        }
+      }
+
+      setIsRelayFailover(false);
+      applyHealth(result);
     } catch {
-      setHealth({
+      applyHealth({
         status: 'offline',
         latencyMs: null,
         networkType: 'remote',
@@ -40,85 +88,110 @@ export function useServerConnection(): ServerConnectionState {
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [applyServer, applyHealth]);
 
   const switchServer = useCallback(
     async (id: string) => {
       setChecking(true);
+      setIsRelayFailover(false);
       const updated = await serverConfigService.setActiveServer(id);
-      setActiveServerState(updated);
+      applyServer(updated);
       const result = await checkServerHealth(updated.url);
-      setHealth(result);
+      applyHealth(result);
       setChecking(false);
     },
-    []
+    [applyServer, applyHealth]
   );
 
-  // Monitoramento periódico (a cada 30 segundos) com mounted guard
+  // Monitoramento periódico adaptativo com pausa em background
   useEffect(() => {
     let mounted = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
-    const runCheck = async () => {
+    const runProbe = async () => {
+      if (AppState.currentState !== 'active') return;
       try {
         const server = await serverConfigService.getActiveServer();
         if (!mounted) return;
-        setActiveServerState(server);
-        const result = await checkServerHealth(server.url);
+        applyServer(server);
+
+        const primaryHealth = await checkServerHealth(server.url);
         if (!mounted) return;
-        setHealth(result);
+
+        if (primaryHealth.status === 'online') {
+          setIsRelayFailover(false);
+          applyHealth(primaryHealth);
+          return;
+        }
+
+        // Se primário falhou, sonda nuvem sem alterar SecureStore
+        if (!server.url.includes('vercel.app')) {
+          const cloudHealth = await checkServerHealth('https://assistente-xi.vercel.app/api');
+          if (!mounted) return;
+          if (cloudHealth.status === 'online') {
+            setIsRelayFailover(true);
+            applyHealth({ ...cloudHealth, networkType: 'remote' });
+            return;
+          }
+        }
+
+        setIsRelayFailover(false);
+        applyHealth(primaryHealth);
       } catch {
         if (!mounted) return;
-        setHealth({
+        applyHealth({
           status: 'offline',
           latencyMs: null,
           networkType: 'remote',
-          error: 'Falha ao obter servidor ativo',
+          error: 'Falha na sondagem periódica',
         });
       } finally {
         if (mounted) setChecking(false);
       }
     };
 
-    runCheck();
-    const interval = setInterval(runCheck, 30000);
+    runProbe();
+    timer = setInterval(runProbe, 15000);
+
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        runProbe();
+      }
+    });
 
     return () => {
       mounted = false;
-      clearInterval(interval);
+      if (timer) clearInterval(timer);
+      subscription.remove();
     };
-  }, []);
+  }, [applyServer, applyHealth]);
 
-  // Re-checa ao voltar do background
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        checkConnection();
-      }
-    });
-    return () => subscription.remove();
-  }, [checkConnection]);
-
-  // Formatação do badge para o cabeçalho
+  // Formatação transparente do status para o usuário
   let badgeText = 'A verificar...';
-  let badgeColor = '#F59E0B'; // Amarelo/laranja enquanto checa
+  let badgeColor = '#F59E0B'; // Amarelo enquanto sonda
 
   if (!checking) {
     if (health.status === 'online') {
-      badgeColor = '#22C55E'; // Verde neon
       const latencyStr = health.latencyMs ? `${health.latencyMs}ms` : '';
-      switch (health.networkType) {
-        case 'lan':
-          badgeText = `LAN (${latencyStr})`;
-          break;
-        case 'tailscale':
-          badgeText = `Tailscale (${latencyStr})`;
-          break;
-        case 'tunnel':
-          badgeText = `Túnel (${latencyStr})`;
-          break;
-        default:
-          badgeText = `Remoto (${latencyStr})`;
-          break;
+      if (isRelayFailover) {
+        badgeColor = '#818CF8'; // Índigo suave
+        badgeText = `Relay Nuvem (${latencyStr})`;
+      } else {
+        badgeColor = '#22C55E'; // Verde neon
+        switch (health.networkType) {
+          case 'lan':
+            badgeText = `Conectado (LAN ${latencyStr})`;
+            break;
+          case 'tailscale':
+            badgeText = `Tailscale (${latencyStr})`;
+            break;
+          case 'tunnel':
+            badgeText = `Túnel (${latencyStr})`;
+            break;
+          default:
+            badgeText = `Nuvem (${latencyStr})`;
+            break;
+        }
       }
     } else {
       badgeColor = '#EF4444'; // Vermelho
@@ -126,15 +199,19 @@ export function useServerConnection(): ServerConnectionState {
     }
   }
 
-  return {
-    activeServer,
-    status: checking ? 'checking' : health.status,
-    latencyMs: health.latencyMs,
-    networkType: health.networkType,
-    badgeText,
-    badgeColor,
-    isOnline: health.status === 'online',
-    refresh: checkConnection,
-    switchServer,
-  };
+  return useMemo(
+    () => ({
+      activeServer,
+      status: checking ? 'checking' : health.status,
+      latencyMs: health.latencyMs,
+      networkType: health.networkType,
+      badgeText,
+      badgeColor,
+      isOnline: health.status === 'online',
+      isRelayFailover,
+      refresh: checkConnection,
+      switchServer,
+    }),
+    [activeServer, checking, health.status, health.latencyMs, health.networkType, badgeText, badgeColor, isRelayFailover, checkConnection, switchServer]
+  );
 }

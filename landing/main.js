@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initCopyButtons();
   initSpotlightPreview();
   initScrollEffects();
+  initHero3DTilt();
+  initLiveTelemetryTicker();
+  initCardSpotlight();
 });
 
 /* ==========================================================================
@@ -429,3 +432,90 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+/* ==========================================================================
+   10. Interactive 3D Card Parallax Tilt & Specular Glare
+   ========================================================================== */
+function initHero3DTilt() {
+  const card = document.getElementById('hero-3d-tilt-card');
+  const glare = document.getElementById('hero-3d-glare');
+  if (!card) return;
+
+  card.addEventListener('mousemove', (e) => {
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    const rotateX = ((y - centerY) / centerY) * -6; // max 6 deg tilt
+    const rotateY = ((x - centerX) / centerX) * 6;
+
+    card.style.transform = `perspective(1200px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateY(-4px)`;
+
+    if (glare) {
+      glare.style.setProperty('--mouse-x', `${(x / rect.width) * 100}%`);
+      glare.style.setProperty('--mouse-y', `${(y / rect.height) * 100}%`);
+    }
+  });
+
+  card.addEventListener('mouseleave', () => {
+    card.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg) translateY(0px)';
+  });
+}
+
+/* ==========================================================================
+   11. Dynamic Live Telemetry Jitter
+   ========================================================================== */
+function initLiveTelemetryTicker() {
+  const ipcEl = document.getElementById('hero-live-ipc');
+  const ramEl = document.getElementById('hero-live-ram');
+  const cpuEl = document.getElementById('hero-live-cpu');
+
+  if (!ipcEl && !ramEl && !cpuEl) return;
+
+  // IPC latency subtle jitter
+  setInterval(() => {
+    if (ipcEl) {
+      const val = (0.36 + Math.random() * 0.12).toFixed(2);
+      ipcEl.textContent = `${val}ms`;
+    }
+  }, 2400);
+
+  // RAM subtle fluctuation
+  setInterval(() => {
+    if (ramEl) {
+      const val = (75.8 + Math.random() * 1.4).toFixed(1);
+      ramEl.textContent = `${val} MB`;
+    }
+  }, 3600);
+
+  // CPU Win32 jitter
+  setInterval(() => {
+    if (cpuEl) {
+      const val = (3.8 + Math.random() * 1.8).toFixed(1);
+      cpuEl.textContent = `${val}%`;
+    }
+  }, 2800);
+}
+
+/* ==========================================================================
+   12. Card Spotlight Border Glow on Features Grid
+   ========================================================================== */
+function initCardSpotlight() {
+  const cards = document.querySelectorAll('#features .card-tech');
+  if (!cards.length) return;
+
+  cards.forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      card.style.setProperty('--card-mouse-x', `${x}px`);
+      card.style.setProperty('--card-mouse-y', `${y}px`);
+    });
+  });
+}
+
+

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
-import { SettingsModal } from "./components/SettingsModal";
+import { SettingsModal, TabType } from "./components/SettingsModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { MobilePairModal } from "./components/MobilePairModal";
@@ -31,6 +31,7 @@ import {
 import { executeDeviceTool } from "./services/deviceExecutor";
 import { AgentEnvironment } from "./components/agent/AgentEnvironment";
 import { useAgentRuntime, agentRuntimeStore } from "./services/agentRuntimeStore";
+import { startDeviceHeartbeat } from "./services/deviceHeartbeat";
 
 export function App() {
   const [activeView, setActiveView] = useState<"chat" | "agent">("chat");
@@ -46,6 +47,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<TabType>("account");
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isMobilePairOpen, setIsMobilePairOpen] = useState(false);
@@ -54,6 +56,16 @@ export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [localMetrics, setLocalMetrics] = useState<LocalSystemMetrics | undefined>();
+
+  const handleOpenSettings = useCallback((tab: TabType = "account") => {
+    setSettingsTab(tab);
+    setIsSettingsOpen(true);
+  }, []);
+
+  const handleOpenMobilePair = useCallback(() => {
+    setSettingsTab("pairing");
+    setIsSettingsOpen(true);
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -78,6 +90,14 @@ export function App() {
     return () => {
       isMounted = false;
       clearInterval(interval);
+    };
+  }, []);
+
+  // Daemon de presença ativa do PC físico (Heartbeat a cada 10s)
+  useEffect(() => {
+    const stopHeartbeat = startDeviceHeartbeat();
+    return () => {
+      stopHeartbeat();
     };
   }, []);
 
@@ -164,15 +184,16 @@ export function App() {
       .catch(() => {});
   }, []);
 
-  // Polling e WebSocket de telemetria em tempo real
+  // Polling e WebSocket de telemetria em tempo real (ativo continuamente)
   useEffect(() => {
-    if (!currentUser) return;
-
     loadStatus();
-    loadThreads();
-    loadSettingsData();
 
-    // Conexão WebSocket para telemetria sem latência
+    if (currentUser) {
+      loadThreads();
+      loadSettingsData();
+    }
+
+    // Conexão WebSocket para telemetria em tempo real e broker de dispositivo
     const unsubscribeWs = connectSystemWebSocket((liveStatus) => {
       setSystemStatus(liveStatus);
       setIsConnected(liveStatus.is_online);
@@ -180,14 +201,15 @@ export function App() {
 
     const interval = setInterval(() => {
       loadStatus();
-      // Se ainda não encontrou threads ou se conectou recentemente, tenta recarregar
-      setThreads((current) => {
-        if (current.length === 0) {
-          loadThreads();
-        }
-        return current;
-      });
-    }, 5000);
+      if (currentUser) {
+        setThreads((current) => {
+          if (current.length === 0) {
+            loadThreads();
+          }
+          return current;
+        });
+      }
+    }, 4000);
 
     return () => {
       clearInterval(interval);
@@ -365,6 +387,13 @@ export function App() {
         e.preventDefault();
         showToast("Bloqueando sessão do computador...");
         executeDeviceTool("system_power_action", { action: "lock" }).catch(() => {});
+        return;
+      }
+
+      // Ctrl + Shift + M: Abrir Pareamento Mobile
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        handleOpenMobilePair();
         return;
       }
     };
@@ -626,12 +655,12 @@ export function App() {
         }}
         onDeleteThread={handleDeleteThread}
         onRenameThread={handleRenameThread}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => handleOpenSettings("account")}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         user={currentUser}
-        onOpenAuth={() => setIsSettingsOpen(true)}
-        onOpenMobilePair={() => setIsMobilePairOpen(true)}
+        onOpenAuth={() => handleOpenSettings("account")}
+        onOpenMobilePair={handleOpenMobilePair}
         isConnected={isConnected}
         systemStatus={systemStatus}
         localMetrics={localMetrics}
@@ -667,6 +696,7 @@ export function App() {
               onOpenArtifact={() => {
                 setActiveView("agent");
               }}
+              onOpenMobilePair={handleOpenMobilePair}
             />
           </div>
         ) : (
@@ -694,6 +724,8 @@ export function App() {
         settings={settings}
         user={currentUser}
         onLogout={handleLogout}
+        onOpenMobilePair={handleOpenMobilePair}
+        initialTab={settingsTab}
       />
 
       {/* Modal de Pareamento Mobile (QR Code & PIN) */}
@@ -722,11 +754,15 @@ export function App() {
           setIsCommandPaletteOpen(false);
         }}
         onOpenSettings={() => {
-          setIsSettingsOpen(true);
+          handleOpenSettings("account");
           setIsCommandPaletteOpen(false);
         }}
         onSendMessage={(text) => {
           handleSendMessage(text, true);
+          setIsCommandPaletteOpen(false);
+        }}
+        onOpenMobilePair={() => {
+          handleOpenMobilePair();
           setIsCommandPaletteOpen(false);
         }}
       />

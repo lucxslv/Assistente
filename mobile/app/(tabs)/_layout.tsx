@@ -64,6 +64,12 @@ export default function TabsLayout() {
           title: 'Agent',
         }}
       />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

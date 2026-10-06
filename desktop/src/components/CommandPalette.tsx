@@ -12,6 +12,7 @@ import {
   Volume2,
   VolumeX,
   Camera,
+  Smartphone,
 } from "lucide-react";
 import { Thread } from "../types";
 import { executeDeviceTool } from "../services/deviceExecutor";
@@ -24,6 +25,7 @@ interface CommandPaletteProps {
   onNewThread: () => void;
   onOpenSettings: () => void;
   onSendMessage: (text: string) => void;
+  onOpenMobilePair?: () => void;
 }
 
 interface PaletteAction {
@@ -43,6 +45,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onNewThread,
   onOpenSettings,
   onSendMessage,
+  onOpenMobilePair,
 }) => {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -70,6 +73,21 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onClose();
       },
     },
+    ...(onOpenMobilePair
+      ? [
+          {
+            id: "action-mobile-pair",
+            title: "Parear Dispositivo Mobile (QR Code & PIN)",
+            category: "Ações Rápidas" as const,
+            icon: Smartphone,
+            shortcut: "Ctrl+M",
+            run: () => {
+              onOpenMobilePair();
+              onClose();
+            },
+          },
+        ]
+      : []),
     {
       id: "action-settings",
       title: "Abrir Preferências",

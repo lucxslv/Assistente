@@ -163,6 +163,76 @@
         </a>
       </div>
 
+      <!-- 3D Autonomous Core Visual Showcase (Generated via Higgsfield) -->
+      <div class="mt-12 relative max-w-5xl mx-auto">
+        <div id="hero-3d-tilt-card" class="hero-3d-card relative rounded-2xl overflow-hidden border border-[#8B7CFF]/30 bg-gradient-to-b from-[#15171C]/90 to-[#0A0B0E]/95 shadow-[0_20px_70px_-10px_rgba(139,124,255,0.28)] group">
+          <!-- Ambient 3D Glow Backlight -->
+          <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#8B7CFF]/20 rounded-full blur-3xl pointer-events-none"></div>
+          
+          <!-- Top Floating Status Bar -->
+          <div class="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 border border-white/10 backdrop-blur-md text-[11px] font-mono text-zinc-300">
+              <span class="w-2 h-2 rounded-full bg-[#8B7CFF] animate-pulse"></span>
+              <span class="font-semibold text-white">NÚCLEO 3D AUTÔNOMO</span>
+              <span class="text-zinc-600">|</span>
+              <span class="text-[#B4A9FF]">Tauri v2 + Win32 Core</span>
+            </div>
+            <div class="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/60 border border-emerald-500/30 backdrop-blur-md text-[11px] font-mono text-emerald-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>Zero-Trust Gatekeeper Ativo</span>
+            </div>
+          </div>
+
+          <!-- 3D Render Image Viewport with Glass Depth & Parallax -->
+          <div class="relative overflow-hidden aspect-[16/9] w-full flex items-center justify-center">
+            <!-- Dynamic Specular Glare Layer -->
+            <div id="hero-3d-glare" class="hero-3d-glare"></div>
+
+            <!-- Holographic Laser Scanline -->
+            <div class="hero-scanline"></div>
+
+            <picture class="w-full h-full">
+              <source srcset="assets/3d/charlie-hero-3d.webp" type="image/webp">
+              <img 
+                id="hero-3d-render-img"
+                src="assets/3d/charlie-hero-3d.png" 
+                alt="Charlie Desktop 3D Autonomous Core &amp; Agent Workspace" 
+                class="w-full h-full object-cover transform transition-transform duration-700 ease-out group-hover:scale-[1.02] filter drop-shadow-[0_15px_35px_rgba(0,0,0,0.85)]"
+                loading="eager"
+              >
+            </picture>
+            
+            <!-- Bottom Vignette & Gradient Seamless Blend -->
+            <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#0A0B0E] via-[#0A0B0E]/60 to-transparent pointer-events-none"></div>
+            <!-- Side Vignettes -->
+            <div class="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#0A0B0E]/70 to-transparent pointer-events-none"></div>
+            <div class="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#0A0B0E]/70 to-transparent pointer-events-none"></div>
+          </div>
+
+          <!-- Bottom Telemetry HUD Bar on 3D Card -->
+          <div class="px-6 py-3 bg-[#0E0F12]/90 border-t border-white/[0.08] backdrop-blur-md flex flex-wrap items-center justify-between gap-4 text-xs font-mono text-zinc-400">
+            <div class="flex items-center gap-3">
+              <span class="text-white font-semibold flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                Local Host Engine:
+              </span>
+              <span>IPC Latency: <strong id="hero-live-ipc" class="text-emerald-400 font-semibold">0.42ms</strong></span>
+              <span class="text-zinc-600">•</span>
+              <span>Memory: <strong id="hero-live-ram" class="text-zinc-200 font-semibold">76.4 MB</strong></span>
+              <span class="text-zinc-600">•</span>
+              <span class="hidden sm:inline">Win32 CPU: <strong id="hero-live-cpu" class="text-purple-300 font-semibold">4.8%</strong></span>
+            </div>
+            <div class="flex items-center gap-4 text-[11px]">
+              <span class="text-emerald-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                SHA-256 Validated
+              </span>
+              <span class="text-purple-300">Gemini 2.0 Flash + Reasoning</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Quick Specs Indicators -->
       <div class="mt-12 pt-8 border-t border-white/[0.06] max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
         <div class="p-3 rounded-lg bg-[#15171C]/60 border border-[#292D35]/50">
@@ -623,12 +693,11 @@
         
         <!-- Card 1: Local Agent Runtime 2.0 -->
         <div class="card-tech p-6 space-y-4">
-          <div class="w-12 h-12 rounded-xl bg-[#8B7CFF]/10 border border-[#8B7CFF]/30 flex items-center justify-center text-[#B4A9FF]">
-            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>
+          <div class="feature-3d-badge">
+            <picture>
+              <source srcset="assets/3d/feature-runtime-3d.webp" type="image/webp">
+              <img src="assets/3d/feature-runtime-3d.png" alt="Local Runtime 3D Core" loading="lazy">
+            </picture>
           </div>
           <div>
             <h3 class="text-lg font-bold text-white tracking-tight">Local Agent Runtime 2.0</h3>
@@ -643,12 +712,11 @@
 
         <!-- Card 2: Context Drawer & Inspector -->
         <div class="card-tech p-6 space-y-4">
-          <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
-            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-              <line x1="12" y1="22.08" x2="12" y2="12"></line>
-            </svg>
+          <div class="feature-3d-badge">
+            <picture>
+              <source srcset="assets/3d/feature-drawer-3d.webp" type="image/webp">
+              <img src="assets/3d/feature-drawer-3d.png" alt="Context Drawer 3D" loading="lazy">
+            </picture>
           </div>
           <div>
             <h3 class="text-lg font-bold text-white tracking-tight">Context Drawer &amp; Inspector</h3>
@@ -663,10 +731,11 @@
 
         <!-- Card 3: Zero-Trust Permission Engine -->
         <div class="card-tech p-6 space-y-4">
-          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            </svg>
+          <div class="feature-3d-badge">
+            <picture>
+              <source srcset="assets/3d/feature-zerotrust-3d.webp" type="image/webp">
+              <img src="assets/3d/feature-zerotrust-3d.png" alt="Zero-Trust Shield 3D" loading="lazy">
+            </picture>
           </div>
           <div>
             <h3 class="text-lg font-bold text-white tracking-tight">Arquitetura Zero-Trust</h3>
@@ -718,11 +787,11 @@
 
         <!-- Card 6: Charlie Spotlight -->
         <div class="card-tech p-6 space-y-4">
-          <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
+          <div class="feature-3d-badge">
+            <picture>
+              <source srcset="assets/3d/feature-spotlight-3d.webp" type="image/webp">
+              <img src="assets/3d/feature-spotlight-3d.png" alt="Spotlight HUD 3D" loading="lazy">
+            </picture>
           </div>
           <div>
             <h3 class="text-lg font-bold text-white tracking-tight">Charlie Spotlight Global</h3>

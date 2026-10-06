@@ -13,8 +13,9 @@ import {
   Square,
   X,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
-import { loginUser, registerUser, UserProfile } from "../services/api";
+import { loginUser, registerUser, loginAsGuest, UserProfile } from "../services/api";
 import { invoke } from "@tauri-apps/api/core";
 
 interface AuthGatekeeperProps {
@@ -106,6 +107,24 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
       setIsLoading(false);
     }
   };
+
+  const handleGuestLogin = async () => {
+    setError(null);
+    setSuccessMsg(null);
+    setIsLoading(true);
+    try {
+      const res = await loginAsGuest();
+      setSuccessMsg("Acessando como Lucas no modo local...");
+      setTimeout(() => {
+        onSuccess(res.user);
+      }, 500);
+    } catch (err: any) {
+      setError(err?.message || "Falha ao iniciar modo local.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0E0F12] text-[#F2F3F5] font-sans select-none overflow-hidden relative">
@@ -327,6 +346,22 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
+            </button>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-[var(--border)]"></div>
+              <span className="flex-shrink mx-3 text-[10px] text-[var(--text-muted)] font-medium uppercase tracking-wider">ou</span>
+              <div className="flex-grow border-t border-[var(--border)]"></div>
+            </div>
+
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={handleGuestLogin}
+              className="w-full py-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-[var(--text-primary)] hover:text-white font-medium transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
+              <span>Continuar como Lucas (Modo Local / Convidado)</span>
             </button>
           </form>
 

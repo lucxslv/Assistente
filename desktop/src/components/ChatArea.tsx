@@ -25,6 +25,7 @@ import {
   LayoutDashboard,
   Sparkles,
   ArrowRight,
+  Smartphone,
 } from "lucide-react";
 import { Message, ToolCallInfo, AgentArtifact } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -42,6 +43,7 @@ interface ChatAreaProps {
   hasActiveWorkspace?: boolean;
   activeArtifacts?: AgentArtifact[];
   onOpenArtifact?: (artifactId: string) => void;
+  onOpenMobilePair?: () => void;
 }
 
 // Componente para blocos de código com destaque e botão de cópia
@@ -204,6 +206,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   hasActiveWorkspace,
   activeArtifacts = [],
   onOpenArtifact,
+  onOpenMobilePair,
 }) => {
   const [input, setInput] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
@@ -463,6 +466,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {hasActiveWorkspace && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
               )}
+            </button>
+          )}
+
+          {onOpenMobilePair && (
+            <button
+              type="button"
+              onClick={onOpenMobilePair}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 transition-all text-[11.5px] font-medium cursor-pointer mr-1 group shadow-sm"
+              title="Parear Aplicativo Mobile (QR Code / PIN)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <span className="hidden sm:inline">Parear Celular</span>
             </button>
           )}
 
