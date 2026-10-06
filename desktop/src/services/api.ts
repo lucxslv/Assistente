@@ -47,66 +47,110 @@ export function humanizeErrorMessage(error: any): string {
   return "Não foi possível completar a ação no momento. Verifique sua conexão e tente novamente.";
 }
 
-const LOCAL_API = "http://127.0.0.1:8005/api";
-const CLOUD_API = "https://assistente-xi.vercel.app/api";
+export const LOCAL_API = "http://127.0.0.1:8005/api";
+export const CLOUD_API = "https://assistente-xi.vercel.app/api";
 
-// Limpa qualquer resquício legado do localStorage que forçava a nuvem e bloqueava o disco local
-if (typeof window !== "undefined") {
-  try {
-    const saved = localStorage.getItem("charlie_api_url");
-    if (saved && (saved.includes("vercel.app") || saved.includes("assistente-xi"))) {
-      localStorage.removeItem("charlie_api_url");
-    }
-  } catch {
-    // ignore
+// O servidor padrão oficial é a Nuvem Charlie (Vercel + Supabase)
+let activeApiBase: string = CLOUD_API;
+
+export function getServerMode(): "cloud" | "local" | "custom" {
+  if (typeof window === "undefined") return "cloud";
+  const custom = localStorage.getItem("charlie_api_url");
+  if (custom && custom.trim()) return "custom";
+  const mode = localStorage.getItem("charlie_server_mode");
+  if (mode === "local") return "local";
+  return "cloud";
+}
+
+export function setServerMode(mode: "cloud" | "local" | "custom", customUrl?: string): void {
+  if (typeof window === "undefined") return;
+  if (mode === "custom" && customUrl && customUrl.trim()) {
+    localStorage.setItem("charlie_server_mode", "custom");
+    const clean = customUrl.trim().replace(/\/+$/, "");
+    const finalUrl = clean.endsWith("/api") ? clean : `${clean}/api`;
+    localStorage.setItem("charlie_api_url", finalUrl);
+    activeApiBase = finalUrl;
+  } else if (mode === "local") {
+    localStorage.setItem("charlie_server_mode", "local");
+    localStorage.removeItem("charlie_api_url");
+    activeApiBase = LOCAL_API;
+  } else {
+    localStorage.setItem("charlie_server_mode", "cloud");
+    localStorage.removeItem("charlie_api_url");
+    activeApiBase = CLOUD_API;
   }
 }
 
-// Inicializa com CLOUD_API como base segura para conexão imediata ao Supabase
-let activeApiBase: string = CLOUD_API;
-
 /**
- * Checa de forma ativa se o backend local (porta 8005) está respondendo.
- * Se estiver ativo, garante uso do motor local com acesso total ao disco.
- * Se estiver inativo, faz fallback transparente para a nuvem Vercel.
+ * Detecta a conectividade com o servidor preferido (Nuvem por padrão).
+ * Caso a nuvem esteja inatingível e o motor local 8005 esteja rodando,
+ * permite fallback resiliente.
  */
 export async function detectApiBase(): Promise<string> {
-  const custom = typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null;
-  if (custom && custom.trim() && !custom.includes("vercel.app") && !custom.includes("assistente-xi")) {
-    const clean = custom.trim().replace(/\/+$/, "");
-    activeApiBase = clean.endsWith("/api") ? clean : `${clean}/api`;
-    return activeApiBase;
+  const mode = getServerMode();
+
+  if (mode === "custom") {
+    const custom = localStorage.getItem("charlie_api_url");
+    if (custom && custom.trim()) {
+      const clean = custom.trim().replace(/\/+$/, "");
+      activeApiBase = clean.endsWith("/api") ? clean : `${clean}/api`;
+      return activeApiBase;
+    }
   }
 
+  if (mode === "local") {
+    activeApiBase = LOCAL_API;
+    return LOCAL_API;
+  }
+
+  // Modo Nuvem (Padrão Oficial)
   try {
-    const res = await fetch("http://127.0.0.1:8005/api/health", {
-      signal: AbortSignal.timeout(1000),
+    const res = await fetch(`${CLOUD_API}/health`, {
+      signal: AbortSignal.timeout(2500),
     });
     if (res.ok) {
-      activeApiBase = LOCAL_API;
-      return LOCAL_API;
+      activeApiBase = CLOUD_API;
+      return CLOUD_API;
     }
   } catch {
-    // Backend local inativo
+    // Nuvem temporariamente inacessível, checa se há daemon local ativo
+    try {
+      const localRes = await fetch(`${LOCAL_API}/health`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (localRes.ok) {
+        console.warn("[Charlie API] Nuvem indisponível. Usando servidor local temporariamente.");
+        activeApiBase = LOCAL_API;
+        return LOCAL_API;
+      }
+    } catch {
+      // Nenhum ativo no momento
+    }
   }
 
   activeApiBase = CLOUD_API;
   return CLOUD_API;
 }
 
-// Inicia detecção imediatamente e monitora a cada 4 segundos
+// Inicia detecção imediatamente e monitora a cada 5 segundos
 if (typeof window !== "undefined") {
   detectApiBase();
-  setInterval(detectApiBase, 4000);
+  setInterval(detectApiBase, 5000);
 }
 
 export function getApiBase(): string {
-  const custom = typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null;
-  if (custom && custom.trim() && !custom.includes("vercel.app") && !custom.includes("assistente-xi")) {
-    const clean = custom.trim().replace(/\/+$/, "");
-    return clean.endsWith("/api") ? clean : `${clean}/api`;
+  const mode = getServerMode();
+  if (mode === "custom") {
+    const custom = localStorage.getItem("charlie_api_url");
+    if (custom && custom.trim()) {
+      const clean = custom.trim().replace(/\/+$/, "");
+      return clean.endsWith("/api") ? clean : `${clean}/api`;
+    }
   }
-  return activeApiBase;
+  if (mode === "local") {
+    return LOCAL_API;
+  }
+  return activeApiBase || CLOUD_API;
 }
 
 export function getWsBase(): string {
@@ -119,9 +163,9 @@ export function getWsBase(): string {
 
 export function setCustomApiUrl(url: string): void {
   if (!url || !url.trim()) {
-    localStorage.removeItem("charlie_api_url");
+    setServerMode("cloud");
   } else {
-    localStorage.setItem("charlie_api_url", url.trim());
+    setServerMode("custom", url);
   }
 }
 
@@ -190,7 +234,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     let fetchOptions = options;
     if (currentBase === LOCAL_API && !options.signal) {
       // Evita bloqueio indefinido caso o backend local 8005 não esteja rodando
-      fetchOptions = { ...options, signal: AbortSignal.timeout(1800) };
+      fetchOptions = { ...options, signal: AbortSignal.timeout(2000) };
     }
     const res = await fetch(url, fetchOptions);
     if (!res.ok && currentBase === LOCAL_API && [502, 503, 504].includes(res.status)) {
@@ -199,10 +243,20 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     return res;
   } catch (err: any) {
     if (currentBase === LOCAL_API) {
-      console.warn(`[Charlie API] Backend local inacessível para ${path}. Alternando imediatamente para a nuvem Vercel...`);
-      activeApiBase = CLOUD_API;
+      console.warn(`[Charlie API] Backend local inacessível para ${path}. Alternando para a nuvem Vercel...`);
       const cloudUrl = `${CLOUD_API}${fullPath}`;
       return await fetch(cloudUrl, options);
+    } else if (currentBase === CLOUD_API) {
+      // Se a nuvem estiver indisponível e houver serviço local ativo, usa fallback
+      try {
+        const localCheck = await fetch(`${LOCAL_API}/health`, { signal: AbortSignal.timeout(1000) });
+        if (localCheck.ok) {
+          console.warn(`[Charlie API] Nuvem indisponível para ${path}. Usando fallback local...`);
+          return await fetch(`${LOCAL_API}${fullPath}`, options);
+        }
+      } catch {
+        // ignora
+      }
     }
     throw err;
   }
@@ -235,6 +289,33 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
   saveAuthSession(data);
   return data;
 }
+
+export async function loginAsGuest(): Promise<AuthResponse> {
+  try {
+    const res = await apiFetch("/auth/guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      saveAuthSession(data);
+      return data;
+    }
+  } catch {
+    // Modo offline / fallback
+  }
+  const fallbackData: AuthResponse = {
+    user: {
+      id: "guest-lucas",
+      name: "Lucas",
+      email: "lucas@charlie.local",
+    },
+    token: "charlie_guest_token",
+  };
+  saveAuthSession(fallbackData);
+  return fallbackData;
+}
+
 
 export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const token = getStoredToken();
@@ -549,9 +630,12 @@ export function connectSystemWebSocket(
 
   const connect = () => {
     if (isClosed) return;
-    const wsUrl = `${getWsBase()}/chat/ws`;
-    // Vercel serverless não suporta WebSockets persistentes; o app usa fallback de polling HTTP a cada 5s
+    const wsUrl = `${getWsBase()}/chat/ws?client_type=desktop`;
+    // Vercel serverless não suporta WebSockets persistentes; tenta reconectar quando o motor local subir
     if (wsUrl.includes("vercel.app")) {
+      if (!isClosed) {
+        setTimeout(connect, 4000);
+      }
       return;
     }
     try {

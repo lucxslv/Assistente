@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import close_db_pool, init_db_pool
-from api.routes import auth, chat, messages, settings, system, threads, tools, agent, admin, pair
+from api.routes import auth, chat, messages, settings, system, threads, tools, agent, admin, pair, device
 
 logger = logging.getLogger("charlie.api")
 logging.basicConfig(level=logging.INFO)
@@ -65,7 +65,11 @@ ALLOWED_ORIGINS = [
     "https://assistente-xi.vercel.app",
 ]
 
-ALLOWED_ORIGIN_REGEX = r"^https:\/\/(?:assistente-[a-zA-Z0-9_-]+|web-charlie-[a-zA-Z0-9_-]+)\.vercel\.app$|^tauri:\/\/localhost$"
+ALLOWED_ORIGIN_REGEX = (
+    r"^https?:\/\/(?:localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)(?::\d+)?$"
+    r"|^https:\/\/(?:assistente-[a-zA-Z0-9_-]+|web-charlie-[a-zA-Z0-9_-]+)\.vercel\.app$"
+    r"|^tauri:\/\/localhost$"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,6 +93,7 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(agent.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(pair.router, prefix="/api")
+app.include_router(device.router, prefix="/api")
 
 
 @app.get("/")
@@ -123,6 +128,6 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.getenv("PORT", "8005"))
-    host = os.getenv("HOST", "0.0.0.0" if os.getenv("PORT") else "127.0.0.1")
+    host = os.getenv("HOST", "0.0.0.0")
     reload = os.getenv("ENV") != "production" and not os.getenv("PORT")
     uvicorn.run("api.main:app", host=host, port=port, reload=reload)

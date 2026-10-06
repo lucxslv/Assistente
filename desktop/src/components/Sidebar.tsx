@@ -529,14 +529,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onOpenMobilePair}
-            className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-[var(--radius-md)] bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 text-indigo-300 hover:text-indigo-200 transition-all text-[11px] font-medium cursor-pointer shadow-sm group"
-            title="Conectar aplicativo Mobile via QR Code ou PIN"
+            className="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/35 hover:border-indigo-500/50 text-indigo-200 hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-sm group"
+            title="Conectar aplicativo Mobile via QR Code ou PIN (Ctrl+Shift+M)"
           >
             <span className="flex items-center gap-2">
-              <Smartphone className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <Smartphone className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
               <span>Parear Celular</span>
             </span>
-            <span className="text-[10px] bg-indigo-500/20 px-1.5 py-0.5 rounded text-indigo-300 font-mono font-bold">QR / PIN</span>
+            <span className="flex items-center gap-1.5 text-[10px] bg-indigo-500/30 border border-indigo-400/30 px-2 py-0.5 rounded-full text-indigo-200 font-mono font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              QR / PIN
+            </span>
           </button>
         )}
         {user ? (

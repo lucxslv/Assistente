@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,19 +12,167 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/src/components/Screen';
+import { PairingModal } from '@/src/components/PairingModal';
 import { useAuth } from '@/src/hooks/useAuth';
+import { authStorage } from '@/src/services/authStorage';
+import { checkServerHealth } from '@/src/services/apiClient';
+import { normalizeServerUrl, normalizeHostAddress, serverConfigService } from '@/src/services/serverConfig';
+
+type AuthMode = 'pc' | 'cloud';
 
 export default function AuthScreen() {
-  const { signIn, signUp, continueAsGuest } = useAuth();
+  const { signIn, signUp, continueAsGuest, refreshSession } = useAuth();
+  const [mode, setMode] = useState<AuthMode>('pc');
+  const [pairingModalOpen, setPairingModalOpen] = useState(false);
+
+  // Modo PC / PIN
+  const [pin, setPin] = useState('');
+  const [host, setHost] = useState('');
+  const [showHostInput, setShowHostInput] = useState(true);
+
+  // Modo Nuvem
   const [registering, setRegistering] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // Estados compartilhados
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  async function submit() {
+  useEffect(() => {
+    serverConfigService
+      .listServers()
+      .then((servers) => {
+        const lanServer = servers.find((s) => !s.url.includes('vercel.app'));
+        if (lanServer) {
+          setHost(lanServer.url);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handlePinSubmit() {
+    const cleanPin = pin.trim().replace(/[^0-9]/g, '');
+    if (cleanPin.length !== 6) {
+      setError('O PIN deve conter exatamente 6 dígitos numéricos.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+
+    try {
+      const servers = await serverConfigService.listServers();
+      const lanServer = servers.find((s) => !s.url.includes('vercel.app'));
+
+      // Monta lista inteligente de hosts candidatos (prioriza o digitado, depois LAN real, depois emuladores)
+      const candidateList: string[] = [];
+      if (host.trim()) candidateList.push(host.trim());
+      if (lanServer?.url) candidateList.push(lanServer.url);
+      candidateList.push('http://192.168.0.190:8005');
+      if (Platform.OS === 'android') candidateList.push('http://10.0.2.2:8005');
+      candidateList.push('http://localhost:8005');
+
+      const uniqueBases = Array.from(new Set(candidateList.map((c) => normalizeHostAddress(c))));
+
+      const deviceId = await authStorage.getOrCreateDeviceId();
+      const deviceName = await authStorage.getDeviceName();
+
+      let response: Response | null = null;
+      let lastErrMessage = '';
+      let successfulHost = '';
+
+      for (const baseHost of uniqueBases) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 2000);
+
+          const res = await fetch(`${baseHost}/api/pair/verify-pin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pin: cleanPin,
+              device_name: deviceName,
+              device_id: deviceId,
+              platform: Platform.OS,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (res.ok) {
+            response = res;
+            successfulHost = baseHost;
+            break;
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            lastErrMessage = errData.detail || `Erro HTTP ${res.status}`;
+            if (res.status === 429) {
+              throw new Error('PIN bloqueado por tentativas excessivas. Gere um novo no Desktop.');
+            }
+            if (res.status === 400 || res.status === 401) {
+              throw new Error(errData.detail || 'PIN incorreto.');
+            }
+          }
+        } catch (fetchErr: any) {
+          if (fetchErr.message && (fetchErr.message.includes('PIN') || fetchErr.message.includes('bloqueado'))) {
+            throw fetchErr;
+          }
+          // Falha de rede para este candidato: continua tentando o próximo
+        }
+      }
+
+      if (!response) {
+        throw new Error(
+          lastErrMessage ||
+            'Não foi possível conectar ao PC. Verifique se o Charlie Desktop está aberto e se celular e computador estão na mesma rede Wi-Fi.'
+        );
+      }
+
+      const pairResult = await response.json();
+      let resolvedUrl = successfulHost;
+      let isLan = false;
+
+      if (pairResult.lan_url) {
+        try {
+          const lanHealth = await checkServerHealth(pairResult.lan_url);
+          if (lanHealth.status === 'online') {
+            resolvedUrl = pairResult.lan_url;
+            isLan = true;
+          } else if (pairResult.tunnel_url) {
+            resolvedUrl = pairResult.tunnel_url;
+          }
+        } catch {
+          // Fallback gracioso para baseHost
+        }
+      } else if (pairResult.tunnel_url) {
+        resolvedUrl = pairResult.tunnel_url;
+      }
+
+      await authStorage.savePairedCredentials({
+        token: pairResult.token,
+        serverUrl: resolvedUrl,
+        deviceId,
+        deviceName,
+        isLan,
+      });
+
+      await refreshSession();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Falha na conexão com o PC.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCloudSubmit() {
     setBusy(true);
     setError('');
     try {
@@ -35,15 +184,16 @@ export default function AuthScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falha de autenticação.');
+      setError(e instanceof Error ? e.message : 'Falha de autenticação na nuvem.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setBusy(false);
     }
   }
 
-  function handleGuestMode() {
+  async function handleGuestMode() {
     Haptics.selectionAsync();
-    continueAsGuest();
+    await continueAsGuest();
     router.replace('/');
   }
 
@@ -53,69 +203,257 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.page}
       >
-        <View style={styles.brandContainer}>
-          <Text style={styles.brand}>Charlie</Text>
-          <Text style={styles.title}>Conversar. Observar. Agir.</Text>
-        </View>
-
-        <View style={styles.card}>
-          {registering && (
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Nome"
-              placeholderTextColor="#77809A"
-            />
-          )}
-
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="E-mail"
-            placeholderTextColor="#77809A"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Senha"
-            placeholderTextColor="#77809A"
-            secureTextEntry
-          />
-
-          {!!error && <Text style={styles.error}>{error}</Text>}
-
-          <Pressable onPress={submit} style={styles.button} disabled={busy}>
-            {busy ? (
-              <ActivityIndicator color="#0D0F12" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {registering ? 'Criar conta' : 'Entrar'}
-              </Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              setRegistering(!registering);
-            }}
-          >
-            <Text style={styles.link}>
-              {registering ? 'Já tenho conta' : 'Criar nova conta'}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.brandContainer}>
+            <Text style={styles.brand}>Charlie</Text>
+            <Text style={styles.title}>Conversar. Observar. Agir.</Text>
+            <Text style={styles.description}>
+              Assistente de IA com controle em tempo real do seu computador.
             </Text>
-          </Pressable>
+          </View>
 
-          {/* Opção para entrar diretamente no modo demonstração */}
-          <Pressable onPress={handleGuestMode} style={styles.guestButton}>
-            <Text style={styles.guestButtonText}>Continuar como Lucas (Demo)</Text>
-          </Pressable>
-        </View>
+          {/* Seletor de Modo: Conectar ao PC vs Nuvem */}
+          <View style={styles.tabContainer}>
+            <Pressable
+              testID="tab-pc"
+              style={[styles.tabButton, mode === 'pc' && styles.tabButtonActive]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setMode('pc');
+                setError('');
+              }}
+            >
+              <Ionicons
+                name="desktop-outline"
+                size={16}
+                color={mode === 'pc' ? '#818CF8' : '#77809A'}
+              />
+              <Text style={[styles.tabText, mode === 'pc' && styles.tabTextActive]}>
+                Conectar ao PC
+              </Text>
+            </Pressable>
+
+            <Pressable
+              testID="tab-cloud"
+              style={[styles.tabButton, mode === 'cloud' && styles.tabButtonActive]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setMode('cloud');
+                setError('');
+              }}
+            >
+              <Ionicons
+                name="cloud-outline"
+                size={16}
+                color={mode === 'cloud' ? '#818CF8' : '#77809A'}
+              />
+              <Text style={[styles.tabText, mode === 'cloud' && styles.tabTextActive]}>
+                Conta Nuvem
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.card}>
+            {mode === 'pc' ? (
+              <>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>Pareamento com Charlie Desktop</Text>
+                  <Text style={styles.cardSubtitle}>
+                    Digite o PIN de 6 dígitos exibido nas configurações do Charlie no seu computador.
+                  </Text>
+                </View>
+
+                {/* Input de PIN */}
+                <View style={styles.pinWrapper}>
+                  <TextInput
+                    testID="pin-input"
+                    style={styles.pinInput}
+                    value={pin}
+                    onChangeText={(text) => {
+                      const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
+                      setPin(cleaned);
+                      setError('');
+                    }}
+                    placeholder="000000"
+                    placeholderTextColor="#475569"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    autoFocus={mode === 'pc'}
+                  />
+                  <Text style={styles.pinHelper}>
+                    {pin.length}/6 dígitos
+                  </Text>
+                </View>
+
+                {/* Alternar Configuração Manual de IP/Host */}
+                <Pressable
+                  style={styles.hostToggle}
+                  onPress={() => setShowHostInput(!showHostInput)}
+                >
+                  <Ionicons
+                    name={showHostInput ? 'chevron-up' : 'settings-outline'}
+                    size={14}
+                    color="#8791A4"
+                  />
+                  <Text style={styles.hostToggleText}>
+                    {showHostInput ? 'Ocultar endereço do PC' : 'Ajustar IP do computador'}
+                  </Text>
+                </Pressable>
+
+                {showHostInput && (
+                  <View style={styles.hostInputBox}>
+                    <Text style={styles.inputLabel}>Endereço LAN do Computador (Porta 8005):</Text>
+                    <TextInput
+                      testID="pin-host-input"
+                      style={styles.input}
+                      value={host}
+                      onChangeText={setHost}
+                      placeholder="Ex: 192.168.0.190:8005"
+                      placeholderTextColor="#77809A"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                )}
+
+                {!!error && <Text style={styles.error}>{error}</Text>}
+
+                {/* Botão de Conectar via PIN */}
+                <Pressable
+                  testID="pin-submit-button"
+                  onPress={handlePinSubmit}
+                  style={[styles.button, busy && styles.buttonDisabled]}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#0D0F12" />
+                  ) : (
+                    <View style={styles.btnRow}>
+                      <Ionicons name="link-outline" size={18} color="#0D0F12" />
+                      <Text style={styles.buttonText}>Conectar ao Computador</Text>
+                    </View>
+                  )}
+                </Pressable>
+
+                {/* Divisor */}
+                <View style={styles.dividerRow}>
+                  <View style={styles.divider} />
+                  <Text style={styles.dividerText}>OU</Text>
+                  <View style={styles.divider} />
+                </View>
+
+                {/* Botão para Escanear QR Code */}
+                <Pressable
+                  testID="qr-scanner-button"
+                  style={styles.qrButton}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPairingModalOpen(true);
+                  }}
+                >
+                  <Ionicons name="qr-code-outline" size={18} color="#818CF8" />
+                  <Text style={styles.qrButtonText}>Escanear QR Code na Tela do PC</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>
+                    {registering ? 'Criar Conta no Charlie Cloud' : 'Entrar na Conta Cloud'}
+                  </Text>
+                  <Text style={styles.cardSubtitle}>
+                    Acesse seu assistente e históricos centralizados via nuvem.
+                  </Text>
+                </View>
+
+                {registering && (
+                  <TextInput
+                    testID="name-input"
+                    style={styles.input}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Nome completo"
+                    placeholderTextColor="#77809A"
+                  />
+                )}
+
+                <TextInput
+                  testID="email-input"
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="E-mail"
+                  placeholderTextColor="#77809A"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+
+                <TextInput
+                  testID="password-input"
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Senha"
+                  placeholderTextColor="#77809A"
+                  secureTextEntry
+                />
+
+                {!!error && <Text style={styles.error}>{error}</Text>}
+
+                <Pressable
+                  testID="cloud-submit-button"
+                  onPress={handleCloudSubmit}
+                  style={[styles.button, busy && styles.buttonDisabled]}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#0D0F12" />
+                  ) : (
+                    <Text style={styles.buttonText}>
+                      {registering ? 'Criar Conta' : 'Entrar'}
+                    </Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setRegistering(!registering);
+                    setError('');
+                  }}
+                >
+                  <Text style={styles.link}>
+                    {registering ? 'Já tenho conta? Entrar' : 'Não tem conta? Criar nova'}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+
+            {/* Opção para entrar diretamente no modo demonstração */}
+            <Pressable
+              testID="guest-button"
+              onPress={handleGuestMode}
+              style={styles.guestButton}
+            >
+              <Ionicons name="sparkles-outline" size={14} color="#818CF8" />
+              <Text style={styles.guestButtonText}>Continuar no Modo Demonstração (Lucas)</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+
+        {/* Modal de Pareamento Completo (com Câmera / QR Code Scanner) */}
+        <PairingModal
+          visible={pairingModalOpen}
+          onClose={() => setPairingModalOpen(false)}
+          onPairSuccess={async () => {
+            await refreshSession();
+            router.replace('/');
+          }}
+        />
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -124,12 +462,15 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    padding: 24,
-    justifyContent: 'space-evenly',
     backgroundColor: '#0D0F12',
   },
+  scrollContent: {
+    padding: 24,
+    paddingTop: Platform.OS === 'ios' ? 20 : 36,
+    paddingBottom: 40,
+  },
   brandContainer: {
-    marginBottom: 8,
+    marginBottom: 20,
   },
   brand: {
     color: '#818CF8',
@@ -139,9 +480,44 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#F5F7FA',
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
-    marginTop: 8,
+    marginTop: 6,
+  },
+  description: {
+    color: '#8791A4',
+    fontSize: 13,
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#161A22',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#212631',
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  tabButtonActive: {
+    backgroundColor: '#212631',
+  },
+  tabText: {
+    color: '#77809A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tabTextActive: {
+    color: '#F5F7FA',
   },
   card: {
     backgroundColor: '#161A22',
@@ -150,6 +526,62 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 22,
     gap: 14,
+  },
+  cardHeader: {
+    marginBottom: 4,
+  },
+  cardTitle: {
+    color: '#F5F7FA',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  cardSubtitle: {
+    color: '#8791A4',
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  pinWrapper: {
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  pinInput: {
+    width: '100%',
+    color: '#818CF8',
+    backgroundColor: '#0D0F12',
+    borderColor: '#818CF8',
+    borderWidth: 2,
+    paddingVertical: 14,
+    borderRadius: 14,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 10,
+    textAlign: 'center',
+  },
+  pinHelper: {
+    color: '#77809A',
+    fontSize: 11,
+    marginTop: 6,
+  },
+  hostToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  hostToggleText: {
+    color: '#8791A4',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  hostInputBox: {
+    gap: 6,
+  },
+  inputLabel: {
+    color: '#8791A4',
+    fontSize: 11,
+    fontWeight: '600',
   },
   input: {
     color: '#F5F7FA',
@@ -162,19 +594,61 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#EF4444',
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   button: {
     padding: 15,
     borderRadius: 14,
     backgroundColor: '#818CF8',
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   buttonText: {
     color: '#0D0F12',
     fontWeight: '800',
     fontSize: 14,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginVertical: 2,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#212631',
+  },
+  dividerText: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  qrButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#1E232E',
+    borderWidth: 1,
+    borderColor: 'rgba(129, 140, 248, 0.25)',
+  },
+  qrButtonText: {
+    color: '#818CF8',
+    fontWeight: '700',
+    fontSize: 13,
   },
   link: {
     color: '#818CF8',
@@ -184,11 +658,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   guestButton: {
-    marginTop: 8,
+    marginTop: 4,
     padding: 12,
     borderRadius: 12,
     backgroundColor: '#212631',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   guestButtonText: {
     color: '#F5F7FA',

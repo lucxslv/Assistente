@@ -20,9 +20,14 @@ async def list_messages(
 
     try:
         t_uuid = uuid.UUID(thread_id)
-        u_uuid = uuid.UUID(user["id"])
-    except ValueError:
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
+
+    u_uuid = None
+    try:
+        u_uuid = uuid.UUID(str(user["id"]))
+    except (ValueError, TypeError):
+        pass
 
     async with pool.acquire() as conn:
         # Valida que a conversa existe e pertence ao usuário autenticado (chat_sessions ou Thread)
@@ -38,9 +43,9 @@ async def list_messages(
             thread_owner = await conn.fetchrow("""
                 SELECT id FROM "Thread"
                 WHERE id = $1 
-                  AND ("userId" = $2 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3))
+                  AND (($2::uuid IS NOT NULL AND "userId" = $2::uuid) OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3) OR (metadata->>'user_id' = $4))
                   AND "deletedAt" IS NULL
-            """, t_uuid, u_uuid, email)
+            """, t_uuid, u_uuid, email, u_id_str)
 
             if not thread_owner:
                 raise HTTPException(

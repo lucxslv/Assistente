@@ -94,9 +94,14 @@ async def delete_thread(thread_id: str, user: dict = Depends(get_current_user)):
 
     try:
         t_uuid = uuid.UUID(thread_id)
-        u_uuid = uuid.UUID(user["id"])
-    except ValueError:
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
+
+    u_uuid = None
+    try:
+        u_uuid = uuid.UUID(str(user["id"]))
+    except (ValueError, TypeError):
+        pass
 
     email = user.get("email")
     u_id_str = str(user["id"])
@@ -104,8 +109,8 @@ async def delete_thread(thread_id: str, user: dict = Depends(get_current_user)):
         res = await conn.execute("""
             UPDATE "Thread"
             SET "deletedAt" = CURRENT_TIMESTAMP
-            WHERE id = $1 AND ("userId" = $2 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3))
-        """, t_uuid, u_uuid, email)
+            WHERE id = $1 AND (($2::uuid IS NOT NULL AND "userId" = $2::uuid) OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $3) OR (metadata->>'user_id' = $4))
+        """, t_uuid, u_uuid, email, u_id_str)
 
         await conn.execute("""
             DELETE FROM public.chat_sessions
@@ -138,9 +143,14 @@ async def update_thread(thread_id: str, data: ThreadUpdate, user: dict = Depends
 
     try:
         t_uuid = uuid.UUID(thread_id)
-        u_uuid = uuid.UUID(user["id"])
-    except ValueError:
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="ID de conversa inválido.")
+
+    u_uuid = None
+    try:
+        u_uuid = uuid.UUID(str(user["id"]))
+    except (ValueError, TypeError):
+        pass
 
     email = user.get("email")
     u_id_str = str(user["id"])
@@ -148,8 +158,8 @@ async def update_thread(thread_id: str, data: ThreadUpdate, user: dict = Depends
         res = await conn.execute("""
             UPDATE "Thread"
             SET name = $1, "updatedAt" = CURRENT_TIMESTAMP
-            WHERE id = $2 AND ("userId" = $3 OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $4))
-        """, data.name, t_uuid, u_uuid, email)
+            WHERE id = $2 AND (($3::uuid IS NOT NULL AND "userId" = $3::uuid) OR ("userIdentifier" IS NOT NULL AND "userIdentifier" = $4) OR (metadata->>'user_id' = $5))
+        """, data.name, t_uuid, u_uuid, email, u_id_str)
 
         await conn.execute("""
             UPDATE public.chat_sessions

@@ -25,6 +25,32 @@ export function normalizeServerUrl(rawUrl: string): string {
   return url;
 }
 
+/**
+ * Normaliza o endereço do host do usuário (IP ou domínio).
+ * Se o usuário digitar "192.168.0.190" ou "192.168.0.190:8005",
+ * garante "http://" e a porta 8005 padrão para LAN se omitida.
+ * Remove também qualquer "/api" residual no final para evitar duplicidade.
+ */
+export function normalizeHostAddress(input: string, defaultPort = 8005): string {
+  let clean = input.trim();
+  if (!clean) return '';
+  clean = clean.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(clean)) {
+    clean = `http://${clean}`;
+  }
+  const match = clean.match(/^(https?:\/\/)([0-9a-zA-Z.-]+)(?::(\d+))?(\/.*)?$/);
+  if (match) {
+    const proto = match[1];
+    const host = match[2];
+    const port = match[3];
+    if (!port && (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) || host === 'localhost')) {
+      return `${proto}${host}:${defaultPort}`;
+    }
+    return `${proto}${host}${port ? `:${port}` : ''}`;
+  }
+  return clean;
+}
+
 /** Perfil padrão caso nenhum ambiente esteja configurado */
 export function getDefaultServerProfile(): ServerProfile {
   return {
@@ -51,7 +77,11 @@ class ServerConfigService {
       if (json) {
         const parsed = JSON.parse(json) as ServerProfile[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          // Filtra perfis com IPs link-local/internos inválidos (ex: 169.254.* gerado por containers cloud)
+          const valid = parsed.filter((s) => !/https?:\/\/169\.254\./i.test(s.url));
+          if (valid.length > 0) {
+            return valid;
+          }
         }
       }
     } catch {
@@ -71,7 +101,7 @@ class ServerConfigService {
     try {
       const activeId = await SecureStore.getItemAsync(STORAGE_ACTIVE_ID_KEY);
       if (activeId) {
-        const found = servers.find((s) => s.id === activeId);
+        const found = servers.find((s) => s.id === activeId && !/https?:\/\/169\.254\./i.test(s.url));
         if (found) return found;
       }
     } catch {

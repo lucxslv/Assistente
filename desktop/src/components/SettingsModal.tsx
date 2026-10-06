@@ -21,6 +21,11 @@ import {
   Plus,
   Sliders,
   Folder,
+  Smartphone,
+  Globe,
+  Server,
+  Wifi,
+  RefreshCw,
 } from "lucide-react";
 import { Settings } from "../types";
 import {
@@ -28,7 +33,12 @@ import {
   UserProfile,
   fetchUserMemories,
   clearUserMemories,
+  getServerMode,
+  setServerMode,
+  CLOUD_API,
+  LOCAL_API,
 } from "../services/api";
+import { PairingPanel } from "./PairingPanel";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -37,9 +47,11 @@ interface SettingsModalProps {
   user?: UserProfile | null;
   onLogout?: () => void;
   onOpenAuth?: () => void;
+  onOpenMobilePair?: () => void;
+  initialTab?: TabType;
 }
 
-type TabType = "account" | "brain" | "rag" | "voice" | "automations";
+export type TabType = "account" | "server" | "pairing" | "brain" | "rag" | "voice" | "automations";
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -48,8 +60,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   user,
   onLogout,
   onOpenAuth,
+  onOpenMobilePair: _onOpenMobilePair,
+  initialTab = "account",
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>("account");
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   // 1. Modo de Operação (Estilo de Resposta)
   const [operationMode, setOperationMode] = useState<"balanced" | "creative" | "fast">(() => {
@@ -107,6 +127,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const saved = localStorage.getItem("charlie_minimize_tray");
     return saved !== null ? saved === "true" : true;
   });
+
+  // 6. Configurações de Conexão com o Servidor (Nuvem vs Local vs Custom)
+  const [serverMode, setServerModeState] = useState<"cloud" | "local" | "custom">(() => getServerMode());
+  const [customServerUrl, setCustomServerUrl] = useState<string>(() => {
+    return (typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null) || "";
+  });
+  const [serverTesting, setServerTesting] = useState(false);
+  const [serverTestResult, setServerTestResult] = useState<{
+    ok: boolean;
+    latencyMs?: number;
+    service?: string;
+    version?: string;
+    dbConnected?: boolean;
+    message?: string;
+  } | null>(null);
+
+  const handleTestServerConnection = async () => {
+    setServerTesting(true);
+    setServerTestResult(null);
+    const targetUrl =
+      serverMode === "custom"
+        ? (customServerUrl.trim().endsWith("/api") ? customServerUrl.trim() : `${customServerUrl.trim()}/api`)
+        : serverMode === "local"
+        ? LOCAL_API
+        : CLOUD_API;
+
+    const start = performance.now();
+    try {
+      const res = await fetch(`${targetUrl}/health`, { signal: AbortSignal.timeout(4500) });
+      const elapsed = Math.round(performance.now() - start);
+      if (res.ok) {
+        const data = await res.json();
+        setServerTestResult({
+          ok: true,
+          latencyMs: elapsed,
+          service: data.service || "Charlie API",
+          version: data.version || "2.0.0",
+          dbConnected: data.database_connected ?? true,
+          message: "Servidor online e respondendo!",
+        });
+      } else {
+        setServerTestResult({
+          ok: false,
+          latencyMs: elapsed,
+          message: `O servidor respondeu com status HTTP ${res.status}.`,
+        });
+      }
+    } catch (err: any) {
+      setServerTestResult({
+        ok: false,
+        message: err?.message || "Não foi possível conectar ao servidor. Verifique o endereço e sua conexão.",
+      });
+    } finally {
+      setServerTesting(false);
+    }
+  };
 
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -213,6 +289,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Salvar preferências gerais
   const handleSave = async () => {
     setSaving(true);
+    // Salva modo e endereço do servidor (Nuvem / Local / Custom)
+    setServerMode(serverMode, customServerUrl);
+
     localStorage.setItem("charlie_mode", operationMode);
     localStorage.setItem("charlie_voice_enabled", String(voiceEnabled));
     localStorage.setItem("charlie_voice", selectedVoice);
@@ -249,6 +328,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: "account", label: "Conta & Perfil", icon: User },
+    { id: "server", label: "Servidor & Nuvem", icon: Globe },
+    { id: "pairing", label: "Parear Celular (Mobile)", icon: Smartphone },
     { id: "brain", label: "Cérebro & Memória", icon: Brain },
     { id: "rag", label: "Base de Conhecimento", icon: FolderGit2 },
     { id: "voice", label: "Voz & Fala", icon: Volume2 },
@@ -393,6 +474,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
+                {/* Pareamento com Dispositivo Mobile */}
+                <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 flex items-center justify-center">
+                        <Smartphone className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-semibold text-zinc-100">Dispositivo Mobile (Expo / Celular)</h4>
+                        <p className="text-[11px] text-zinc-400">Conecte seu celular via QR Code ou PIN para controle remoto</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("pairing")}
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Ir para Pareamento</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Card de Privacidade */}
                 <div className="p-4 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-elevated)]/30 space-y-2">
                   <span className="text-[11.5px] font-semibold text-[var(--text-primary)] block">
@@ -406,7 +510,258 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
 
             {/* ================================================================
-                ABA 2: CÉREBRO & MEMÓRIA
+                ABA NOVO: SERVIDOR & NUVEM (CONEXÃO CENTRAL)
+                ================================================================ */}
+            {activeTab === "server" && (
+              <div className="space-y-5 animate-fade-in">
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[var(--accent)]" />
+                    <span>Servidor & Conexão do Charlie</span>
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Escolha onde seu assistente se conecta: Nuvem Vercel (recomendado para celular e sincronização), Localhost ou Servidor Próprio.
+                  </p>
+                </div>
+
+                {/* Seleção de Destino do Servidor */}
+                <div className="space-y-3">
+                  {/* Opção 1: Nuvem Oficial (Vercel) */}
+                  <div
+                    onClick={() => setServerModeState("cloud")}
+                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                      serverMode === "cloud"
+                        ? "bg-indigo-500/10 border-indigo-500/60 shadow-sm shadow-indigo-500/10"
+                        : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                            serverMode === "cloud"
+                              ? "bg-indigo-500/20 text-indigo-400 border border-indigo-400/30"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          <Globe className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-zinc-100">
+                              Servidor na Nuvem (Vercel Cloud Brain)
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-[10px] font-mono font-bold">
+                              Oficial / Padrão
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 mt-0.5 font-mono">
+                            {CLOUD_API}
+                          </p>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-full border flex items-center justify-center mt-1 ${
+                          serverMode === "cloud"
+                            ? "border-indigo-400 bg-indigo-500"
+                            : "border-zinc-600"
+                        }`}
+                      >
+                        {serverMode === "cloud" && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-2.5 leading-relaxed pl-12">
+                      Conecta diretamente ao cérebro na nuvem (Supabase + Vercel). Permite sincronização contínua de conversas, memórias e controle remoto seguro pelo aplicativo mobile via 4G/WAN de qualquer lugar.
+                    </p>
+                  </div>
+
+                  {/* Opção 2: Servidor Local (Offline) */}
+                  <div
+                    onClick={() => setServerModeState("local")}
+                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                      serverMode === "local"
+                        ? "bg-emerald-500/10 border-emerald-500/60 shadow-sm shadow-emerald-500/10"
+                        : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                            serverMode === "local"
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-400/30"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          <Server className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-zinc-100">
+                              Servidor Local Offline
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[10px] font-mono font-bold">
+                              Localhost
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 mt-0.5 font-mono">
+                            {LOCAL_API}
+                          </p>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-full border flex items-center justify-center mt-1 ${
+                          serverMode === "local"
+                            ? "border-emerald-400 bg-emerald-500"
+                            : "border-zinc-600"
+                        }`}
+                      >
+                        {serverMode === "local" && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-2.5 leading-relaxed pl-12">
+                      Opera estritamente no seu computador através da porta local 8005. Ideal para ambientes offline ou desenvolvimento interno.
+                    </p>
+                  </div>
+
+                  {/* Opção 3: Endpoint Personalizado */}
+                  <div
+                    onClick={() => setServerModeState("custom")}
+                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                      serverMode === "custom"
+                        ? "bg-amber-500/10 border-amber-500/60 shadow-sm shadow-amber-500/10"
+                        : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                            serverMode === "custom"
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-400/30"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          <Wifi className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-zinc-100 block">
+                            URL Customizada / Self-Hosted
+                          </span>
+                          <span className="text-[10.5px] text-zinc-400">
+                            Túnel Cloudflare, VPS própria ou IP fixo dedicado
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-full border flex items-center justify-center mt-1 ${
+                          serverMode === "custom"
+                            ? "border-amber-400 bg-amber-500"
+                            : "border-zinc-600"
+                        }`}
+                      >
+                        {serverMode === "custom" && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </div>
+                    </div>
+
+                    {serverMode === "custom" && (
+                      <div className="mt-3 pl-12">
+                        <input
+                          type="text"
+                          placeholder="https://sua-api.com/api"
+                          value={customServerUrl}
+                          onChange={(e) => setCustomServerUrl(e.target.value)}
+                          className="w-full bg-[var(--surface-elevated)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-amber-500/60"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card de Teste & Diagnóstico */}
+                <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-[var(--text-primary)] block">
+                        Diagnóstico de Conexão
+                      </span>
+                      <span className="text-[10.5px] text-[var(--text-muted)] font-mono">
+                        Alvo ativo:{" "}
+                        {serverMode === "custom"
+                          ? customServerUrl || "Não configurado"
+                          : serverMode === "local"
+                          ? LOCAL_API
+                          : CLOUD_API}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestServerConnection}
+                      disabled={serverTesting}
+                      className="px-3 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm"
+                    >
+                      {serverTesting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      )}
+                      <span>Testar Conexão</span>
+                    </button>
+                  </div>
+
+                  {serverTestResult && (
+                    <div
+                      className={`p-3 rounded-lg border text-xs space-y-1.5 ${
+                        serverTestResult.ok
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 font-semibold">
+                        {serverTestResult.ok ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        )}
+                        <span>{serverTestResult.message}</span>
+                      </div>
+                      {serverTestResult.ok && (
+                        <div className="flex flex-wrap gap-3 text-[11px] text-zinc-300 font-mono pt-1">
+                          <span>Latência: <strong>{serverTestResult.latencyMs}ms</strong></span>
+                          <span>Serviço: <strong>{serverTestResult.service}</strong></span>
+                          <span>Versão: <strong>{serverTestResult.version}</strong></span>
+                          <span>
+                            Supabase:{" "}
+                            <strong className={serverTestResult.dbConnected ? "text-emerald-400" : "text-amber-400"}>
+                              {serverTestResult.dbConnected ? "Conectado" : "Offline"}
+                            </strong>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ================================================================
+                ABA 2: PAREAMENTO CELULAR / MOBILE (DEDICADA)
+                ================================================================ */}
+            {activeTab === "pairing" && (
+              <div className="animate-fade-in">
+                <PairingPanel onClose={onClose} />
+              </div>
+            )}
+
+            {/* ================================================================
+                ABA 3: CÉREBRO & MEMÓRIA
                 ================================================================ */}
             {activeTab === "brain" && (
               <div className="space-y-5 animate-fade-in">

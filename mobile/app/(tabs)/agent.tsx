@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AppState,
   Platform,
   Pressable,
   ScrollView,
@@ -61,10 +62,10 @@ export default function AgentScreen() {
   const [session, setSession] = useState<AgentSession | null>(null);
   const [isPaused, setIsPaused] = useState(false);
 
-
   useEffect(() => {
     let mounted = true;
     const run = async () => {
+      if (AppState.currentState !== 'active') return;
       try {
         const active = await agentService.active();
         if (mounted && active.session) {
@@ -78,9 +79,16 @@ export default function AgentScreen() {
 
     run();
     const interval = setInterval(run, 4000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        run();
+      }
+    });
+
     return () => {
       mounted = false;
       clearInterval(interval);
+      sub.remove();
     };
   }, []);
 
@@ -109,6 +117,31 @@ export default function AgentScreen() {
     }
   };
 
+  // Resolução dinâmica de etapas e progresso baseada na sessão ativa
+  const steps: MissionStep[] =
+    session?.nodes && session.nodes.length > 0
+      ? session.nodes.map((node, index) => {
+          const isDone =
+            node.status === 'completed' ||
+            node.status === 'done' ||
+            node.status === 'success';
+          const isRunning =
+            node.status === 'running' || node.status === 'in_progress';
+          return {
+            id: node.id || `node-${index}`,
+            title: node.title || node.tool || `Etapa ${index + 1}`,
+            status: isDone ? 'completed' : isRunning ? 'in_progress' : 'pending',
+            statusLabel: isDone ? 'concluído' : isRunning ? 'em andamento' : 'aguardando',
+            progressText: isRunning ? '…' : isDone ? '100%' : '-',
+            dotColor: isDone ? '#22C55E' : isRunning ? '#818CF8' : '#64748B',
+          };
+        })
+      : DEFAULT_STEPS;
+
+  const completedCount = steps.filter((s) => s.status === 'completed').length;
+  const progressPercent =
+    steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
+
   return (
     <Screen>
       <ScrollView
@@ -130,7 +163,7 @@ export default function AgentScreen() {
 
           {/* Linha do Tempo Visual das Etapas */}
           <View style={styles.stepsList}>
-            {DEFAULT_STEPS.map((step) => (
+            {steps.map((step) => (
               <View key={step.id} style={styles.stepRow}>
                 <View style={[styles.stepDot, { backgroundColor: step.dotColor }]} />
                 <View style={styles.stepInfo}>
@@ -153,7 +186,12 @@ export default function AgentScreen() {
 
           {/* Barra de Progresso do Runner */}
           <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: '67%' }]} />
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${Math.max(8, progressPercent)}%` },
+              ]}
+            />
           </View>
 
           {/* Controlos Operacionais */}

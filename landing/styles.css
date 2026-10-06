@@ -259,6 +259,27 @@ body {
   pointer-events: none;
 }
 
+/* Linear/Raycast-style Dynamic Border Spotlight */
+#features .card-tech::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(350px circle at var(--card-mouse-x, -500px) var(--card-mouse-y, -500px), rgba(139, 124, 255, 0.5), transparent 70%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: 2;
+}
+
+#features .card-tech:hover::before {
+  opacity: 1;
+}
+
 /* Top Navigation Bar */
 .navbar-blur {
   background: rgba(10, 11, 14, 0.82);
@@ -464,6 +485,85 @@ body {
   border: 1px solid var(--warning-border);
   border-radius: var(--radius-md);
   box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.8);
+}
+
+/* 3D Autonomous Core Hero Card */
+.hero-3d-card {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+  will-change: transform;
+}
+
+.hero-3d-card:hover {
+  border-color: rgba(139, 124, 255, 0.55);
+  box-shadow: 0 30px 100px -15px rgba(139, 124, 255, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.hero-3d-card-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Dynamic Interactive Specular Glare */
+.hero-3d-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle 380px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.12) 0%, rgba(139, 124, 255, 0.06) 40%, transparent 80%);
+  mix-blend-mode: overlay;
+  z-index: 15;
+  transition: opacity 0.3s ease;
+  opacity: 0;
+}
+.hero-3d-card:hover .hero-3d-glare {
+  opacity: 1;
+}
+
+/* Holographic Laser Scanline */
+@keyframes scanline-sweep {
+  0% { transform: translateY(-100%); opacity: 0; }
+  15% { opacity: 0.8; }
+  85% { opacity: 0.8; }
+  100% { transform: translateY(800%); opacity: 0; }
+}
+
+.hero-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.4) 20%, rgba(139, 124, 255, 0.95) 50%, rgba(52, 211, 153, 0.4) 80%, transparent 100%);
+  box-shadow: 0 0 15px rgba(139, 124, 255, 0.8), 0 0 30px rgba(56, 189, 248, 0.5);
+  animation: scanline-sweep 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: 12;
+}
+
+/* 3D Feature Icon Badge */
+.feature-3d-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(21, 23, 28, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 0 20px -5px rgba(139, 124, 255, 0.25);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+.card-tech:hover .feature-3d-badge {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.8), 0 0 30px -4px rgba(139, 124, 255, 0.45);
+}
+.feature-3d-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
 }
 
 /* Responsive adjustments */

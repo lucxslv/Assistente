@@ -22,11 +22,17 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :1420 ^| findstr LISTENING') 
 )
 taskkill /f /im desktop.exe >nul 2>&1
 
-echo [1/2] Iniciando Charlie Modular API (Porta 8005)...
-start "Charlie Modular API" cmd /c "uv run python -m api.main || pause"
+echo [1/2] Iniciando Charlie Modular API (Porta 8005 - Todas Interfaces)...
+set "HOST=0.0.0.0"
+set "PORT=8005"
+if exist "%~dp0.venv\Scripts\python.exe" (
+    start "Charlie Modular API" cmd /c "set HOST=0.0.0.0&& set PORT=8005&& "%~dp0.venv\Scripts\python.exe" -m uvicorn api.main:app --host 0.0.0.0 --port 8005 || pause"
+) else (
+    start "Charlie Modular API" cmd /c "set HOST=0.0.0.0&& set PORT=8005&& uv run python -m uvicorn api.main:app --host 0.0.0.0 --port 8005 || pause"
+)
 
 echo [Aguardando API inicializar...]
-ping -n 3 127.0.0.1 >nul
+ping -n 4 127.0.0.1 >nul
 
 echo [2/2] Iniciando App Desktop (Tauri + React)...
 cd desktop

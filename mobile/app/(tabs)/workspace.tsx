@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/src/components/Screen';
+import { DesktopRemotePad } from '@/src/components/DesktopRemotePad';
 import { api } from '@/src/services/api';
 import { SystemStatus, ToolDefinition } from '@/src/types/api';
 
@@ -80,38 +81,48 @@ export default function WorkspaceScreen() {
     {
       id: 'runner',
       label: 'Runner',
-      dotColor: '#818CF8',
-      detail: '2 em execução',
+      dotColor: status?.status === 'idle' ? '#64748B' : '#818CF8',
+      detail: status?.current_process
+        ? `${status.current_process}`
+        : status?.status === 'idle'
+        ? 'Em repouso'
+        : 'Processando',
     },
     {
       id: 'tasks',
       label: 'Tasks',
-      dotColor: '#F59E0B',
-      detail: '3 aguardando',
+      dotColor: status?.active_tool ? '#F59E0B' : '#22C55E',
+      detail: status?.active_tool ? `Ferramenta: ${status.active_tool}` : 'Pronto para tarefas',
     },
     {
-      id: 'logs',
-      label: 'Logs',
-      dotColor: '#22C55E',
-      detail: 'ao vivo',
+      id: 'host',
+      label: 'Hardware PC',
+      dotColor: status?.host ? '#38BDF8' : '#64748B',
+      detail: status?.host
+        ? `CPU ${Math.round(status.host.cpu_percent)}% · RAM ${Math.round(status.host.memory_percent)}%`
+        : 'Telemetria do Host',
     },
     {
       id: 'servers',
-      label: 'Servers',
+      label: 'Dispositivos',
       dotColor: '#22C55E',
-      detail: status ? `${status.connected_devices_count || 1} online` : '1 online',
+      detail: status ? `${status.connected_devices_count || 1} conectado(s)` : '1 online',
     },
     {
       id: 'tools',
       label: 'Tools',
-      dotColor: '#64748B',
-      detail: tools.length > 0 ? `${tools.length} ferramentas` : '12 ferramentas',
+      dotColor: '#818CF8',
+      detail: tools.length > 0 ? `${tools.length} ativas` : '12 integradas',
     },
     {
-      id: 'snippets',
-      label: 'Snippets',
-      dotColor: '#64748B',
-      detail: '8 salvos',
+      id: 'logs',
+      label: 'Charlie State',
+      dotColor: status?.is_speaking ? '#F59E0B' : '#22C55E',
+      detail: status?.is_speaking
+        ? 'Falando'
+        : status?.is_listening
+        ? 'Ouvindo'
+        : 'Sincronizado',
     },
   ];
 
@@ -141,6 +152,9 @@ export default function WorkspaceScreen() {
           <Text style={styles.title}>Workspace</Text>
           <Text style={styles.subtitle}>Operar e controlar</Text>
         </View>
+
+        {/* Módulo de Controle Remoto Nativo do Desktop */}
+        <DesktopRemotePad />
 
         {/* Lista de Módulos Operacionais */}
         <View style={styles.listCard}>

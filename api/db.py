@@ -74,6 +74,59 @@ async def init_db_pool() -> Optional[asyncpg.Pool]:
             except Exception as persist_err:
                 logger.warning(f"Aviso ao inicializar schema de persistência: {persist_err}")
 
+            # Inicializa schema de presença de dispositivos e comandos em nuvem
+            try:
+                async with _pool.acquire() as conn:
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS device_host_state (
+                            device_name TEXT PRIMARY KEY,
+                            last_heartbeat DOUBLE PRECISION NOT NULL,
+                            telemetry JSONB NOT NULL,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                        );
+                        CREATE TABLE IF NOT EXISTS device_pending_commands (
+                            id TEXT PRIMARY KEY,
+                            action TEXT NOT NULL,
+                            level INTEGER,
+                            key TEXT,
+                            target TEXT,
+                            command TEXT,
+                            params JSONB,
+                            executed BOOLEAN DEFAULT FALSE,
+                            created_at DOUBLE PRECISION NOT NULL
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_device_cmd_pending ON device_pending_commands(executed, created_at);
+
+                        CREATE TABLE IF NOT EXISTS device_pairing_sessions (
+                            pairing_id TEXT PRIMARY KEY,
+                            pin TEXT NOT NULL,
+                            secret TEXT NOT NULL,
+                            lan_url TEXT,
+                            tunnel_url TEXT,
+                            name TEXT,
+                            expires_at DOUBLE PRECISION NOT NULL,
+                            attempts INTEGER DEFAULT 0,
+                            paired BOOLEAN DEFAULT FALSE,
+                            paired_at DOUBLE PRECISION,
+                            device_info JSONB,
+                            device_token TEXT
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_device_pairing_pin ON device_pairing_sessions(pin);
+
+                        CREATE TABLE IF NOT EXISTS device_authorized_devices (
+                            device_id TEXT PRIMARY KEY,
+                            device_name TEXT NOT NULL,
+                            platform TEXT,
+                            token TEXT UNIQUE NOT NULL,
+                            paired_at DOUBLE PRECISION NOT NULL,
+                            last_seen DOUBLE PRECISION NOT NULL,
+                            permissions JSONB
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_device_auth_token ON device_authorized_devices(token);
+                    """)
+            except Exception as dev_err:
+                logger.warning(f"Aviso ao inicializar schema de device e pairing: {dev_err}")
+
         except Exception as e:
             _last_db_error = f"{type(e).__name__}: {str(e)}"
             logger.error(f"Falha ao conectar no Supabase: {e}")

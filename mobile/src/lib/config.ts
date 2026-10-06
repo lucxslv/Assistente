@@ -24,5 +24,6 @@ export async function setApiUrl(value: string): Promise<string> {
 
 export function getWebSocketUrl(apiUrl: string, token?: string): string {
   const url = `${apiUrl.replace(/^http/, 'ws')}/chat/ws`;
-  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+  const query = `client_type=mobile${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  return `${url}?${query}`;
 }
