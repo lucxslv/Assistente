@@ -34,7 +34,6 @@ interface HeartbeatResponse {
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 const HEARTBEAT_TARGETS = [
-  'http://127.0.0.1:8005/api/device/heartbeat',
   'https://assistente-xi.vercel.app/api/device/heartbeat',
 ];
 

@@ -17,8 +17,7 @@ import { Screen } from '@/src/components/Screen';
 import { PairingModal } from '@/src/components/PairingModal';
 import { useAuth } from '@/src/hooks/useAuth';
 import { authStorage } from '@/src/services/authStorage';
-import { checkServerHealth } from '@/src/services/apiClient';
-import { normalizeServerUrl, normalizeHostAddress, serverConfigService } from '@/src/services/serverConfig';
+import { serverConfigService } from '@/src/services/serverConfig';
 
 type AuthMode = 'pc' | 'cloud';
 
@@ -29,8 +28,6 @@ export default function AuthScreen() {
 
   // Modo PC / PIN
   const [pin, setPin] = useState('');
-  const [host, setHost] = useState('');
-  const [showHostInput, setShowHostInput] = useState(true);
 
   // Modo Nuvem
   const [registering, setRegistering] = useState(false);
@@ -41,18 +38,6 @@ export default function AuthScreen() {
   // Estados compartilhados
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    serverConfigService
-      .listServers()
-      .then((servers) => {
-        const lanServer = servers.find((s) => !s.url.includes('vercel.app'));
-        if (lanServer) {
-          setHost(lanServer.url);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   async function handlePinSubmit() {
     const cleanPin = pin.trim().replace(/[^0-9]/g, '');
@@ -66,106 +51,48 @@ export default function AuthScreen() {
     setError('');
 
     try {
-      const servers = await serverConfigService.listServers();
-      const lanServer = servers.find((s) => !s.url.includes('vercel.app'));
-
-      // Monta lista inteligente de hosts candidatos (prioriza o digitado, depois LAN real, depois emuladores)
-      const candidateList: string[] = [];
-      if (host.trim()) candidateList.push(host.trim());
-      if (lanServer?.url) candidateList.push(lanServer.url);
-      candidateList.push('http://192.168.0.190:8005');
-      if (Platform.OS === 'android') candidateList.push('http://10.0.2.2:8005');
-      candidateList.push('http://localhost:8005');
-
-      const uniqueBases = Array.from(new Set(candidateList.map((c) => normalizeHostAddress(c))));
-
       const deviceId = await authStorage.getOrCreateDeviceId();
       const deviceName = await authStorage.getDeviceName();
 
-      let response: Response | null = null;
-      let lastErrMessage = '';
-      let successfulHost = '';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
 
-      for (const baseHost of uniqueBases) {
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch('https://assistente-xi.vercel.app/api/pair/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: cleanPin,
+          device_name: deviceName,
+          device_id: deviceId,
+          platform: Platform.OS,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-          const res = await fetch(`${baseHost}/api/pair/verify-pin`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pin: cleanPin,
-              device_name: deviceName,
-              device_id: deviceId,
-              platform: Platform.OS,
-            }),
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
-
-          if (res.ok) {
-            response = res;
-            successfulHost = baseHost;
-            break;
-          } else {
-            const errData = await res.json().catch(() => ({}));
-            lastErrMessage = errData.detail || `Erro HTTP ${res.status}`;
-            if (res.status === 429) {
-              throw new Error('PIN bloqueado por tentativas excessivas. Gere um novo no Desktop.');
-            }
-            if (res.status === 400 || res.status === 401) {
-              throw new Error(errData.detail || 'PIN incorreto.');
-            }
-          }
-        } catch (fetchErr: any) {
-          if (fetchErr.message && (fetchErr.message.includes('PIN') || fetchErr.message.includes('bloqueado'))) {
-            throw fetchErr;
-          }
-          // Falha de rede para este candidato: continua tentando o próximo
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          throw new Error('PIN bloqueado por tentativas excessivas. Gere um novo no Desktop.');
         }
+        throw new Error(errData.detail || 'PIN incorreto ou expirado. Gere um novo no Desktop.');
       }
 
-      if (!response) {
-        throw new Error(
-          lastErrMessage ||
-            'Não foi possível conectar ao PC. Verifique se o Charlie Desktop está aberto e se celular e computador estão na mesma rede Wi-Fi.'
-        );
-      }
-
-      const pairResult = await response.json();
-      let resolvedUrl = successfulHost;
-      let isLan = false;
-
-      if (pairResult.lan_url) {
-        try {
-          const lanHealth = await checkServerHealth(pairResult.lan_url);
-          if (lanHealth.status === 'online') {
-            resolvedUrl = pairResult.lan_url;
-            isLan = true;
-          } else if (pairResult.tunnel_url) {
-            resolvedUrl = pairResult.tunnel_url;
-          }
-        } catch {
-          // Fallback gracioso para baseHost
-        }
-      } else if (pairResult.tunnel_url) {
-        resolvedUrl = pairResult.tunnel_url;
-      }
+      const pairResult = await res.json();
 
       await authStorage.savePairedCredentials({
         token: pairResult.token,
-        serverUrl: resolvedUrl,
+        serverUrl: 'https://assistente-xi.vercel.app/api',
         deviceId,
         deviceName,
-        isLan,
+        isLan: false,
       });
 
       await refreshSession();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Falha na conexão com o PC.');
+      setError(e instanceof Error ? e.message : 'Falha na conexão com o servidor.');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setBusy(false);
@@ -288,37 +215,6 @@ export default function AuthScreen() {
                     {pin.length}/6 dígitos
                   </Text>
                 </View>
-
-                {/* Alternar Configuração Manual de IP/Host */}
-                <Pressable
-                  style={styles.hostToggle}
-                  onPress={() => setShowHostInput(!showHostInput)}
-                >
-                  <Ionicons
-                    name={showHostInput ? 'chevron-up' : 'settings-outline'}
-                    size={14}
-                    color="#8791A4"
-                  />
-                  <Text style={styles.hostToggleText}>
-                    {showHostInput ? 'Ocultar endereço do PC' : 'Ajustar IP do computador'}
-                  </Text>
-                </Pressable>
-
-                {showHostInput && (
-                  <View style={styles.hostInputBox}>
-                    <Text style={styles.inputLabel}>Endereço LAN do Computador (Porta 8005):</Text>
-                    <TextInput
-                      testID="pin-host-input"
-                      style={styles.input}
-                      value={host}
-                      onChangeText={setHost}
-                      placeholder="Ex: 192.168.0.190:8005"
-                      placeholderTextColor="#77809A"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </View>
-                )}
 
                 {!!error && <Text style={styles.error}>{error}</Text>}
 
@@ -562,26 +458,6 @@ const styles = StyleSheet.create({
     color: '#77809A',
     fontSize: 11,
     marginTop: 6,
-  },
-  hostToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  hostToggleText: {
-    color: '#8791A4',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  hostInputBox: {
-    gap: 6,
-  },
-  inputLabel: {
-    color: '#8791A4',
-    fontSize: 11,
-    fontWeight: '600',
   },
   input: {
     color: '#F5F7FA',

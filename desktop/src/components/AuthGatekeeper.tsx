@@ -114,12 +114,12 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
     setIsLoading(true);
     try {
       const res = await loginAsGuest();
-      setSuccessMsg("Acessando como Lucas no modo local...");
+      setSuccessMsg("Acessando como Lucas...");
       setTimeout(() => {
         onSuccess(res.user);
       }, 500);
     } catch (err: any) {
-      setError(err?.message || "Falha ao iniciar modo local.");
+      setError(err?.message || "Falha ao iniciar sessão.");
     } finally {
       setIsLoading(false);
     }
@@ -361,7 +361,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
               className="w-full py-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-[var(--text-primary)] hover:text-white font-medium transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
             >
               <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
-              <span>Continuar como Lucas (Modo Local / Convidado)</span>
+              <span>Continuar como Lucas (Acesso Direto)</span>
             </button>
           </form>
 

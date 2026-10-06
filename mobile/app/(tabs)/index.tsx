@@ -123,7 +123,7 @@ export default function HomeScreen() {
                   ]}
                 />
                 <Text style={styles.headerStatusText}>
-                  API: {serverConn.isOnline ? 'Online' : 'Offline'}
+                  Servidor: {serverConn.isOnline ? 'Online' : 'Offline'}
                 </Text>
               </View>
 
@@ -265,10 +265,10 @@ export default function HomeScreen() {
               ]}
             />
             <View style={styles.activityInfo}>
-              <Text style={styles.activityItemTitle}>Conexão API</Text>
+              <Text style={styles.activityItemTitle}>Servidor Oficial</Text>
               <Text style={styles.activityItemDetail}>
                 {serverConn.isOnline
-                  ? `${serverConn.activeServer?.name ?? 'API'} online (${serverConn.networkType.toUpperCase()})`
+                  ? `${serverConn.activeServer?.name ?? 'Servidor Charlie'} online${serverConn.latencyMs ? ` (${serverConn.latencyMs}ms)` : ''}`
                   : 'Servidor desconectado'}
               </Text>
             </View>

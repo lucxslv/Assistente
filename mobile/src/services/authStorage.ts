@@ -117,7 +117,7 @@ export const authStorage = {
 
     // Salva e ativa o perfil de servidor no gerenciador de perfis do app
     await serverConfigService.saveServer({
-      name: `Desktop (${mode.toUpperCase()})`,
+      name: 'Servidor Oficial',
       url: normalizedUrl,
       token: params.token,
       makeActive: true,

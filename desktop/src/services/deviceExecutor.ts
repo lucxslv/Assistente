@@ -89,26 +89,9 @@ export async function getRunningProcesses(): Promise<LocalProcessInfo[]> {
 }
 
 export async function executeDeviceTool(name: string, args: Record<string, any>): Promise<string> {
-  console.log(`[DeviceExecutor] Recebido comando para executar no Windows: ${name}`, args);
+  console.log(`[DeviceExecutor] Executando comando nativo no Windows: ${name}`, args);
 
-  // 1. Tenta despachar para o backend local (porta 8005) caso o usuário também esteja rodando Python local
-  try {
-    const localRes = await fetch("http://127.0.0.1:8005/api/tools/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, arguments: args }),
-      signal: AbortSignal.timeout(1000),
-    });
-    if (localRes.ok) {
-      const data = await localRes.json();
-      console.log(`[DeviceExecutor] Executado via agente local:`, data);
-      return data.result || "Executado via agente local.";
-    }
-  } catch {
-    // Backend local não está ativo; executa nativamente via Tauri
-  }
-
-  // 2. Execução nativa no Windows usando capacidades do Tauri e Win32
+  // Execução nativa direta no Windows usando capacidades do Tauri e Win32
   try {
     if (name === "create_folder" || name === "create_directory") {
       const folderPath = String(args.path || "Nova Pasta");

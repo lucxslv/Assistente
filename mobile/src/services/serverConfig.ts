@@ -55,7 +55,7 @@ export function normalizeHostAddress(input: string, defaultPort = 8005): string 
 export function getDefaultServerProfile(): ServerProfile {
   return {
     id: 'default-cloud',
-    name: 'Nuvem Padrão',
+    name: 'Servidor Oficial',
     url: normalizeServerUrl(FALLBACK_URL),
     isDefault: true,
     createdAt: new Date().toISOString(),
