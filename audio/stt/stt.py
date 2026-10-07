@@ -132,6 +132,9 @@ class SpeechToText:
         return full_text or None
 
     def _transcribe_groq(self, audio: np.ndarray) -> str | None:
+        if audio is None or len(audio) == 0:
+            return None
+
         if not config.groq_api_key:
             logger.error("Chave GROQ_API_KEY não configurada no .env!")
             return None
@@ -148,18 +151,19 @@ class SpeechToText:
         language = config.language.split("-")[0] if config.language else "pt"
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
         headers = {"Authorization": f"Bearer {config.groq_api_key}"}
-        
+        stt_model = getattr(config, "groq_stt_model", "whisper-large-v3") or "whisper-large-v3"
+
         files = {"file": ("audio.wav", wav_io, "audio/wav")}
         data = {
-            "model": "whisper-large-v3",
+            "model": stt_model,
             "language": language,
             "response_format": "json",
             "temperature": "0.0",
-            "prompt": "Voz do usuário, transcrição limpa. Sem legendas, sem agradecimentos, sem notas musicais."
+            "prompt": "Voz do usuário, transcrição limpa. Sem legendas, sem agradecimentos, sem notas musicais.",
         }
 
         try:
-            logger.debug("Enviando áudio para nuvem Groq (whisper-large-v3)...")
+            logger.debug("Enviando áudio para nuvem Groq (%s)...", stt_model)
             response = httpx.post(url, headers=headers, files=files, data=data, timeout=30.0)
             response.raise_for_status()
             
@@ -172,12 +176,23 @@ class SpeechToText:
             text = re.sub(r'\(.*?\)', '', text)
             text = text.replace('♪', '').replace('♫', '').strip()
             
-            # Filtro contra alucinações curtas e comuns
+            # Filtro contra alucinações comuns em silêncio ou ruído residual do Whisper
             lower_text = text.lower()
-            bad_words = ["obrigado", "obrigada", "inscreva", "assistir", "canal", "amém", "tchau", "legendado", "áudio:"]
-            
+            bad_phrases = [
+                "obrigado por assistir",
+                "inscreva-se",
+                "deixe seu like",
+                "até o próximo vídeo",
+                "legendado por",
+                "áudio:",
+            ]
+            if any(bp in lower_text for bp in bad_phrases):
+                logger.debug("Transcrição ignorada (alucinação de encerramento detectada): %s", text)
+                return None
+
+            bad_words = ["obrigado", "obrigada", "inscreva", "assistir", "canal", "amém", "tchau", "legendado"]
             word_count = len(lower_text.split())
-            if word_count <= 4 and any(bw in lower_text for bw in bad_words):
+            if word_count <= 6 and any(bw in lower_text for bw in bad_words) and ("canal" in lower_text or "assistir" in lower_text):
                 logger.debug("Transcrição ignorada (alucinação detectada): %s", text)
                 return None
                 
