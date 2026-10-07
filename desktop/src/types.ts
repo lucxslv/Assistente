@@ -41,7 +41,10 @@ export interface Settings {
   llm_provider: string;
   gemini_model: string;
   groq_model: string;
+  tts_provider?: string;
   tts_voice: string;
+  elevenlabs_api_key?: string;
+  elevenlabs_voice_id?: string;
   wake_word: string;
   wake_word_enabled: boolean;
   home_assistant_url: string;

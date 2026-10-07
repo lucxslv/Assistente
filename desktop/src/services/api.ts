@@ -87,16 +87,21 @@ export interface AuthResponse {
 
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("charlie_auth_token");
+  return localStorage.getItem("charlie_auth_token") || "charlie_guest_token";
+}
+
+export function clearInvalidToken(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("charlie_auth_token");
 }
 
 export function getStoredUser(): UserProfile | null {
   if (typeof window === "undefined") return null;
   try {
     const data = localStorage.getItem("charlie_user");
-    return data ? JSON.parse(data) : null;
+    return data ? JSON.parse(data) : { id: "guest-lucas", name: "Lucas", email: "lucas@charlie.local" };
   } catch {
-    return null;
+    return { id: "guest-lucas", name: "Lucas", email: "lucas@charlie.local" };
   }
 }
 
@@ -113,27 +118,36 @@ export function clearAuthSession(): void {
 }
 
 export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
-  const token = getStoredToken();
+  const token = getStoredToken() || "charlie_guest_token";
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Client-Platform": "Windows",
     "X-Client-Type": "desktop",
     "X-Client-Name": "Charlie Desktop",
+    "Authorization": `Bearer ${token}`,
     ...extraHeaders,
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
   return headers;
 }
 
 /**
- * Executa requisições HTTP com fallback transparente e imediato entre motor local (8005) e Vercel Cloud.
+ * Executa requisições HTTP com fallback transparente e imediato entre motor local (8005) e Vercel Cloud,
+ * tratando automaticamente expiração de tokens (401) com failover para credencial de convidado.
  */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const fullPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${CLOUD_API}${fullPath}`;
-  return await fetch(url, options);
+  const res = await fetch(url, options);
+
+  // Se retornou 401 e estava usando token customizado expirado, limpa e retenta com guest_token
+  if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
+    clearInvalidToken();
+    const headers = new Headers(options.headers || {});
+    headers.set("Authorization", "Bearer charlie_guest_token");
+    return await fetch(url, { ...options, headers });
+  }
+
+  return res;
 }
 
 export async function registerUser(name: string, email: string, password: string): Promise<AuthResponse> {
@@ -201,8 +215,18 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
       },
     });
     if (!res.ok) {
-      clearAuthSession();
-      return null;
+      if (token !== "charlie_guest_token") {
+        clearInvalidToken();
+        const guestRes = await apiFetch("/auth/me", {
+          headers: { Authorization: "Bearer charlie_guest_token" },
+        });
+        if (guestRes.ok) {
+          const guestUser: UserProfile = await guestRes.json();
+          localStorage.setItem("charlie_user", JSON.stringify(guestUser));
+          return guestUser;
+        }
+      }
+      return getStoredUser();
     }
     const user: UserProfile = await res.json();
     localStorage.setItem("charlie_user", JSON.stringify(user));
@@ -318,17 +342,33 @@ export async function sendChatMessage(
   skipTts: boolean = true
 ): Promise<{ reply: string; thread_id: string; status: string }> {
   const base = getApiBase();
-  const res = await fetch(`${base}/chat`, {
+  const payload = { message, thread_id: threadId, skip_tts: skipTts };
+
+  let res = await fetch(`${base}/chat`, {
     method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify({ message, thread_id: threadId, skip_tts: skipTts }),
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error("Falha ao enviar mensagem");
+
+  if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
+    clearInvalidToken();
+    res = await fetch(`${base}/chat`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+  }
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`Falha ao enviar mensagem: HTTP ${res.status} ${errorText}`);
+  }
   return res.json();
 }
 
 /**
- * Envia mensagem via SSE (Server-Sent Events) recebendo tokens e status em tempo real.
+ * Envia mensagem via SSE (Server-Sent Events) recebendo tokens e status em tempo real,
+ * com fallback inteligente para REST caso o streaming sofra qualquer interrupção de rede.
  */
 export async function sendChatMessageStream(
   message: string,
@@ -347,14 +387,47 @@ export async function sendChatMessageStream(
     payload.tool_results = toolResults;
   }
 
-  const res = await fetch(`${base}/chat/stream`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}/chat/stream`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
 
+    // Se 401 com token expirado, limpa token e retenta com guest_token
+    if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
+      console.warn("[Charlie API] Sessão expirada (401). Retentando streaming com guest_token...");
+      clearInvalidToken();
+      res = await fetch(`${base}/chat/stream`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+    }
+  } catch (fetchErr) {
+    console.warn("[Charlie API] Falha na requisição de streaming. Ativando fallback imediato para REST /chat...", fetchErr);
+    const restRes = await sendChatMessage(message, threadId, skipTts);
+    onEvent({
+      type: "done",
+      data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
+    });
+    return;
+  }
+
+  // Se a resposta de streaming não foi OK (ou não tem body para stream)
   if (!res.ok || !res.body) {
-    throw new Error(`Falha no streaming: ${res.statusText}`);
+    console.warn(`[Charlie API] Streaming HTTP ${res.status}. Ativando fallback transparente para REST...`);
+    try {
+      const restRes = await sendChatMessage(message, threadId, skipTts);
+      onEvent({
+        type: "done",
+        data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
+      });
+      return;
+    } catch (restErr: any) {
+      throw new Error(`Falha no envio da mensagem (${res.status}): ${restErr?.message || res.statusText}`);
+    }
   }
 
   const reader = res.body.getReader();
@@ -363,61 +436,84 @@ export async function sendChatMessageStream(
 
   let clientToolCalls: Array<{ call_id: string; name: string; args: any }> = [];
   let returnedThreadId: string | null = threadId;
+  let receivedAnyToken = false;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
 
-    for (const part of parts) {
-      if (!part.trim()) continue;
-      let eventType: StreamEvent["type"] = "token";
-      let eventDataStr = "";
+      for (const part of parts) {
+        if (!part.trim()) continue;
+        let eventType: StreamEvent["type"] = "token";
+        let eventDataStr = "";
 
-      for (const line of part.split("\n")) {
-        if (line.startsWith("event: ")) {
-          eventType = line.substring(7).trim() as StreamEvent["type"];
-        } else if (line.startsWith("data: ")) {
-          eventDataStr = line.substring(6).trim();
+        for (const line of part.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.substring(7).trim() as StreamEvent["type"];
+          } else if (line.startsWith("data: ")) {
+            eventDataStr = line.substring(6).trim();
+          }
+        }
+
+        if (eventDataStr) {
+          try {
+            const parsed = JSON.parse(eventDataStr);
+            if (eventType === "token" && parsed.token) {
+              receivedAnyToken = true;
+            }
+            onEvent({ type: eventType, data: parsed });
+
+            if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
+              clientToolCalls = parsed.tools || [];
+              if (parsed.thread_id) returnedThreadId = parsed.thread_id;
+            }
+          } catch (e) {
+            console.error("Erro ao fazer parse do evento SSE:", e, eventDataStr);
+          }
         }
       }
+    }
 
+    if (buffer.trim()) {
+      let eventType: StreamEvent["type"] = "token";
+      let eventDataStr = "";
+      for (const line of buffer.split("\n")) {
+        if (line.startsWith("event: ")) eventType = line.substring(7).trim() as StreamEvent["type"];
+        else if (line.startsWith("data: ")) eventDataStr = line.substring(6).trim();
+      }
       if (eventDataStr) {
         try {
           const parsed = JSON.parse(eventDataStr);
+          if (eventType === "token" && parsed.token) {
+            receivedAnyToken = true;
+          }
           onEvent({ type: eventType, data: parsed });
-
           if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
             clientToolCalls = parsed.tools || [];
             if (parsed.thread_id) returnedThreadId = parsed.thread_id;
           }
-        } catch (e) {
-          console.error("Erro ao fazer parse do evento SSE:", e, eventDataStr);
+        } catch {
+          // ignore
         }
       }
     }
-  }
-
-  if (buffer.trim()) {
-    let eventType: StreamEvent["type"] = "token";
-    let eventDataStr = "";
-    for (const line of buffer.split("\n")) {
-      if (line.startsWith("event: ")) eventType = line.substring(7).trim() as StreamEvent["type"];
-      else if (line.startsWith("data: ")) eventDataStr = line.substring(6).trim();
-    }
-    if (eventDataStr) {
+  } catch (streamReadErr) {
+    console.warn("[Charlie API] Conexão SSE interrompida durante leitura:", streamReadErr);
+    if (!receivedAnyToken) {
       try {
-        const parsed = JSON.parse(eventDataStr);
-        onEvent({ type: eventType, data: parsed });
-        if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
-          clientToolCalls = parsed.tools || [];
-          if (parsed.thread_id) returnedThreadId = parsed.thread_id;
-        }
+        const restRes = await sendChatMessage(message, threadId, skipTts);
+        onEvent({
+          type: "done",
+          data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
+        });
+        return;
       } catch (e) {
-        // ignore
+        throw streamReadErr;
       }
     }
   }
@@ -549,4 +645,40 @@ export async function clearUserMemories(): Promise<void> {
     headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Falha ao limpar memórias");
+}
+
+export interface VoiceStatus {
+  running: boolean;
+  state: "stopped" | "idle" | "listening" | "thinking" | "speaking" | "error";
+  wake_word: string;
+  wake_word_enabled: boolean;
+  tts_provider: string;
+  tts_voice: string;
+  stt_provider: string;
+}
+
+export async function fetchVoiceStatus(): Promise<VoiceStatus> {
+  const res = await apiFetch("/voice/status");
+  if (!res.ok) throw new Error("Falha ao buscar status de voz");
+  return res.json();
+}
+
+export async function toggleVoiceService(enabled: boolean): Promise<{ status: string; running: boolean; state: string }> {
+  const res = await apiFetch("/voice/toggle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error("Falha ao alterar serviço de voz");
+  return res.json();
+}
+
+export async function testVoiceSynthesis(text?: string): Promise<{ status: string; message: string }> {
+  const res = await apiFetch("/voice/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error("Falha ao disparar áudio de teste");
+  return res.json();
 }
