@@ -24,6 +24,10 @@ import {
   Smartphone,
   Globe,
   RefreshCw,
+  Mic,
+  Key,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Settings } from "../types";
 import {
@@ -32,6 +36,8 @@ import {
   fetchUserMemories,
   clearUserMemories,
   CLOUD_API,
+  testVoiceSynthesis,
+  toggleVoiceService,
 } from "../services/api";
 import { PairingPanel } from "./PairingPanel";
 
@@ -101,6 +107,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return settings?.wake_word_enabled ?? true;
   });
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [ttsProvider, setTtsProvider] = useState<string>(() => {
+    return settings?.tts_provider || localStorage.getItem("charlie_tts_provider") || "elevenlabs";
+  });
+  const [elevenLabsKey, setElevenLabsKey] = useState<string>(() => {
+    return localStorage.getItem("charlie_elevenlabs_key") || "";
+  });
+  const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState<string>(() => {
+    return localStorage.getItem("charlie_elevenlabs_voice_id") || "";
+  });
+  const [showElevenKey, setShowElevenKey] = useState(false);
+  const [testingVoice, setTestingVoice] = useState(false);
+  const [voiceTestToast, setVoiceTestToast] = useState<{ msg: string; error?: boolean } | null>(null);
+
+  const handleTestVoice = async () => {
+    setTestingVoice(true);
+    setVoiceTestToast(null);
+    try {
+      const res = await testVoiceSynthesis("Olá! Esta é uma demonstração da voz configurada para o Charlie.");
+      setVoiceTestToast({ msg: res.message || "Áudio reproduzido com sucesso!" });
+    } catch (err: any) {
+      setVoiceTestToast({ msg: err.message || "Falha ao reproduzir áudio de teste.", error: true });
+    } finally {
+      setTestingVoice(false);
+      setTimeout(() => setVoiceTestToast(null), 4000);
+    }
+  };
 
   // 5. Automações & Casa Inteligente (Home Assistant)
   const [homeAssistantUrl, setHomeAssistantUrl] = useState(() => {
@@ -284,9 +316,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     localStorage.setItem("charlie_minimize_tray", String(minimizeToTray));
     localStorage.setItem("charlie_rag_tokens", String(ragTokenLimit));
 
+    localStorage.setItem("charlie_tts_provider", ttsProvider);
+    localStorage.setItem("charlie_elevenlabs_key", elevenLabsKey);
+    localStorage.setItem("charlie_elevenlabs_voice_id", elevenLabsVoiceId);
+
+    try {
+      await toggleVoiceService(wakeWordEnabled);
+    } catch {
+      // Continua se offline
+    }
+
     try {
       await updateSettings({
+        tts_provider: ttsProvider,
         tts_voice: selectedVoice,
+        elevenlabs_api_key: elevenLabsKey,
+        elevenlabs_voice_id: elevenLabsVoiceId,
         wake_word_enabled: wakeWordEnabled,
         home_assistant_url: homeAssistantUrl,
       });
@@ -914,56 +959,178 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
 
-                {/* Seleção de Voz */}
+                {/* Provedor de Voz TTS */}
                 <div className="space-y-2">
                   <span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
-                    Vozes Neurais Disponíveis:
+                    Motor de Síntese de Voz (TTS):
                   </span>
                   <div className="grid grid-cols-2 gap-2.5">
-                    {voicesList.map((v) => {
-                      const isSelected = selectedVoice === v.id;
-                      return (
-                        <div
-                          key={v.id}
-                          onClick={() => setSelectedVoice(v.id)}
-                          className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                            isSelected
-                              ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
-                              : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
-                          }`}
-                        >
-                          <div className="min-w-0 pr-1">
-                            <div className="font-semibold text-xs text-[var(--text-primary)] truncate">
-                              {v.name}
-                            </div>
-                            <div className="text-[10px] text-[var(--text-muted)] truncate">{v.desc}</div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePreviewVoice(v.id);
-                            }}
-                            disabled={isPlayingPreview}
-                            className="p-1.5 rounded-lg hover:bg-[var(--accent-soft-bg)] text-[var(--accent)] transition-all shrink-0 cursor-pointer"
-                            title="Ouvir demonstração"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                    <div
+                      onClick={() => setTtsProvider("elevenlabs")}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        ttsProvider === "elevenlabs"
+                          ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
+                          : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        ElevenLabs (Ultra-Realista)
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                        Alta fidelidade, expressividade e voz natural
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setTtsProvider("edge")}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        ttsProvider === "edge"
+                          ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
+                          : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        Edge-TTS (Gratuito)
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                        Vozes neurais nativas da Microsoft sem custos
+                      </div>
+                    </div>
                   </div>
                 </div>
+
+                {/* Configurações específicas do ElevenLabs */}
+                {ttsProvider === "elevenlabs" && (
+                  <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[var(--text-primary)] text-xs flex items-center gap-1.5">
+                        <Key className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        Credenciais da ElevenLabs
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleTestVoice}
+                        disabled={testingVoice}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-medium bg-[var(--accent)] text-[var(--accent-fg)] hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {testingVoice ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Play className="w-3 h-3 fill-current" />
+                        )}
+                        <span>{testingVoice ? "Gerando..." : "Testar Voz"}</span>
+                      </button>
+                    </div>
+
+                    {voiceTestToast && (
+                      <div
+                        className={`text-[11px] p-2 rounded-lg flex items-center gap-1.5 ${
+                          voiceTestToast.error
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        }`}
+                      >
+                        {voiceTestToast.error ? (
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>{voiceTestToast.msg}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold text-[var(--text-secondary)] block">
+                        ElevenLabs API Key
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showElevenKey ? "text" : "password"}
+                          value={elevenLabsKey}
+                          onChange={(e) => setElevenLabsKey(e.target.value)}
+                          placeholder="Cole sua chave xi-api-key..."
+                          className="w-full text-xs px-3 py-1.5 pr-8 rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowElevenKey(!showElevenKey)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                        >
+                          {showElevenKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold text-[var(--text-secondary)] block">
+                        Voice ID (Identificador da Voz)
+                      </label>
+                      <input
+                        type="text"
+                        value={elevenLabsVoiceId}
+                        onChange={(e) => setElevenLabsVoiceId(e.target.value)}
+                        placeholder="Ex: 21m00Tcm4TlvDq8ikWAM ou ID da sua voz clonada"
+                        className="w-full text-xs px-3 py-1.5 rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Seleção de Voz Edge-TTS */}
+                {ttsProvider === "edge" && (
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
+                      Vozes Neurais Disponíveis:
+                    </span>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {voicesList.map((v) => {
+                        const isSelected = selectedVoice === v.id;
+                        return (
+                          <div
+                            key={v.id}
+                            onClick={() => setSelectedVoice(v.id)}
+                            className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                              isSelected
+                                ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
+                                : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
+                            }`}
+                          >
+                            <div className="min-w-0 pr-1">
+                              <div className="font-semibold text-xs text-[var(--text-primary)] truncate">
+                                {v.name}
+                              </div>
+                              <div className="text-[10px] text-[var(--text-muted)] truncate">{v.desc}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePreviewVoice(v.id);
+                              }}
+                              disabled={isPlayingPreview}
+                              className="p-1.5 rounded-lg hover:bg-[var(--accent-soft-bg)] text-[var(--accent)] transition-all shrink-0 cursor-pointer"
+                              title="Ouvir demonstração"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Palavra de Ativação */}
                 <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center justify-between">
                   <div>
-                    <span className="font-semibold text-[var(--text-primary)] block text-xs">
-                      Palavra de Ativação ("Charlie")
+                    <span className="font-semibold text-[var(--text-primary)] block text-xs flex items-center gap-1.5">
+                      <Mic className="w-3.5 h-3.5 text-[var(--accent)]" />
+                      Palavra de Ativação ("Hey Jarvis")
                     </span>
                     <span className="text-[10.5px] text-[var(--text-muted)]">
-                      Permite chamar o assistente pelo microfone em viva-voz
+                      Escuta contínua em segundo plano via OpenWakeWord com resposta automática por voz
                     </span>
                   </div>
                   <input
