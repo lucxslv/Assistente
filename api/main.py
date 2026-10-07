@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import close_db_pool, init_db_pool
-from api.routes import auth, chat, messages, settings, system, threads, tools, agent, admin, pair, device
+from api.routes import auth, chat, messages, settings, system, threads, tools, agent, admin, pair, device, voice
 
 logger = logging.getLogger("charlie.api")
 logging.basicConfig(level=logging.INFO)
@@ -94,6 +94,7 @@ app.include_router(agent.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(pair.router, prefix="/api")
 app.include_router(device.router, prefix="/api")
+app.include_router(voice.router, prefix="/api")
 
 
 @app.get("/")
