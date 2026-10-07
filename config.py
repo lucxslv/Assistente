@@ -25,7 +25,7 @@ class Config:
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
@@ -35,6 +35,7 @@ class Config:
 
     # Áudio
     stt_provider: str = os.getenv("STT_PROVIDER", "whisper")
+    groq_stt_model: str = os.getenv("GROQ_STT_MODEL", "whisper-large-v3")
     whisper_model: str = os.getenv("WHISPER_MODEL", "base")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "auto")
     whisper_compute_type: str = os.getenv("WHISPER_COMPUTE_TYPE", "default")
@@ -45,7 +46,10 @@ class Config:
     stt_max_duration: float = float(os.getenv("STT_MAX_DURATION", "30.0"))
     tts_provider: str = os.getenv("TTS_PROVIDER", "edge")
     tts_voice: str = os.getenv("TTS_VOICE", "pt-BR-FranciscaNeural")
-    wake_word: str = os.getenv("WAKE_WORD", "assistente")
+    elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
+    elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "")
+    elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    wake_word: str = os.getenv("WAKE_WORD", "hey_jarvis")
     wake_word_enabled: bool = _bool(os.getenv("WAKE_WORD_ENABLED"), False)
 
     # Integrações
