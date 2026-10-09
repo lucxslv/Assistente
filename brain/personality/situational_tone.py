@@ -248,6 +248,9 @@ def analyze_situational_context(
         ctx.interaction_type = "emotional_sharing"
     elif any(it in text_lower for it in idea_triggers):
         ctx.interaction_type = "idea_exploration"
+        if "outro nível" in text_lower or "outro nivel" in text_lower:
+            ctx.tone_mode = "playful"
+
     elif has_laughter or any(bp in text_lower for bp in banter_phrases) or ctx.explicit_tone_request == "playful":
         ctx.interaction_type = "playful_banter"
     elif any(text_lower.startswith(prefix) for prefix in task_action_prefixes) or "encontra os bugs" in text_lower:
@@ -283,10 +286,11 @@ def analyze_situational_context(
         ctx.sarcasm_allowed = False
         ctx.teasing_allowed = False
         ctx.tone_mode = "supportive"
-    elif ctx.explicit_tone_request == "playful" or ctx.interaction_type == "playful_banter":
+    elif ctx.explicit_tone_request == "playful" or ctx.interaction_type == "playful_banter" or ctx.tone_mode == "playful":
         ctx.sarcasm_allowed = True
         ctx.teasing_allowed = True
         ctx.tone_mode = "playful"
+
     elif ctx.interaction_type == "task_execution":
         ctx.tone_mode = "serious"
     else:
