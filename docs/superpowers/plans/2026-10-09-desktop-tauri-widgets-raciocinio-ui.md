@@ -42,9 +42,9 @@
 
 ## 2. Ordem de Execução
 
-- [ ] **Etapa 1:** Atualizar interfaces em `desktop/src/types.ts`.
-- [ ] **Etapa 2:** Implementar suporte a SSE para `widget` e `thought` em `desktop/src/services/api.ts`.
-- [ ] **Etapa 3:** Criar `desktop/src/components/widgets/WidgetRegistry.tsx` com `WidgetErrorBoundary`.
-- [ ] **Etapa 4:** Criar `desktop/src/components/ThinkingBlock.tsx`.
-- [ ] **Etapa 5:** Atualizar `desktop/src/components/ChatArea.tsx` e `desktop/src/App.tsx`.
-- [ ] **Etapa 6:** Validar com `npm --prefix desktop run build` e commitar em etapas rastreáveis.
+- [x] **Etapa 1:** Atualizar interfaces em `desktop/src/types.ts`.
+- [x] **Etapa 2:** Implementar suporte a SSE para `widget` e `thought` em `desktop/src/services/api.ts` e `desktop/src/App.tsx`.
+- [x] **Etapa 3:** Criar `desktop/src/components/widgets/WidgetRegistry.tsx` com `WidgetErrorBoundary`.
+- [x] **Etapa 4:** Criar `desktop/src/components/ThinkingBlock.tsx`.
+- [x] **Etapa 5:** Atualizar `desktop/src/components/ChatArea.tsx` e `desktop/src/App.tsx`.
+- [x] **Etapa 6:** Validar com `npm --prefix desktop run build` e commitar em etapas rastreáveis.
