@@ -656,10 +656,92 @@ class ToolRegistry:
             scope=ToolScope.DEVICE,
         )
 
+        # Ferramentas de Processos em Segundo Plano
+        from tools import background_process
+        self.register(
+            name="start_background_process",
+            handler=background_process.start_background_process,
+            description="Inicia um processo ou serviço em segundo plano sem bloquear a execução do assistente (ex: servidores web, scripts longos).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Comando a ser executado no terminal"},
+                    "working_dir": {"type": "string", "description": "Diretório de trabalho opcional"},
+                    "name": {"type": "string", "description": "Nome descritivo opcional do processo"},
+                },
+                "required": ["command"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+        self.register(
+            name="get_background_process_logs",
+            handler=background_process.get_background_process_logs,
+            description="Lê as últimas saídas/logs de um processo em segundo plano.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "process_id": {"type": "string", "description": "ID do processo retornado ao iniciar"},
+                    "max_lines": {"type": "integer", "description": "Número máximo de linhas finais para ler (padrão 40)"},
+                },
+                "required": ["process_id"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+        self.register(
+            name="list_background_processes",
+            handler=background_process.list_background_processes,
+            description="Lista todos os processos ativos em segundo plano gerenciados pelo assistente.",
+            scope=ToolScope.DEVICE,
+        )
+        self.register(
+            name="kill_background_process",
+            handler=background_process.kill_background_process,
+            description="Encerra um processo em segundo plano e seus subprocessos.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "process_id": {"type": "string", "description": "ID do processo a encerrar"},
+                },
+                "required": ["process_id"],
+            },
+            scope=ToolScope.DEVICE,
+        )
+
+        # Ferramentas universais MCP (Model Context Protocol)
+        from tools.mcp_client import mcp_client
+        self.register(
+            name="call_mcp_tool",
+            handler=mcp_client.call_tool,
+            description="Invoca ferramentas de servidores MCP externos universais (Playwright, GitHub, Postgres, Filesystem).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "tool_name": {"type": "string", "description": "Nome da ferramenta MCP"},
+                    "arguments": {"type": "object", "description": "Argumentos da ferramenta"},
+                },
+                "required": ["tool_name", "arguments"],
+            },
+            scope=ToolScope.CLOUD,
+        )
+
     async def _wrap_save_user_memory(self, fact: str, category: str = "general") -> str:
         clean_fact = (fact or "").strip()
         if not clean_fact:
             return "Erro: O fato a ser memorizado não pode ser vazio."
+
+        # Blindagem contra memorização e vazamento de segredos/tokens sensíveis
+        import re
+        sensitive_patterns = [
+            r"sk-[a-zA-Z0-9_\-]{20,}",
+            r"AIzaSy[a-zA-Z0-9_\-]{20,}",
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+            r"(?:password|senha|secret|token)\s*[:=]\s*['\"][^'\"]{8,}['\"]",
+        ]
+        for pat in sensitive_patterns:
+            if re.search(pat, clean_fact, re.IGNORECASE):
+                logger.warning(f"[SEGURANÇA] Bloqueada tentativa de memorizar credencial/segredo sensível.")
+                return "Segurança: O fato contém padrões de chaves, segredos ou senhas confidenciais e foi bloqueado para evitar vazamento em memória permanente."
+
         try:
             from api.routes.auth import current_user_id_var
             uid = current_user_id_var.get()

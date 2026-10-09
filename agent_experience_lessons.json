@@ -1,0 +1,247 @@
+[
+  {
+    "id": "les_touch_windows",
+    "intentPattern": "criação de arquivo vazio no terminal",
+    "rootCauseError": "Comando 'touch' não é nativo do Windows PowerShell ou CMD.",
+    "successfulCorrection": "Use a ferramenta 'write_file' diretamente ou o comando PowerShell 'New-Item -ItemType File -Force'.",
+    "tags": [
+      "windows",
+      "powershell",
+      "touch",
+      "arquivo"
+    ],
+    "createdAt": "2026-10-07T04:13:48.179008+00:00"
+  },
+  {
+    "id": "les_grep_windows",
+    "intentPattern": "busca de padrão de texto em arquivos",
+    "rootCauseError": "Comando 'grep' falha no Windows sem Git Bash instalado.",
+    "successfulCorrection": "Use 'Select-String -Pattern <termo>' no PowerShell ou scripts Python.",
+    "tags": [
+      "windows",
+      "powershell",
+      "grep",
+      "busca"
+    ],
+    "createdAt": "2026-10-07T04:13:48.179008+00:00"
+  },
+  {
+    "id": "les_encoding_utf8",
+    "intentPattern": "escrita de scripts ou arquivos com caracteres acentuados",
+    "rootCauseError": "Codificação ANSI/CP1252 padrão do Windows corrompe acentos em arquivos gerados.",
+    "successfulCorrection": "Sempre passe encoding UTF-8 explícito ou use 'Out-File -Encoding utf8'.",
+    "tags": [
+      "windows",
+      "encoding",
+      "utf8",
+      "acentos"
+    ],
+    "createdAt": "2026-10-07T04:13:48.179008+00:00"
+  },
+  {
+    "id": "les_pip_venv",
+    "intentPattern": "instalação de dependências python",
+    "rootCauseError": "Executar 'pip install' global pode falhar por falta de permissão ou poluir o sistema.",
+    "successfulCorrection": "Use sempre o Python do ambiente virtual '.venv\\Scripts\\python.exe -m pip' ou o gerenciador 'uv add'.",
+    "tags": [
+      "python",
+      "pip",
+      "venv",
+      "uv"
+    ],
+    "createdAt": "2026-10-07T04:13:48.179008+00:00"
+  },
+  {
+    "id": "les_rm_rf",
+    "intentPattern": "remoção recursiva de diretórios",
+    "rootCauseError": "'rm -rf' não funciona no CMD padrão do Windows.",
+    "successfulCorrection": "Use PowerShell 'Remove-Item -Recurse -Force' ou rmdir /s /q.",
+    "tags": [
+      "windows",
+      "rm",
+      "powershell",
+      "pastas"
+    ],
+    "createdAt": "2026-10-07T04:13:48.179008+00:00"
+  },
+  {
+    "id": "les_a70a5521",
+    "intentPattern": "Executar script python com venv",
+    "rootCauseError": "python: can't open file: No such file or directory",
+    "successfulCorrection": "Utilizar caminho absoluto .venv\\Scripts\\python.exe script.py",
+    "tags": [
+      "python",
+      "venv",
+      "windows"
+    ],
+    "createdAt": "2026-10-07T04:15:58.204883+00:00"
+  },
+  {
+    "id": "les_7a7cbd4f",
+    "intentPattern": "Executar script python com venv",
+    "rootCauseError": "python: can't open file: No such file or directory",
+    "successfulCorrection": "Utilizar caminho absoluto .venv\\Scripts\\python.exe script.py",
+    "tags": [
+      "python",
+      "venv",
+      "windows"
+    ],
+    "createdAt": "2026-10-07T04:16:24.917203+00:00"
+  },
+  {
+    "id": "les_ed28d4ab",
+    "intentPattern": "Executar script python com venv",
+    "rootCauseError": "python: can't open file: No such file or directory",
+    "successfulCorrection": "Utilizar caminho absoluto .venv\\Scripts\\python.exe script.py",
+    "tags": [
+      "python",
+      "venv",
+      "windows"
+    ],
+    "createdAt": "2026-10-07T04:19:06.142696+00:00"
+  },
+  {
+    "id": "les_50628f34",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T04:46:21.643674+00:00"
+  },
+  {
+    "id": "les_0599ad4e",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T04:47:03.185983+00:00"
+  },
+  {
+    "id": "les_a627c3b5",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T04:47:21.901573+00:00"
+  },
+  {
+    "id": "les_5a9f5682",
+    "intentPattern": "Executar script python com venv",
+    "rootCauseError": "python: can't open file: No such file or directory",
+    "successfulCorrection": "Utilizar caminho absoluto .venv\\Scripts\\python.exe script.py",
+    "tags": [
+      "python",
+      "venv",
+      "windows"
+    ],
+    "createdAt": "2026-10-07T05:16:25.768682+00:00"
+  },
+  {
+    "id": "les_0e4da9f5",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T05:51:06.733357+00:00"
+  },
+  {
+    "id": "les_a4fda602",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T06:06:14.507126+00:00"
+  },
+  {
+    "id": "les_34a86495",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T06:13:24.907163+00:00"
+  },
+  {
+    "id": "les_e2266683",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-07T17:51:42.625868+00:00"
+  },
+  {
+    "id": "les_64c50b79",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-09T17:33:55.514386+00:00"
+  },
+  {
+    "id": "les_1dbcb70f",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-09T17:51:48.346016+00:00"
+  },
+  {
+    "id": "les_ff55f311",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-09T17:53:11.767623+00:00"
+  },
+  {
+    "id": "les_47667539",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-09T18:53:51.285600+00:00"
+  },
+  {
+    "id": "les_79710134",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-09T18:54:32.724808+00:00"
+  }
+]

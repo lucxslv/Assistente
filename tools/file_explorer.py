@@ -29,6 +29,11 @@ def is_blocked_path(p: Path) -> tuple[bool, str]:
     repo_root = Path.cwd().resolve()
     try:
         resolved = p.resolve()
+        # Bloqueio de pastas críticas do sistema operacional
+        system_roots = {"windows", "system32", "syswow64", "$recycle.bin", "system volume information"}
+        if any(part.lower() in system_roots for part in resolved.parts):
+            return True, "Acesso negado: diretórios críticos do sistema operacional são protegidos contra manipulação."
+
         if resolved == repo_root or repo_root in resolved.parents:
             rel_parts = [part.lower() for part in resolved.relative_to(repo_root).parts]
             if not rel_parts:
@@ -135,6 +140,56 @@ def resolve_friendly_path(path: str) -> Path:
         if lower.startswith(prefix):
             sub = clean_p[len(prefix):].lstrip("/\\")
             return pics_dir / sub
+
+    # Normalização de caminhos genéricos do Windows que o LLM pode inferir
+    # (ex: C:\Users\Public\Documents\..., C:\Users\User\Documents\..., ou caminhos locais quando OneDrive está ativo)
+    norm_slash = clean_p.replace("\\", "/").strip("/")
+    parts = norm_slash.split("/")
+    if len(parts) >= 3 and parts[0].endswith(":") and parts[1].lower() == "users":
+        # Estrutura C:/Users/<user>/<folder>/...
+        if len(parts) >= 4:
+            special_name = parts[3].lower()
+            if special_name in ("documents", "documentos"):
+                sub = "/".join(parts[4:])
+                return (docs_dir / sub).resolve() if sub else docs_dir
+            elif special_name in ("desktop", "área de trabalho", "area de trabalho"):
+                sub = "/".join(parts[4:])
+                return (desktop_dir / sub).resolve() if sub else desktop_dir
+            elif special_name in ("downloads",):
+                sub = "/".join(parts[4:])
+                return (downloads_dir / sub).resolve() if sub else downloads_dir
+            elif special_name in ("pictures", "imagens", "fotos"):
+                sub = "/".join(parts[4:])
+                return (pics_dir / sub).resolve() if sub else pics_dir
+
+    norm_lower = norm_slash.lower()
+    for doc_token in ("users/public/documents", "users/public/documentos", "users/default/documents", "users/default/documentos"):
+        if doc_token in norm_lower:
+            idx = norm_lower.find(doc_token) + len(doc_token)
+            sub = norm_slash[idx:].lstrip("/")
+            return (docs_dir / sub).resolve() if sub else docs_dir
+
+    for desk_token in ("users/public/desktop", "users/default/desktop", "users/public/área de trabalho", "users/public/area de trabalho"):
+        if desk_token in norm_lower:
+            idx = norm_lower.find(desk_token) + len(desk_token)
+            sub = norm_slash[idx:].lstrip("/")
+            return (desktop_dir / sub).resolve() if sub else desktop_dir
+
+    for down_token in ("users/public/downloads", "users/default/downloads"):
+        if down_token in norm_lower:
+            idx = norm_lower.find(down_token) + len(down_token)
+            sub = norm_slash[idx:].lstrip("/")
+            return (downloads_dir / sub).resolve() if sub else downloads_dir
+
+    # Se OneDrive estiver ativo e gerenciando Documentos, redireciona qualquer path
+    # apontando para C:/Users/<usuario>/Documents diretamente para docs_dir (OneDrive/Documentos)
+    try:
+        norm_home_docs = (home / "Documents").as_posix().lower()
+        if norm_lower.startswith(norm_home_docs) and docs_dir != (home / "Documents"):
+            sub = norm_slash[len(norm_home_docs):].lstrip("/")
+            return (docs_dir / sub).resolve() if sub else docs_dir
+    except Exception:
+        pass
 
     # 1. Tenta o caminho direto se for absoluto ou já existir
     direct = Path(clean_p).resolve()
@@ -274,6 +329,7 @@ def write_file(path: str, content: str) -> str:
         if blocked:
             return reason
 
+        target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Sucesso: Arquivo '{target.name}' foi escrito com sucesso em '{target.parent}'."
