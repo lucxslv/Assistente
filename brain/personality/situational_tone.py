@@ -224,9 +224,11 @@ def analyze_situational_context(
     ]
     idea_triggers = [
         "tive uma ideia", "tive uma idéia", "estava pensando numa", "estava pensando em",
-        "pensando em criar", "e se a gente fizesse", "e se a gente", "e se nós", "que tal se",
-        "ideia absurda", "ideia genial", "insight sobre", "vamos a outro nível", "vamos a outro nivel"
+        "pensando em criar", "pensando numa", "pensando em", "e se a gente fizesse",
+        "e se a gente", "e se nós", "que tal se", "ideia absurda", "ideia genial",
+        "insight sobre", "vamos a outro nível", "vamos a outro nivel"
     ]
+
     laughter_tokens = {"kkk", "kkkk", "kkkkk", "kakaka", "kakakaka", "hahaha", "rsrs"}
     has_laughter = any(tok in text_lower for tok in laughter_tokens)
     banter_phrases = ["tu é muito idiota", "voce é muito idiota", "tu é muito bobo", "voce é muito bobo", "vamos zoar"]
