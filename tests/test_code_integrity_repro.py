@@ -6,7 +6,7 @@ Fase 1 (RED): Congela os casos de falha demonstrando a causa raiz dos defeitos a
 import re
 import pytest
 from brain.agent.task_graph import TaskNode
-from brain.agent.verifier import Verifier
+from brain.agent.verifier import Verifier, VerificationCheckType
 
 
 def apply_legacy_pipeline_cleanup(final_reply: str) -> str:
@@ -81,10 +81,10 @@ def test_reproduce_defect_3_verifier_gives_false_positive_stamp_without_tests():
 
     passed, evidence = Verifier._verify_code(task, tool_result, {})
 
-    # Na implementação legada, mesmo sem testes executados, ele emite o selo de testes:
-    assert evidence.summary == "Compilação/Testes validados com sucesso.", (
-        "Causa raiz confirmada: Verifier atribui selo 'Testes validados' sem evidência de testes executados!"
-    )
+    # Com a correção arquitetural honesta (Task 3), ele NÃO atribui mais o selo falso de testes:
+    assert evidence.summary != "Compilação/Testes validados com sucesso."
+    assert "Execução de runtime não realizada" in evidence.summary
+    assert evidence.type == VerificationCheckType.COMPILATION.value
 
 
 def test_pipeline_must_preserve_raw_typescript_and_json():
