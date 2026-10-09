@@ -30,15 +30,27 @@ class _db_connection_scope:
     def __init__(self, target):
         self.target = target
         self.conn = None
+        self._ctx = None
 
     async def __aenter__(self):
         if hasattr(self.target, "acquire"):
-            self.conn = await self.target.acquire()
-            return self.conn
+            acq = self.target.acquire()
+            if hasattr(acq, "__aenter__"):
+                self._ctx = acq
+                self.conn = await self._ctx.__aenter__()
+                return self.conn
+            elif asyncio.iscoroutine(acq):
+                self.conn = await acq
+                return self.conn
+            else:
+                self.conn = acq
+                return self.conn
         return self.target
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.conn and hasattr(self.target, "release"):
+        if self._ctx:
+            await self._ctx.__aexit__(exc_type, exc_val, exc_tb)
+        elif self.conn and hasattr(self.target, "release"):
             try:
                 await self.target.release(self.conn)
             except Exception:
@@ -87,7 +99,7 @@ async def ensure_session_record(
     user_email: Optional[str] = None,
     prompt: Optional[str] = None,
 ) -> str:
-    """Garante a existência da sessão em chat_sessions e sincroniza com a tabela Thread."""
+    """Garante a existência da sessão em chat_sessions e sincroniza com a tabela Thread com validação de titularidade."""
     if not pool:
         return session_id
 
@@ -114,14 +126,21 @@ async def ensure_session_record(
                     s_uuid, title, str(user_id), now
                 )
             else:
+                existing_user = existing["user_id"]
+                if existing_user and existing_user != str(user_id) and existing_user != user_email:
+                    logger.warning(
+                        f"[chat_persistence] Violação de titularidade: Usuário '{user_id}' tentou acessar sessão '{session_id}' pertencente a '{existing_user}'"
+                    )
+                    raise PermissionError("Acesso negado: esta conversa pertence a outro usuário.")
+
                 if existing["title"] in ("Nova Conversa", "Novo Chat", "Conversa sem título", None, "") and prompt and prompt.strip():
                     await conn.execute(
-                        "UPDATE public.chat_sessions SET title = $1, updated_at = $2, user_id = COALESCE(user_id, $3) WHERE id = $4",
+                        "UPDATE public.chat_sessions SET title = $1, updated_at = $2, user_id = COALESCE(user_id, $3) WHERE id = $4 AND (user_id IS NULL OR user_id = $3)",
                         title, now, str(user_id), s_uuid
                     )
                 else:
                     await conn.execute(
-                        "UPDATE public.chat_sessions SET updated_at = $1, user_id = COALESCE(user_id, $2) WHERE id = $3",
+                        "UPDATE public.chat_sessions SET updated_at = $1, user_id = COALESCE(user_id, $2) WHERE id = $3 AND (user_id IS NULL OR user_id = $2)",
                         now, str(user_id), s_uuid
                     )
 
@@ -133,7 +152,7 @@ async def ensure_session_record(
                 except (ValueError, TypeError):
                     pass
 
-                thread_row = await conn.fetchrow('SELECT id, name, "userId" FROM "Thread" WHERE id = $1', s_uuid)
+                thread_row = await conn.fetchrow('SELECT id, name, "userId", "userIdentifier" FROM "Thread" WHERE id = $1', s_uuid)
                 if not thread_row:
                     await conn.execute(
                         """
@@ -144,6 +163,14 @@ async def ensure_session_record(
                         s_uuid, title, now, u_uuid, user_email
                     )
                 else:
+                    t_uid = str(thread_row.get("userId") or "")
+                    t_uident = thread_row.get("userIdentifier")
+                    if (t_uid and t_uid != str(user_id)) and (t_uident and t_uident != user_email and t_uident != str(user_id)):
+                        logger.warning(
+                            f"[chat_persistence] Violação de titularidade em Thread: req={user_id}, owner={t_uid}/{t_uident}"
+                        )
+                        raise PermissionError("Acesso negado: esta conversa pertence a outro usuário.")
+
                     if thread_row["name"] in ("Nova Conversa", "Novo Chat", "Conversa sem título", None, "") and prompt and prompt.strip():
                         await conn.execute(
                             'UPDATE "Thread" SET name = $1, "updatedAt" = $2 WHERE id = $3',
@@ -154,9 +181,13 @@ async def ensure_session_record(
                             'UPDATE "Thread" SET "updatedAt" = $1 WHERE id = $2',
                             now, s_uuid
                         )
+            except PermissionError:
+                raise
             except Exception as th_err:
                 logger.debug("Aviso não-crítico ao sincronizar Thread: %s", th_err)
 
+    except PermissionError:
+        raise
     except Exception as e:
         logger.error(f"[chat_persistence] Falha ao registrar sessão {session_id}: {e}")
 
@@ -474,8 +505,9 @@ async def load_chat_history(
     pool: asyncpg.Pool,
     session_id: str,
     limit: int = 30,
+    user_id: Optional[str] = None,
 ) -> list[dict]:
-    """Carrega o histórico real de mensagens a partir de chat_messages (com fallback para Step)."""
+    """Carrega o histórico real de mensagens com validação de titularidade do usuário."""
     if not pool or not session_id:
         return []
 
@@ -491,6 +523,18 @@ async def load_chat_history(
 
     try:
         async with _db_connection_scope(pool) as conn:
+            # 0. Validação de Titularidade da Sessão
+            if user_id:
+                sess_owner = await conn.fetchrow(
+                    "SELECT user_id FROM public.chat_sessions WHERE id = $1",
+                    s_uuid
+                )
+                if sess_owner and sess_owner["user_id"] and sess_owner["user_id"] != str(user_id):
+                    logger.warning(
+                        f"[chat_persistence] Tentativa de ler histórico de outro usuário: sess={session_id}, req_user={user_id}, owner={sess_owner['user_id']}"
+                    )
+                    return []
+
             # 1. Tenta carregar prioritariamente de chat_messages
             rows = await conn.fetch(
                 """

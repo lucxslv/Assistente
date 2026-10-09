@@ -43,13 +43,13 @@ class ChatRequest(BaseModel):
     images: Optional[list[dict]] = None
 
 
-async def _load_thread_history(thread_id: str, limit: int = 30) -> list[dict]:
-    """Carrega o histórico real de mensagens da conversa (chat_messages com fallback para Step)."""
+async def _load_thread_history(thread_id: str, limit: int = 30, user_id: Optional[str] = None) -> list[dict]:
+    """Carrega o histórico real de mensagens da conversa (chat_messages com validação de titularidade)."""
     pool = await get_or_init_db_pool()
     if not pool or not thread_id:
         return []
     from api.services.chat_persistence import load_chat_history
-    return await load_chat_history(pool, thread_id, limit=limit)
+    return await load_chat_history(pool, thread_id, limit=limit, user_id=user_id)
 
 
 def _dispatch_save_message(
@@ -92,7 +92,7 @@ async def _prepare_session_and_store_user_message(
     user: Optional[dict] = None,
     background_tasks: Optional[BackgroundTasks] = None,
 ) -> str:
-    """Garante a existência da sessão em chat_sessions e persiste a mensagem do usuário (role: user)."""
+    """Garante a existência da sessão em chat_sessions e persiste a mensagem do usuário (role: user) com validação de titularidade."""
     if not user or not user.get("id"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -112,8 +112,15 @@ async def _prepare_session_and_store_user_message(
 
     if pool:
         from api.services.chat_persistence import ensure_session_record
-        # Garante a existência imediata da sessão para integridade e FK
-        await ensure_session_record(pool, session_id=sid, user_id=u_id_str, user_email=u_email, prompt=message)
+        try:
+            # Garante a existência imediata da sessão para integridade e FK
+            await ensure_session_record(pool, session_id=sid, user_id=u_id_str, user_email=u_email, prompt=message)
+        except PermissionError as pe:
+            logger.warning(f"[chat] Tentativa de invasão ou acesso indevido à sessão {sid} por {u_id_str}: {pe}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado: esta conversa pertence a outro usuário.",
+            )
 
         # Persistência atômica sem duplicação de gravação
         if message and message.strip():
@@ -186,7 +193,7 @@ async def chat_post(
         background_tasks=background_tasks,
     )
 
-    thread_history = await _load_thread_history(thread_id)
+    thread_history = await _load_thread_history(thread_id, user_id=str(user["id"]))
     if not thread_history and req.history:
         thread_history = req.history
 
@@ -263,7 +270,7 @@ async def chat_stream_sse(
     )
     client_ip = _extract_ip(request)
 
-    thread_history = await _load_thread_history(thread_id)
+    thread_history = await _load_thread_history(thread_id, user_id=str(user["id"]))
     if not thread_history and req.history:
         thread_history = req.history
 
@@ -357,8 +364,15 @@ async def chat_ws(websocket: WebSocket):
         platform=platform_name,
     )
 
-    # Apenas o Desktop Tauri é registrado como executor de ferramentas nativas
-    is_desktop_broker_client = (client_type == "desktop")
+    # Valida token inicial se fornecido nos query parameters
+    ws_user = None
+    token = websocket.query_params.get("token")
+    if token:
+        from api.routes.auth import verify_supabase_token
+        ws_user = await verify_supabase_token(token)
+
+    # Apenas o Desktop Tauri AUTENTICADO é registrado como executor de ferramentas nativas
+    is_desktop_broker_client = (client_type == "desktop" and ws_user is not None)
     if is_desktop_broker_client:
         device_broker.register_device_connection(websocket)
 
@@ -375,12 +389,6 @@ async def chat_ws(websocket: WebSocket):
 
     state.subscribe(on_state_change)
     pipeline = get_pipeline()
-
-    ws_user = None
-    token = websocket.query_params.get("token")
-    if token:
-        from api.routes.auth import verify_supabase_token
-        ws_user = await verify_supabase_token(token)
 
     try:
         while True:
@@ -401,6 +409,10 @@ async def chat_ws(websocket: WebSocket):
                 if auth_tok:
                     from api.routes.auth import verify_supabase_token
                     ws_user = await verify_supabase_token(auth_tok)
+                    # Registra no device_broker se autenticado com sucesso e for desktop
+                    if ws_user and client_type == "desktop" and not is_desktop_broker_client:
+                        device_broker.register_device_connection(websocket)
+                        is_desktop_broker_client = True
                     await websocket.send_json({"type": "auth_status", "authenticated": ws_user is not None})
             elif msg_type == "device_tool_result":
                 if is_desktop_broker_client:
@@ -413,7 +425,12 @@ async def chat_ws(websocket: WebSocket):
                     continue
                 text = data.get("message", "")
                 thread_id_in = data.get("thread_id") or data.get("session_id")
-                thread_id = await _prepare_session_and_store_user_message(text, thread_id=thread_id_in, user=ws_user)
+                try:
+                    thread_id = await _prepare_session_and_store_user_message(text, thread_id=thread_id_in, user=ws_user)
+                except HTTPException as he:
+                    logger.warning(f"[chat_ws] Bloqueio de acesso à sessão {thread_id_in} por {ws_user.get('id')}: {he.detail}")
+                    await websocket.send_json({"type": "error", "data": {"error": he.detail}})
+                    continue
                 presence_manager.register_or_heartbeat(client_id=client_id, active_thread_id=thread_id)
 
                 final_reply = ""
