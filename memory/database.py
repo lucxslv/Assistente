@@ -283,6 +283,11 @@ class MemoryDatabase:
                     cur.execute('DELETE FROM "UserMemory" WHERE user_id = %s', (user_id,))
                     cur.execute('DELETE FROM "UserPreference" WHERE user_id = %s', (user_id,))
                     cur.execute('DELETE FROM "UserModel" WHERE user_id = %s', (user_id,))
+                    try:
+                        from brain.personality.user_model import user_model_manager
+                        user_model_manager.invalidate_user(user_id)
+                    except Exception:
+                        pass
                     logger.info("Memórias limpas com sucesso no Supabase para user_id: %s", user_id)
         except Exception as e:
             logger.error("Erro ao limpar memórias no Supabase: %s", e)

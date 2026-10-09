@@ -1256,3 +1256,65 @@ def test_sec_40_atomic_session_ownership_enforcement():
     asyncio.run(run())
 
 
+def test_sec_41_user_model_cache_and_rag_isolation():
+    """SEC-41 - Isolamento de Cache e Memória por Identidade: Partição estrita por user_id e invalidação granular."""
+    start = time.time()
+    from brain.personality.user_model import user_model_manager, UserModel
+    from memory.retrieval.retriever import MemoryRetriever
+    from unittest.mock import MagicMock
+
+    user_alice = "user_alice_test_41"
+    user_bob = "user_bob_test_41"
+
+    # 1. Testa partição estrita de cache em UserModelManager
+    model_alice = user_model_manager.get_user_model(user_alice)
+    model_alice.update_trait("humor", 0.10)  # Alice quer tom sério
+
+    model_bob = user_model_manager.get_user_model(user_bob)
+    model_bob.update_trait("humor", 0.95)  # Bob quer muito humor
+
+    # Garante que as instâncias e valores em cache são isolados por identidade
+    cached_alice = user_model_manager.get_user_model(user_alice)
+    cached_bob = user_model_manager.get_user_model(user_bob)
+    assert cached_alice.communication.humor != cached_bob.communication.humor
+    assert cached_alice.user_id == user_alice
+    assert cached_bob.user_id == user_bob
+
+    # 2. Testa método invalidate_user: invalida apenas Alice
+    assert hasattr(user_model_manager, "invalidate_user"), "user_model_manager não possui método invalidate_user!"
+    user_model_manager.invalidate_user(user_alice)
+
+    # Bob continua no cache, Alice foi removida
+    cache_keys = list(user_model_manager._cache.keys())
+    assert f"user:{user_alice}" not in cache_keys and user_alice not in cache_keys, "Alice não foi removida do cache!"
+    assert (f"user:{user_bob}" in cache_keys or user_bob in cache_keys), "Bob foi indevidamente removido ao invalidar Alice!"
+
+    # 3. Testa isolamento de RAG no MemoryRetriever
+    retriever = MemoryRetriever()
+    from memory.database import db
+    db.get_all_preferences = MagicMock(side_effect=lambda user_id: {"pref_alice": "valor"} if user_id == user_alice else {"pref_bob": "outro"})
+    db.search_memories = MagicMock(return_value=[])
+    db.get_all_facts = MagicMock(side_effect=lambda user_id: ["Fato confidencial da Alice"] if user_id == user_alice else ["Fato público do Bob"])
+
+    summary_bob = retriever.get_summary_context(query="teste", user_id=user_bob)
+    assert "Fato confidencial da Alice" not in summary_bob, "Vazamento de fatos de outro usuário no MemoryRetriever!"
+    assert "pref_alice" not in summary_bob, "Vazamento de preferências de outro usuário no MemoryRetriever!"
+
+    duration = (time.time() - start) * 1000
+    res = TortureResult(
+        test_id="SEC-41",
+        name="Particionamento de Cache e RAG por Identidade Única",
+        category="Security",
+        verdict=Verdict.PASS,
+        details="Caches de UserModel e injeção semântica de RAG isolados por chaves compostas e escopo de identidade imutável.",
+        duration_ms=duration,
+        cwe_id="CWE-639",
+        owasp_category="OWASP-API1:2023",
+        attack_surface="In-Memory Cache & Semantic RAG",
+        severity="High",
+        mitigation="Chaves de cache com prefixo de tenant e método granular invalidate_user.",
+    )
+    security_report.add_result(res)
+
+
+

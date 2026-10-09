@@ -158,6 +158,9 @@ class UserModelManager:
 
     def get_user_model(self, user_id: str = "default") -> UserModel:
         """Carrega o modelo do usuário do cache ou do Supabase (cria o padrão caso não exista)."""
+        key = f"user:{user_id}"
+        if key in self._cache:
+            return self._cache[key]
         if user_id in self._cache:
             return self._cache[user_id]
 
@@ -187,17 +190,18 @@ class UserModelManager:
                         model = UserModel(user_id=user_id)
                         self.save_user_model(model)
 
-                    self._cache[user_id] = model
+                    self._cache[key] = model
                     return model
         except Exception as e:
             logger.error(f"Erro ao carregar UserModel para {user_id}: {e}")
             fallback = UserModel(user_id=user_id)
-            self._cache[user_id] = fallback
+            self._cache[key] = fallback
             return fallback
 
     def save_user_model(self, model: UserModel) -> None:
         """Salva as atualizações do modelo do usuário no Supabase."""
-        self._cache[model.user_id] = model
+        key = f"user:{model.user_id}"
+        self._cache[key] = model
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
@@ -223,6 +227,13 @@ class UserModelManager:
                     logger.info(f"[UserModel] Perfil de {model.user_id} salvo com sucesso no banco.")
         except Exception as e:
             logger.error(f"Erro ao salvar UserModel para {model.user_id}: {e}")
+
+    def invalidate_user(self, user_id: str) -> None:
+        """Remove o modelo do usuário especificado do cache em memória com escopo de identidade."""
+        key = f"user:{user_id}"
+        self._cache.pop(key, None)
+        self._cache.pop(user_id, None)
+        logger.info(f"[UserModel] Cache em memória invalidado para o usuário: {user_id}")
 
 
 # Instância global compartilhada
