@@ -22,6 +22,7 @@ from providers import (
 )
 from collections.abc import AsyncGenerator
 from core.streaming import StreamEvent
+from brain.prompts.prompts import build_system_prompt
 from tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)

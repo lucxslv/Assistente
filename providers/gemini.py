@@ -37,8 +37,13 @@ class GeminiProvider(BaseLLMProvider):
 
         # 1. Tenta com o moderno SDK google-genai
         try:
-            from google import genai
-            from google.genai import types
+            try:
+                from google import genai
+                from google.genai import types
+            except (ImportError, AttributeError):
+                import importlib
+                genai = importlib.import_module("google.genai")
+                types = importlib.import_module("google.genai.types")
 
             client = genai.Client(api_key=config.gemini_api_key)
 
@@ -182,8 +187,13 @@ class GeminiProvider(BaseLLMProvider):
 
             def worker_modern(m_name=current_model_name):
                 try:
-                    from google import genai
-                    from google.genai import types
+                    try:
+                        from google import genai
+                        from google.genai import types
+                    except (ImportError, AttributeError):
+                        import importlib
+                        genai = importlib.import_module("google.genai")
+                        types = importlib.import_module("google.genai.types")
 
                     client = genai.Client(api_key=config.gemini_api_key)
 
