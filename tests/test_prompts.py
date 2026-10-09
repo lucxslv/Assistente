@@ -127,3 +127,19 @@ def test_prompt_idea_exploration_instructs_cocreation(base_profile, empty_tools)
     assert "CURIOSIDADE" in prompt
     assert "CO-CRIAÇÃO" in prompt
 
+
+def test_prompt_injects_technical_honesty_and_completeness(base_profile, empty_tools):
+    """Garante que o prompt injeta diretrizes de honestidade técnica e precisão de código."""
+    prompt = build_system_prompt(
+        profile=base_profile,
+        context="",
+        memory_summary="",
+        tools=empty_tools,
+        user_text="Como implementar Result em TypeScript?",
+    )
+    assert "VERIFICAÇÃO TÉCNICA HONESTA E SEM AFIRMAÇÕES FALSAS" in prompt
+    assert "CÓDIGO GERADO NO CHAT É UMA PROPOSTA CONCEITUAL" in prompt
+    assert "CORRESPONDÊNCIA 1:1 ENTRE EXPLICAÇÃO E CÓDIGO" in prompt
+    assert "AUTOCONTENÇÃO E PRECISÃO DE TIPOS" in prompt
+
+
