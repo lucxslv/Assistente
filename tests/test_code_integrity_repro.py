@@ -119,3 +119,33 @@ def test_pipeline_must_preserve_raw_typescript_and_json():
     assert '"action": "execute"' in clean_content
     assert clean_content.strip() == typescript_input.strip()
 
+
+def test_streaming_message_parser_with_split_chunks():
+    """Valida que o StreamingMessageParser preserva generics mesmo com chunks fragmentados e tags divididas."""
+    from core.message_parser import StreamingMessageParser
+
+    parser = StreamingMessageParser()
+    chunks = [
+        "Aqui está o código: ",
+        "<thou",
+        "ght>avaliando se deve usar Result ou Exception</thought>",
+        "```typescript\n",
+        "export type Result<T, E> = | { ok: true; value: T } | { ok: false; error: E };\n",
+        "```",
+    ]
+
+    emitted_tokens = []
+    for chunk in chunks:
+        token = parser.feed(chunk)
+        if token:
+            emitted_tokens.append(token)
+
+    final_content, meta = parser.flush()
+
+    assert "Result<T, E>" in final_content
+    assert "<thought>" not in final_content
+    assert "</thought>" not in final_content
+    assert "avaliando se deve usar Result" not in final_content
+    assert meta.get("internal_thoughts") == ["avaliando se deve usar Result ou Exception"]
+
+
