@@ -101,3 +101,76 @@ def test_repeated_failure_count_forces_serious_recovery():
     assert ctx.teasing_allowed is False
     assert ctx.tone_mode == "serious"
     assert "FALHAS REPETIDAS" in ctx.to_prompt_guidelines()
+
+
+def test_interaction_type_casual_chat():
+    """Conversa espontânea casual não deve forçar tarefas nem agir como atendente corporativo."""
+    for text in ["e aí Charlie, tudo bem contigo?", "o que você acha da vida?", "olá Charlie!", "como você tá hoje?"]:
+        ctx = analyze_situational_context(text)
+        assert ctx.interaction_type == "casual_chat"
+        assert ctx.requires_task_execution is False
+        assert ctx.requires_structured_output is False
+        guidelines = ctx.to_prompt_guidelines()
+        assert "PRODUTIVIDADE" in guidelines or "ATENDENTE" in guidelines or "CASUAL" in guidelines
+
+
+def test_interaction_type_playful_banter():
+    """Zoeira consentida e risadas recebem tom de cumplicidade sem defensividade."""
+    for text in ["KAKAKAKAKA tu é muito idiota", "tu é muito bobo charlie kkk", "vamos zoar um pouco"]:
+        ctx = analyze_situational_context(text)
+        assert ctx.interaction_type == "playful_banter"
+        assert ctx.sarcasm_allowed is True
+        assert ctx.teasing_allowed is True
+        assert "BRINCADEIRA" in ctx.to_prompt_guidelines() or "CUMPLICIDADE" in ctx.to_prompt_guidelines()
+
+
+def test_interaction_type_idea_exploration():
+    """Compartilhamento de novas ideias desperta curiosidade e co-criação sem pular para execução de tarefas."""
+    for text in [
+        "Tive uma ideia absurda pro MegaBrain",
+        "estava pensando numa arquitetura nova para o cache",
+        "e se a gente fizesse um pipeline diferente para o áudio?",
+    ]:
+        ctx = analyze_situational_context(text)
+        assert ctx.interaction_type == "idea_exploration"
+        assert ctx.requires_task_execution is False
+        guidelines = ctx.to_prompt_guidelines()
+        assert "CURIOSIDADE" in guidelines or "EXPLORAÇÃO" in guidelines or "CO-CRIAÇÃO" in guidelines
+
+
+def test_interaction_type_emotional_sharing():
+    """Desabafos pessoais e vulnerabilidade recebem empatia sem piadas forçadas ou conselhos invasivos."""
+    for text in ["Tô meio mal hoje", "dia difícil cara", "estou exausto e triste hoje"]:
+        ctx = analyze_situational_context(text)
+        assert ctx.interaction_type == "emotional_sharing"
+        assert ctx.sarcasm_allowed is False
+        assert ctx.teasing_allowed is False
+        assert ctx.requires_task_execution is False
+        guidelines = ctx.to_prompt_guidelines()
+        assert "EMPATIA" in guidelines or "ATENÇÃO" in guidelines or "ACOLHEDOR" in guidelines or "VULNERABILIDADE" in guidelines
+
+
+def test_interaction_type_technical_question():
+    """Questões conceituais técnicas exigem profundidade sem rigidez corporativa."""
+    for text in [
+        "como funciona o epoll no Linux comparado ao kqueue?",
+        "qual a diferença conceitual entre thread e corrotina?",
+    ]:
+        ctx = analyze_situational_context(text)
+        assert ctx.interaction_type == "technical_question"
+        assert ctx.requires_task_execution is False
+        guidelines = ctx.to_prompt_guidelines()
+        assert "FORMALIDADE" in guidelines or "TÉCNICA" in guidelines
+
+
+def test_interaction_type_task_execution():
+    """Comandos diretos de ação configuram execução de tarefas com ferramentas."""
+    for text in [
+        "crie o arquivo api.py com FastAPI",
+        "execute os testes do projeto",
+        "refatore o componente de áudio no disco",
+    ]:
+        ctx = analyze_situational_context(text)
+        assert ctx.interaction_type == "task_execution"
+        assert ctx.requires_task_execution is True
+
