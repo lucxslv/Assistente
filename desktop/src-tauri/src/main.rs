@@ -1,5 +1,6 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Impede a abertura de janela de terminal/console no Windows em qualquer modo de compilação
+#![windows_subsystem = "windows"]
+
 
 #[cfg(windows)]
 mod single_instance {

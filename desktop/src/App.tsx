@@ -19,6 +19,7 @@ import {
   fetchThreads,
   fetchThreadSteps,
   sendChatMessageStream,
+  sendChatMessage,
   SystemStatus,
   fetchLocalHardwareMetrics,
   humanizeErrorMessage,
@@ -591,18 +592,37 @@ export function App() {
         skipTts
       );
     } catch (err) {
-      console.warn("Falha no envio de mensagem:", err);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? {
-                ...m,
-                content: m.content || humanizeErrorMessage(err),
-                streaming: false,
-              }
-            : m
-        )
-      );
+      console.warn("Falha no streaming, tentando envio via REST...", err);
+      try {
+        const restResult = await sendChatMessage(text, activeThreadId, skipTts);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  content: restResult.reply,
+                  streaming: false,
+                }
+              : m
+          )
+        );
+        if (!activeThreadId || activeThreadId !== restResult.thread_id) {
+          setActiveThreadId(restResult.thread_id);
+        }
+        loadThreads();
+      } catch (finalErr) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  content: m.content || humanizeErrorMessage(finalErr),
+                  streaming: false,
+                }
+              : m
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
     }

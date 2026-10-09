@@ -320,8 +320,10 @@ fn system_power_action_native(action: String) -> Result<String, String> {
             #[cfg(windows)]
             {
                 use std::process::Command;
+                use std::os::windows::process::CommandExt;
                 let _ = Command::new("rundll32.exe")
                     .args(&["user32.dll,LockWorkStation"])
+                    .creation_flags(0x08000000)
                     .spawn();
                 Ok("Computador bloqueado com sucesso.".into())
             }
@@ -334,8 +336,10 @@ fn system_power_action_native(action: String) -> Result<String, String> {
             #[cfg(windows)]
             {
                 use std::process::Command;
+                use std::os::windows::process::CommandExt;
                 let _ = Command::new("rundll32.exe")
                     .args(&["powrprof.dll,SetSuspendState", "0,1,0"])
+                    .creation_flags(0x08000000)
                     .spawn();
                 Ok("Comando de suspensão enviado.".into())
             }
@@ -353,6 +357,7 @@ fn set_system_volume_native(level: Option<i32>, mute: Option<bool>) -> Result<St
     #[cfg(windows)]
     {
         use std::process::Command;
+        use std::os::windows::process::CommandExt;
         if let Some(m) = mute {
             unsafe {
                 extern "system" {
@@ -371,6 +376,7 @@ fn set_system_volume_native(level: Option<i32>, mute: Option<bool>) -> Result<St
             );
             let _ = Command::new("powershell")
                 .args(&["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+                .creation_flags(0x08000000)
                 .spawn();
             return Ok(format!("Volume ajustado para aproximadamente {}%.", lvl));
         }
@@ -417,8 +423,10 @@ fn execute_system_command(command: String, cwd: Option<String>) -> Result<Comman
     #[cfg(windows)]
     {
         use std::process::Command;
+        use std::os::windows::process::CommandExt;
         let mut cmd = Command::new("powershell.exe");
         cmd.args(&["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &command]);
+        cmd.creation_flags(0x08000000);
         if let Some(dir) = working_dir {
             cmd.current_dir(dir);
         }
@@ -532,10 +540,12 @@ fn get_process_list() -> Result<Vec<LocalProcessInfo>, String> {
     #[cfg(windows)]
     {
         use std::process::Command;
+        use std::os::windows::process::CommandExt;
         let script = r#"Get-Process | Where-Object { $_.Id -gt 0 -and $_.ProcessName -ne 'Idle' } | Sort-Object CPU -Descending | Select-Object -First 30 Id, ProcessName, CPU, WorkingSet64 | ForEach-Object { "$($_.Id)|$($_.ProcessName)|$([math]::Round($_.CPU, 1))|$([math]::Round($_.WorkingSet64 / 1MB, 1))" }"#;
 
         let output = Command::new("powershell.exe")
             .args(&["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])
+            .creation_flags(0x08000000)
             .output()
             .map_err(|e| format!("Erro ao obter processos: {}", e))?;
 
@@ -575,106 +585,7 @@ fn get_process_list() -> Result<Vec<LocalProcessInfo>, String> {
 
 #[tauri::command]
 fn start_local_backend() -> Result<String, String> {
-    if std::net::TcpStream::connect("127.0.0.1:8005").is_ok() {
-        return Ok("Backend já está em execução na porta 8005.".to_string());
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        use std::path::PathBuf;
-        use std::process::Stdio;
-
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        const DETACHED_PROCESS: u32 = 0x00000008;
-
-        // Lista abrangente de diretórios candidatos para a raiz do assistente
-        let mut candidates: Vec<PathBuf> = Vec::new();
-        if let Ok(dir) = std::env::var("CHARLIE_PROJECT_DIR") {
-            if !dir.is_empty() {
-                candidates.push(PathBuf::from(dir));
-            }
-        }
-        candidates.push(PathBuf::from(r"C:\Users\lucas\OneDrive\Documentos\assistente"));
-        if let Ok(cur) = std::env::current_dir() {
-            candidates.push(cur.clone());
-            if let Some(parent) = cur.parent() {
-                candidates.push(parent.to_path_buf());
-                if let Some(grandparent) = parent.parent() {
-                    candidates.push(grandparent.to_path_buf());
-                }
-            }
-        }
-
-        // Localiza a raiz do projeto que contém api/main.py
-        let found_root = candidates.into_iter().find(|p| p.join("api").join("main.py").exists());
-
-        if let Some(root) = found_root {
-            // 1. Prioridade absoluta: Python do ambiente virtual com todas as dependências instaladas
-            let venv_py = root.join(".venv").join("Scripts").join("python.exe");
-            let venv_py2 = root.join("venv").join("Scripts").join("python.exe");
-            let python_path = if venv_py.exists() {
-                Some(venv_py)
-            } else if venv_py2.exists() {
-                Some(venv_py2)
-            } else {
-                None
-            };
-
-            if let Some(py) = python_path {
-                let _ = std::process::Command::new(py)
-                    .args(["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8005"])
-                    .current_dir(&root)
-                    .env("HOST", "0.0.0.0")
-                    .env("PORT", "8005")
-                    .env("ENV", "production")
-                    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|e| format!("Falha ao iniciar processo Python local: {}", e))?;
-
-                return Ok("Serviço Python local (.venv) inicializado com sucesso na porta 8005.".to_string());
-            }
-
-            // 2. Fallback: uv instalado no usuário
-            let uv_path = PathBuf::from(r"C:\Users\lucas\.local\bin\uv.exe");
-            if uv_path.exists() {
-                let _ = std::process::Command::new(uv_path)
-                    .args(["run", "python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8005"])
-                    .current_dir(&root)
-                    .env("HOST", "0.0.0.0")
-                    .env("PORT", "8005")
-                    .env("ENV", "production")
-                    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|e| format!("Falha ao iniciar uv: {}", e))?;
-
-                return Ok("Serviço Charlie via uv inicializado com sucesso.".to_string());
-            }
-
-            // 3. Fallback: PowerShell Start-Process desvinculado
-            let ps_script = format!(
-                r#"Start-Process -FilePath "uv" -ArgumentList "run python -m uvicorn api.main:app --host 0.0.0.0 --port 8005" -WorkingDirectory "{}" -WindowStyle Hidden"#,
-                root.display()
-            );
-            let _ = std::process::Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &ps_script])
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn();
-
-            return Ok("Inicialização delegada com sucesso ao PowerShell.".to_string());
-        }
-
-        Err("Diretório raiz da API do Charlie não encontrado no disco.".into())
-    }
-    #[cfg(not(windows))]
-    {
-        Err("Inicialização local suportada apenas no Windows.".into())
-    }
+    Ok("Servidor em nuvem ativo.".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -709,11 +620,6 @@ pub fn run() {
             start_local_backend
         ])
         .setup(|app| {
-            // Tenta inicializar o backend Python local (porta 8005) em background se disponível
-            std::thread::spawn(|| {
-                let _ = start_local_backend();
-            });
-
             // Listener de ativação inter-processos (quando o usuário clica no atalho com app já aberto/oculto)
             #[cfg(windows)]
             {
