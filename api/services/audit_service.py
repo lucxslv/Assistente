@@ -165,8 +165,11 @@ async def record_audit_log(
                 RETURNING id, created_at;
             """, u_uuid, user_email, ip_address, session_id, user_prompt, model_response, model_name, p_tokens, c_tokens, t_tokens, cost)
 
+            from api.services.privacy import mask_email, sanitize_log_message
+            masked_e = mask_email(user_email)
+            safe_model = sanitize_log_message(str(model_name), max_length=50)
             logger.info(
-                f"[Audit Log] Gravado para {user_email} | Modelo: {model_name} | "
+                f"[Audit Log] Gravado para {masked_e} | Modelo: {safe_model} | "
                 f"Tokens: {t_tokens} (P:{p_tokens}/C:{c_tokens}) | Custo: ${cost:.6f}"
             )
             return {
@@ -186,9 +189,11 @@ async def get_audit_logs(
     search: Optional[str] = None,
     user_email: Optional[str] = None,
     model_name: Optional[str] = None,
+    anonymize: bool = False,
 ) -> Dict[str, Any]:
-    """Recupera logs paginados de auditoria com filtros textuais."""
+    """Recupera logs paginados de auditoria com filtros textuais e opção de anonimização."""
     from api.db import get_or_init_db_pool
+    from api.services.privacy import mask_email, mask_ip
 
     pool = await get_or_init_db_pool()
     if not pool:
@@ -240,8 +245,8 @@ async def get_audit_logs(
             {
                 "id": str(r["id"]),
                 "user_id": str(r["user_id"]),
-                "user_email": r["user_email"],
-                "ip_address": r["ip_address"] or "N/A",
+                "user_email": mask_email(r["user_email"]) if anonymize else r["user_email"],
+                "ip_address": mask_ip(r["ip_address"]) if anonymize else (r["ip_address"] or "N/A"),
                 "session_id": r["session_id"] or "",
                 "user_prompt": r["user_prompt"],
                 "model_response": r["model_response"],

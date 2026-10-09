@@ -130,6 +130,7 @@ async def fetch_audit_logs(
     search: Optional[str] = Query(None, description="Busca textual em prompts, respostas ou emails"),
     user_email: Optional[str] = Query(None, description="Filtrar por e-mail de usuário"),
     model_name: Optional[str] = Query(None, description="Filtrar por modelo de LLM"),
+    anonymized: bool = Query(False, description="Mascarar e-mails e IPs nos resultados"),
     admin: dict = Depends(verify_admin_user),
 ):
     """Retorna a lista paginada e filtrada de interações registradas no sistema."""
@@ -140,6 +141,7 @@ async def fetch_audit_logs(
             search=search,
             user_email=user_email,
             model_name=model_name,
+            anonymize=anonymized,
         )
         return data
     except Exception as e:
@@ -154,11 +156,12 @@ async def fetch_audit_logs(
 async def export_audit_logs(
     format_type: str = Query("csv", pattern="^(csv|json)$"),
     user_email: Optional[str] = Query(None, description="Filtrar exportação para usuário específico"),
+    anonymized: bool = Query(True, description="Mascarar e-mails e IPs nos dados exportados"),
     admin: dict = Depends(verify_admin_user),
 ):
     """Exporta os registros de auditoria em CSV ou JSON para relatórios externos."""
     try:
-        data = await get_audit_logs(page=1, limit=5000, user_email=user_email)
+        data = await get_audit_logs(page=1, limit=5000, user_email=user_email, anonymize=anonymized)
         logs = data.get("logs", [])
 
         if format_type == "json":
