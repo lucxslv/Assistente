@@ -15,6 +15,8 @@ import tests.torture.test_acceptance as test_acceptance
 import tests.torture.test_security as test_security
 import tests.torture.test_runtime_core as test_runtime_core
 import tests.torture.test_behavioral as test_behavioral
+import tests.torture.test_social as test_social
+
 
 
 def run_suite(module, report: TortureReport) -> None:
@@ -57,7 +59,7 @@ def main():
     global_safety_monitor.reset()
 
     print("\n" + "=" * 80)
-    print("  INICIANDO CHARLIE AGENT RUNTIME TORTURE TEST SUITE (83 CENÁRIOS EXPANDIDOS)")
+    print("  INICIANDO CHARLIE AGENT RUNTIME TORTURE TEST SUITE (100 CENÁRIOS EXPANDIDOS)")
     print("=" * 80)
     print("  -> Suíte 1: 20 Testes de Aceitação Final (A - T)...")
     run_suite(test_acceptance, master_report)
@@ -74,10 +76,16 @@ def main():
     for res in test_runtime_core.core_report.results:
         master_report.add_result(res)
 
-    print("  -> Suíte 4: 12 Testes Comportamentais e de Conduta (BEH-01 a BEH-12)...")
+    print("  -> Suíte 4: 21 Testes Comportamentais e de Confiabilidade (BEH-01 a BEH-21)...")
     run_suite(test_behavioral, master_report)
     for res in test_behavioral.behavioral_report.results:
         master_report.add_result(res)
+
+    print("  -> Suíte 5: 8 Testes de Regressão Social e Identidade Conversacional (SOC-01 a SOC-08)...")
+    run_suite(test_social, master_report)
+    for res in test_social.social_report.results:
+        master_report.add_result(res)
+
 
     # Renderiza o Relatório Executivo
     print("\n" + master_report.render_summary() + "\n")
