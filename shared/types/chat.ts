@@ -19,6 +19,14 @@ export interface FileAttachment {
   isImage: boolean;
 }
 
+export interface StructuredWidget<T = Record<string, unknown>> {
+  id: string;
+  type: string;
+  version?: number;
+  data: T;
+  fallbackText: string;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -30,7 +38,7 @@ export interface Message {
   error?: string;
   isStreaming?: boolean;
   tools?: ToolCallInfo[];
-  widgets?: unknown[];
+  widgets?: StructuredWidget[];
 }
 
 export interface Thread {

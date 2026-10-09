@@ -31,13 +31,29 @@ export interface StorageWidgetData {
   totalLabel: string;
 }
 
+export interface UnavailableWidgetData {
+  originalKind?: string;
+  reason?: string;
+}
+
+/**
+ * Contrato canônico de conteúdo estruturado com fallback obrigatório.
+ */
+export interface StructuredContent<T = Record<string, unknown>> {
+  kind: string;
+  version: number;
+  data: T;
+  fallbackText: string;
+}
+
 /**
  * União discriminada de todos os widgets suportados pelo Charlie.
  * Facilita type narrowing no WidgetRegistry.
  */
 export type AssistantWidget =
-  | { id: string; type: 'server_health'; data: ServerHealthWidgetData }
-  | { id: string; type: 'storage_usage'; data: StorageWidgetData };
+  | { id: string; type: 'server_health'; version?: number; data: ServerHealthWidgetData; fallbackText?: string }
+  | { id: string; type: 'storage_usage'; version?: number; data: StorageWidgetData; fallbackText?: string }
+  | { id: string; type: 'embedded_widget_unavailable'; version?: number; data: UnavailableWidgetData; fallbackText: string };
 
 /**
  * Contrato da resposta do backend (payload estruturado ou legado).
