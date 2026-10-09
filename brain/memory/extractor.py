@@ -177,7 +177,16 @@ CHARLIE: {assistant_reply[:500]}
                     logger.info(f"[MemoryExtractor] Memória efêmera/cotidiana descartada por filtro de qualidade: '{content}'")
                     continue
 
+                # Filtro 3: Proteção de integridade de identidade canônica
+                from brain.personality.canonical_identity import sanitize_memory_candidate
+                allowed, clean_cand, reason = sanitize_memory_candidate(content, m_type, user_id=user_id)
+                if not allowed:
+                    logger.warning(f"[MemoryExtractor] Memória descartada por proteção de identidade canônica ({reason}): '{content}'")
+                    continue
+                content = clean_cand
+
                 action = m.get("action", "reinforce")
+
                 saved_via_pool = False
                 try:
                     from api.db import get_or_init_db_pool

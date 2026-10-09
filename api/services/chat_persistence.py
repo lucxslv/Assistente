@@ -291,6 +291,15 @@ async def save_user_memory_entry(
         logger.debug(f"[chat_persistence] Descartando fato por baixa relevância ({importance}) ou certeza ({confidence}): '{clean_fact}'")
         return ""
 
+    # Filtro de integridade de identidade canônica
+    from brain.personality.canonical_identity import sanitize_memory_candidate
+    allowed, sanitized_fact, reason = sanitize_memory_candidate(clean_fact, cat, user_id=str(user_id))
+    if not allowed:
+        logger.warning(f"[chat_persistence] Memória rejeitada por integridade de identidade canônica ({reason}): '{clean_fact}'")
+        return ""
+    clean_fact = sanitized_fact
+
+
     vec_str = None
     try:
         from memory.embeddings import generate_embedding
