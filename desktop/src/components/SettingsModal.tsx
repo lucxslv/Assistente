@@ -116,6 +116,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState<string>(() => {
     return localStorage.getItem("charlie_elevenlabs_voice_id") || "";
   });
+  const [chatterboxApiUrl, setChatterboxApiUrl] = useState<string>(() => {
+    return localStorage.getItem("charlie_chatterbox_api_url") || "";
+  });
   const [showElevenKey, setShowElevenKey] = useState(false);
   const [testingVoice, setTestingVoice] = useState(false);
   const [voiceTestToast, setVoiceTestToast] = useState<{ msg: string; error?: boolean } | null>(null);
@@ -319,6 +322,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     localStorage.setItem("charlie_tts_provider", ttsProvider);
     localStorage.setItem("charlie_elevenlabs_key", elevenLabsKey);
     localStorage.setItem("charlie_elevenlabs_voice_id", elevenLabsVoiceId);
+    localStorage.setItem("charlie_chatterbox_api_url", chatterboxApiUrl);
 
     try {
       await toggleVoiceService(wakeWordEnabled);
@@ -964,42 +968,117 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span className="text-[11px] font-semibold text-[var(--text-secondary)] block">
                     Motor de Síntese de Voz (TTS):
                   </span>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div
+                      onClick={() => setTtsProvider("chatterbox")}
+                      className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                        ttsProvider === "chatterbox"
+                          ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
+                          : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        Chatterbox (Modal)
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                        Serverless Resemble AI com GPU dedicada
+                      </div>
+                    </div>
+
                     <div
                       onClick={() => setTtsProvider("elevenlabs")}
-                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
                         ttsProvider === "elevenlabs"
                           ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
                           : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
                       }`}
                     >
                       <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
-                        ElevenLabs (Ultra-Realista)
+                        <Volume2 className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        ElevenLabs
                       </div>
                       <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
-                        Alta fidelidade, expressividade e voz natural
+                        Alta fidelidade via nuvem ElevenLabs
                       </div>
                     </div>
 
                     <div
                       onClick={() => setTtsProvider("edge")}
-                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
                         ttsProvider === "edge"
                           ? "bg-[var(--accent-soft-bg)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm"
                           : "bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
                       }`}
                     >
                       <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-[var(--accent)]" />
-                        Edge-TTS (Gratuito)
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        Edge-TTS (Grátis)
                       </div>
                       <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
-                        Vozes neurais nativas da Microsoft sem custos
+                        Vozes neurais nativas Microsoft sem custos
                       </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Configurações específicas do Chatterbox */}
+                {ttsProvider === "chatterbox" && (
+                  <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[var(--text-primary)] text-xs flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        Endpoint do Modal (Chatterbox Serverless)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleTestVoice}
+                        disabled={testingVoice}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-medium bg-[var(--accent)] text-[var(--accent-fg)] hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {testingVoice ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Play className="w-3 h-3 fill-current" />
+                        )}
+                        <span>{testingVoice ? "Gerando..." : "Testar Voz"}</span>
+                      </button>
+                    </div>
+
+                    {voiceTestToast && (
+                      <div
+                        className={`text-[11px] p-2 rounded-lg flex items-center gap-1.5 ${
+                          voiceTestToast.error
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        }`}
+                      >
+                        {voiceTestToast.error ? (
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>{voiceTestToast.msg}</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold text-[var(--text-secondary)] block">
+                        Modal Web Endpoint URL
+                      </label>
+                      <input
+                        type="text"
+                        value={chatterboxApiUrl}
+                        onChange={(e) => setChatterboxApiUrl(e.target.value)}
+                        placeholder="https://seu-usuario--chatterbox-tts-chatterboxservice-tts.modal.run"
+                        className="w-full text-xs px-3 py-1.5 rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] font-mono"
+                      />
+                      <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                        URL gerada ao rodar <code className="text-zinc-300">modal deploy server/modal_chatterbox.py</code> no terminal.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Configurações específicas do ElevenLabs */}
                 {ttsProvider === "elevenlabs" && (

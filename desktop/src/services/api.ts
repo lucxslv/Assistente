@@ -48,30 +48,100 @@ export function humanizeErrorMessage(error: any): string {
 }
 
 export const CLOUD_API = "https://assistente-xi.vercel.app/api";
-export const LOCAL_API = CLOUD_API; // Mantido apenas para compatibilidade de tipagem
+export const LOCAL_API = "http://127.0.0.1:8005/api";
 
-export function getServerMode(): "cloud" {
-  return "cloud";
+let activeApiBase = LOCAL_API;
+
+export function getServerMode(): "local" | "cloud" | "custom" {
+  if (typeof window === "undefined") return "local";
+  return (localStorage.getItem("charlie_server_mode") as any) || "local";
 }
 
-export function setServerMode(_mode?: string, _customUrl?: string): void {
-  // Conexão exclusiva com o servidor Charlie oficial
+export function setServerMode(mode: "local" | "cloud" | "custom", customUrl?: string): void {
+  if (typeof window === "undefined") return;
+  if (mode === "custom" && customUrl && customUrl.trim()) {
+    localStorage.setItem("charlie_server_mode", "custom");
+    const clean = customUrl.trim().replace(/\/+$/, "");
+    const finalUrl = clean.endsWith("/api") ? clean : `${clean}/api`;
+    localStorage.setItem("charlie_api_url", finalUrl);
+    activeApiBase = finalUrl;
+  } else if (mode === "cloud") {
+    localStorage.setItem("charlie_server_mode", "cloud");
+    localStorage.removeItem("charlie_api_url");
+    activeApiBase = CLOUD_API;
+  } else {
+    localStorage.setItem("charlie_server_mode", "local");
+    localStorage.removeItem("charlie_api_url");
+    activeApiBase = LOCAL_API;
+  }
 }
 
 export async function detectApiBase(): Promise<string> {
+  const mode = getServerMode();
+
+  if (mode === "custom") {
+    const custom = typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null;
+    if (custom && custom.trim()) {
+      const clean = custom.trim().replace(/\/+$/, "");
+      activeApiBase = clean.endsWith("/api") ? clean : `${clean}/api`;
+      return activeApiBase;
+    }
+  }
+
+  if (mode === "cloud") {
+    activeApiBase = CLOUD_API;
+    return CLOUD_API;
+  }
+
+  // Modo Local por padrão: tenta o motor local 8005 primeiro
+  try {
+    const localRes = await fetch(`${LOCAL_API}/health`, {
+      signal: AbortSignal.timeout(1200),
+    });
+    if (localRes.ok) {
+      activeApiBase = LOCAL_API;
+      return LOCAL_API;
+    }
+  } catch {
+    // Backend local indisponível no momento
+  }
+
+  // Fallback para a nuvem se local estiver desligado
+  activeApiBase = CLOUD_API;
   return CLOUD_API;
+}
+
+if (typeof window !== "undefined") {
+  detectApiBase();
+  setInterval(detectApiBase, 8000);
 }
 
 export function getApiBase(): string {
-  return CLOUD_API;
+  const mode = getServerMode();
+  if (mode === "custom") {
+    const custom = typeof window !== "undefined" ? localStorage.getItem("charlie_api_url") : null;
+    if (custom && custom.trim()) {
+      const clean = custom.trim().replace(/\/+$/, "");
+      return clean.endsWith("/api") ? clean : `${clean}/api`;
+    }
+  }
+  if (mode === "cloud") {
+    return CLOUD_API;
+  }
+  return activeApiBase || LOCAL_API;
 }
 
 export function getWsBase(): string {
-  return CLOUD_API.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
+  const base = getApiBase();
+  return base.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
 }
 
-export function setCustomApiUrl(_url: string): void {
-  // Conexão exclusiva com o servidor Charlie oficial
+export function setCustomApiUrl(url: string): void {
+  if (!url || !url.trim()) {
+    setServerMode("local");
+  } else {
+    setServerMode("custom", url);
+  }
 }
 
 export interface UserProfile {
@@ -135,19 +205,30 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
  * tratando automaticamente expiração de tokens (401) com failover para credencial de convidado.
  */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const currentBase = getApiBase();
   const fullPath = path.startsWith("/") ? path : `/${path}`;
-  const url = `${CLOUD_API}${fullPath}`;
-  const res = await fetch(url, options);
+  const url = `${currentBase}${fullPath}`;
 
-  // Se retornou 401 e estava usando token customizado expirado, limpa e retenta com guest_token
-  if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
-    clearInvalidToken();
-    const headers = new Headers(options.headers || {});
-    headers.set("Authorization", "Bearer charlie_guest_token");
-    return await fetch(url, { ...options, headers });
+  try {
+    const res = await fetch(url, options);
+
+    // Se retornou 401 e estava usando token customizado expirado, limpa e retenta com guest_token
+    if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
+      clearInvalidToken();
+      const headers = new Headers(options.headers || {});
+      headers.set("Authorization", "Bearer charlie_guest_token");
+      return await fetch(url, { ...options, headers });
+    }
+
+    return res;
+  } catch (err: any) {
+    // Se falhou no motor local e a rota não for específica de voz do hardware, tenta a nuvem como fallback
+    if (currentBase === LOCAL_API && !path.includes("/voice")) {
+      const fallbackUrl = `${CLOUD_API}${fullPath}`;
+      return await fetch(fallbackUrl, options);
+    }
+    throw err;
   }
-
-  return res;
 }
 
 export async function registerUser(name: string, email: string, password: string): Promise<AuthResponse> {
