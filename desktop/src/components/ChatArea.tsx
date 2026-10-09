@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { Message, ToolCallInfo, AgentArtifact } from "../types";
 import { invoke } from "@tauri-apps/api/core";
+import { ThinkingBlock } from "./ThinkingBlock";
+import { WidgetRegistry } from "./widgets/WidgetRegistry";
 
 interface ChatAreaProps {
   messages: Message[];
@@ -740,6 +742,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <div className="whitespace-pre-wrap select-text">{m.content}</div>
                       ) : (
                         <div className="space-y-2 select-text">
+                          {/* Raciocínio Interno do Modelo (Thinking Block) */}
+                          {m.thought && (
+                            <ThinkingBlock
+                              thought={m.thought}
+                              isStreaming={Boolean(m.streaming && !m.content)}
+                            />
+                          )}
+
                           {/* Ferramentas executadas com accordion expansível */}
                           {m.tools && m.tools.length > 0 && (
                             <div className="flex flex-col gap-1 mb-2">
@@ -747,6 +757,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                 <ToolExecutionBadge key={tIdx} tool={t} />
                               ))}
                             </div>
+                          )}
+
+                          {/* Widget Estruturado (Generative UI) */}
+                          {m.widget && (
+                            <WidgetRegistry widget={m.widget} />
                           )}
 
                           {/* Conteúdo Markdown com Syntax Highlighting */}

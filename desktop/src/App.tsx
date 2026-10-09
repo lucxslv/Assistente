@@ -556,6 +556,20 @@ export function App() {
                 return { ...m, tools: updatedTools };
               })
             );
+          } else if (ev.type === "thought") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? { ...m, thought: (m.thought || "") + (ev.data.thought || ev.data.text || "") }
+                  : m
+              )
+            );
+          } else if (ev.type === "widget") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId ? { ...m, widget: ev.data } : m
+              )
+            );
           } else if (ev.type === "done") {
             setMessages((prev) =>
               prev.map((m) =>
@@ -564,6 +578,12 @@ export function App() {
                       ...m,
                       content: ev.data.reply || m.content,
                       streaming: false,
+                      widget: ev.data.widget || m.widget,
+                      thought:
+                        ev.data.thought ||
+                        (Array.isArray(ev.data.internal_thoughts)
+                          ? ev.data.internal_thoughts.join("\n\n")
+                          : m.thought),
                     }
                   : m
               )

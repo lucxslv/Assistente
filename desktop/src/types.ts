@@ -12,6 +12,37 @@ export interface ToolCallInfo {
   status: "executing" | "completed" | "error";
 }
 
+export interface ServerHealthWidgetData {
+  title?: string;
+  status?: "healthy" | "degraded" | "offline";
+  cpuPercent: number;
+  ramPercent: number;
+  database: "healthy" | "degraded" | "offline" | boolean;
+  webSocket: "connected" | "disconnected" | boolean;
+  sse?: "connected" | "disconnected" | boolean;
+  actionLabel?: string;
+}
+
+export interface StorageWidgetData {
+  title?: string;
+  usedPercent: number;
+  usedLabel: string;
+  totalLabel: string;
+}
+
+export interface UnavailableWidgetData {
+  originalKind?: string;
+  reason?: string;
+}
+
+export interface WidgetPayload<T = Record<string, any>> {
+  id?: string;
+  type: string;
+  version?: number;
+  data: T;
+  fallbackText: string;
+}
+
 export interface Message {
   id: string;
   name: string;
@@ -20,11 +51,15 @@ export interface Message {
   createdAt?: string | null;
   streaming?: boolean;
   tools?: ToolCallInfo[];
+  widget?: WidgetPayload;
+  thought?: string;
 }
 
 export interface StreamEvent {
   type:
     | "token"
+    | "thought"
+    | "widget"
     | "tool_start"
     | "tool_end"
     | "status"
