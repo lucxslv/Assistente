@@ -65,12 +65,24 @@ export const chatService = {
   },
   async streamSse(message: string, threadId: string, onEvent: (event: StreamEvent) => void, signal?: AbortSignal) {
     const [baseUrl, token] = await Promise.all([getApiUrl(), session.getToken()]);
-    const response = await fetch(`${baseUrl}/chat/stream`, {
+    const effectiveToken = token || 'charlie_guest_token';
+    const targetUrl = baseUrl || 'https://assistente-xi.vercel.app/api';
+
+    let response = await fetch(`${targetUrl}/chat/stream`, {
       method: 'POST',
       signal,
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${effectiveToken}` },
       body: JSON.stringify({ message, thread_id: threadId, skip_tts: true }),
     });
+
+    if (response.status === 401 && effectiveToken !== 'charlie_guest_token') {
+      response = await fetch(`${targetUrl}/chat/stream`, {
+        method: 'POST',
+        signal,
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer charlie_guest_token' },
+        body: JSON.stringify({ message, thread_id: threadId, skip_tts: true }),
+      });
+    }
 
     if (!response.ok) {
       throw new Error(`Streaming SSE indisponível (HTTP ${response.status}).`);

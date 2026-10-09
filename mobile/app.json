@@ -22,10 +22,20 @@
     },
     "android": {
       "package": "com.charlie.mobile",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.charlie.mobile"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b9ba8d30-da91-4675-afdd-12cf6b59b2ba"
+      }
     }
   }
 }

@@ -77,37 +77,66 @@ export function PairingModal({ visible, onClose, onPairSuccess }: PairingModalPr
       const deviceName = await authStorage.getDeviceName();
 
       if (parsed.id && parsed.secret) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 6000);
+        // Constrói candidatos priorizando o endereço local do computador indicado no QR code
+        const candidates: { baseUrl: string; isLan: boolean }[] = [];
+        if (parsed.lan) {
+          const cleanLan = parsed.lan.trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
+          candidates.push({ baseUrl: `${cleanLan}/api`, isLan: true });
+        }
+        if (parsed.tunnel) {
+          const cleanTunnel = parsed.tunnel.trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
+          candidates.push({ baseUrl: `${cleanTunnel}/api`, isLan: false });
+        }
+        candidates.push({ baseUrl: CLOUD_API_BASE, isLan: false });
 
-        const verifyResponse = await fetch(`${CLOUD_API_BASE}/pair/verify-qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: parsed.id,
-            secret: parsed.secret,
-            device_name: deviceName,
-            device_id: deviceId,
-            platform: Platform.OS,
-          }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+        let verifyResult: any = null;
+        let successfulCandidate: { baseUrl: string; isLan: boolean } | null = null;
+        let lastError = '';
 
-        if (!verifyResponse.ok) {
-          const errData = await verifyResponse.json().catch(() => ({}));
-          throw new Error(errData.detail || 'Falha na validação do segredo do QR Code.');
+        for (const candidate of candidates) {
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 4000);
+
+            const verifyResponse = await fetch(`${candidate.baseUrl}/pair/verify-qr`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: parsed.id,
+                secret: parsed.secret,
+                device_name: deviceName,
+                device_id: deviceId,
+                platform: Platform.OS,
+              }),
+              signal: controller.signal,
+            });
+            clearTimeout(timeout);
+
+            if (verifyResponse.ok) {
+              verifyResult = await verifyResponse.json();
+              successfulCandidate = candidate;
+              break;
+            } else {
+              const errData = await verifyResponse.json().catch(() => ({}));
+              lastError = errData.detail || 'Falha na validação do segredo do QR Code.';
+            }
+          } catch {
+            // Falha de rede ou timeout: tenta próximo candidato
+          }
         }
 
-        const verifyResult = await verifyResponse.json();
+        if (!verifyResult || !successfulCandidate) {
+          throw new Error(lastError || 'Falha ao validar o QR Code no Desktop ou na Nuvem.');
+        }
+
         const permanentToken = verifyResult.token;
 
         await authStorage.savePairedCredentials({
           token: permanentToken,
-          serverUrl: CLOUD_API_BASE,
+          serverUrl: successfulCandidate.baseUrl,
           deviceId,
           deviceName,
-          isLan: false,
+          isLan: successfulCandidate.isLan,
         });
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -120,12 +149,16 @@ export function PairingModal({ visible, onClose, onPairSuccess }: PairingModalPr
 
       // Fallback para payloads com token direto
       if (parsed.token) {
+        const targetUrl = parsed.lan
+          ? `${parsed.lan.trim().replace(/\/+$/, '').replace(/\/api\/?$/, '')}/api`
+          : CLOUD_API_BASE;
+
         await authStorage.savePairedCredentials({
           token: parsed.token,
-          serverUrl: CLOUD_API_BASE,
+          serverUrl: targetUrl,
           deviceId,
           deviceName,
-          isLan: false,
+          isLan: Boolean(parsed.lan),
         });
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -178,7 +211,7 @@ export function PairingModal({ visible, onClose, onPairSuccess }: PairingModalPr
     }
   };
 
-  // Verificação segura do PIN diretamente no Servidor Oficial Charlie
+  // Verificação segura do PIN diretamente no Servidor (LAN ou Nuvem Oficial)
   const triggerPinVerification = async (pinCode: string) => {
     setPinTesting(true);
     setPinError(null);
@@ -189,42 +222,92 @@ export function PairingModal({ visible, onClose, onPairSuccess }: PairingModalPr
       const deviceId = await authStorage.getOrCreateDeviceId();
       const deviceName = await authStorage.getDeviceName();
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
-
-      const res = await fetch(`${CLOUD_API_BASE}/pair/verify-pin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pin: pinCode,
-          device_name: deviceName,
-          device_id: deviceId,
-          platform: Platform.OS,
-        }),
-        signal: controller.signal,
+      const candidateUrls: { url: string; isLan: boolean; label: string }[] = [];
+      const activeServer = await serverConfigService.getActiveServer().catch(() => null);
+      if (activeServer && activeServer.url && !activeServer.url.includes('vercel.app')) {
+        candidateUrls.push({
+          url: `${activeServer.url.replace(/\/+$/, '').replace(/\/api\/?$/, '')}/api`,
+          isLan: true,
+          label: 'PC Local',
+        });
+      }
+      candidateUrls.push({
+        url: 'http://192.168.0.190:8005/api',
+        isLan: true,
+        label: 'PC na Rede Local',
       });
-      clearTimeout(timeout);
+      candidateUrls.push({
+        url: CLOUD_API_BASE,
+        isLan: false,
+        label: 'Servidor Oficial Nuvem',
+      });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        if (res.status === 429) {
-          throw new Error('PIN bloqueado por tentativas excessivas. Gere um novo no Desktop.');
+      let pairResult: any = null;
+      let matchedCandidate: { url: string; isLan: boolean; label: string } | null = null;
+      let lastErrorMessage = '';
+
+      for (const cand of candidateUrls) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 4000);
+
+          const res = await fetch(`${cand.url}/pair/verify-pin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pin: pinCode,
+              device_name: deviceName,
+              device_id: deviceId,
+              platform: Platform.OS,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (res.ok) {
+            pairResult = await res.json();
+            matchedCandidate = cand;
+            break;
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            if (res.status === 429) {
+              throw new Error('PIN bloqueado por tentativas excessivas. Gere um novo no Desktop.');
+            }
+            if (res.status === 400 || res.status === 401) {
+              lastErrorMessage = errData.detail || 'PIN incorreto. Verifique os números digitados.';
+              throw new Error(lastErrorMessage);
+            }
+            lastErrorMessage = errData.detail || 'PIN incorreto ou expirado. Gere um novo no Desktop.';
+          }
+        } catch (fetchErr: any) {
+          if (fetchErr.message && (fetchErr.message.includes('bloqueado') || fetchErr.message.includes('PIN incorreto'))) {
+            throw fetchErr;
+          }
+          // Falha de timeout ou de rede na LAN: tenta próximo candidato
         }
-        throw new Error(errData.detail || 'PIN incorreto ou expirado. Gere um novo no Desktop.');
       }
 
-      const pairResult = await res.json();
+      if (!pairResult || !matchedCandidate) {
+        throw new Error(
+          lastErrorMessage || 'Não foi possível validar o PIN. Verifique se o Charlie Desktop está aberto e na mesma rede.'
+        );
+      }
+
+      const finalServerUrl =
+        matchedCandidate.isLan && pairResult.lan_url
+          ? `${pairResult.lan_url.replace(/\/+$/, '').replace(/\/api\/?$/, '')}/api`
+          : matchedCandidate.url;
 
       await authStorage.savePairedCredentials({
         token: pairResult.token,
-        serverUrl: CLOUD_API_BASE,
+        serverUrl: finalServerUrl,
         deviceId,
         deviceName,
-        isLan: false,
+        isLan: matchedCandidate.isLan,
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setPinSuccessInfo('● Conectado ao PC via Servidor Oficial');
+      setPinSuccessInfo(`● Conectado com sucesso (${matchedCandidate.label})`);
 
       const saved = await serverConfigService.getActiveServer();
       setTimeout(() => {

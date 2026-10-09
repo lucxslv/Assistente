@@ -12,9 +12,11 @@ const CLOUD_FALLBACK_URL = 'https://assistente-xi.vercel.app/api';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const [baseUrl, token] = await Promise.all([getApiUrl(), session.getToken()]);
+  const effectiveToken = token || 'charlie_guest_token';
+
   const headers = new Headers(init.headers);
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  headers.set('Authorization', `Bearer ${effectiveToken}`);
 
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   let response: Response;
@@ -22,7 +24,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // 1. Tenta a URL configurada como ativa
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), 6000);
 
     response = await fetch(`${baseUrl}${cleanPath}`, {
       ...init,
@@ -36,7 +38,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!isCloud) {
       try {
         const cloudController = new AbortController();
-        const cloudTimeout = setTimeout(() => cloudController.abort(), 6000);
+        const cloudTimeout = setTimeout(() => cloudController.abort(), 8000);
 
         response = await fetch(`${CLOUD_FALLBACK_URL}${cleanPath}`, {
           ...init,
@@ -49,6 +51,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       }
     } else {
       throw new ApiError(0, 'Não foi possível conectar ao Charlie. Verifique sua conexão de rede.');
+    }
+  }
+
+  // Se retornou 401 e estava usando outro token, retenta uma vez com guest_token
+  if (response.status === 401 && effectiveToken !== 'charlie_guest_token') {
+    try {
+      headers.set('Authorization', 'Bearer charlie_guest_token');
+      response = await fetch(`${baseUrl}${cleanPath}`, {
+        ...init,
+        headers,
+      });
+    } catch {
+      // Ignora erro de retry e segue fluxo padrão
     }
   }
 

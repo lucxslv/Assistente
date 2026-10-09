@@ -76,13 +76,11 @@ class ServerConfigService {
       const json = await SecureStore.getItemAsync(STORAGE_SERVERS_KEY);
       if (json) {
         const parsed = JSON.parse(json) as ServerProfile[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filtra perfis com IPs link-local/internos inválidos (ex: 169.254.* gerado por containers cloud)
-          const valid = parsed.filter((s) => !/https?:\/\/169\.254\./i.test(s.url));
+          // Garante apenas perfis de servidor válidos (eliminando IPs de LAN offline como 192.168.* e 169.254.*)
+          const valid = parsed.filter((s) => !/https?:\/\/(?:169\.254|192\.168|127\.0\.0\.1|localhost)/i.test(s.url));
           if (valid.length > 0) {
             return valid;
           }
-        }
       }
     } catch {
       // Ignora erro de leitura e usa fallback

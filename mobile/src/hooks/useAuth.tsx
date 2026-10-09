@@ -1,6 +1,8 @@
 import React, { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { session } from '@/src/lib/session';
 import { authService } from '@/src/services/auth';
+import { authStorage } from '@/src/services/authStorage';
+import { deviceDiscoveryService } from '@/src/services/deviceDiscovery';
 import { User } from '@/src/types/api';
 
 type AuthContextValue = {
@@ -9,7 +11,6 @@ type AuthContextValue = {
   loading: boolean;
   signIn(email: string, password: string): Promise<void>;
   signUp(name: string, email: string, password: string): Promise<void>;
-  continueAsGuest(): Promise<void>;
   setPairedUser(user: User): void;
   signOut(): Promise<void>;
   refreshSession(): Promise<void>;
@@ -39,6 +40,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const freshUser = await authService.me();
       setUser(freshUser);
+      // Tenta descobrir o Desktop local silenciosamente na inicialização
+      deviceDiscoveryService.autoDiscoverAndLink().catch(() => {});
     } catch (err: unknown) {
       // Se for estritamente erro 401 ou 403, a credencial foi revogada
       const isAuthError =
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (isAuthError) {
         await session.clear();
+        await authStorage.clearPairedCredentials();
         setUser(null);
         setToken(null);
       } else {
@@ -73,22 +77,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const t = await session.getToken();
         setUser(u);
         setToken(t);
+        // Tenta vincular o Desktop na LAN ou conta em background sem bloquear
+        deviceDiscoveryService.autoDiscoverAndLink().catch(() => {});
       },
       signUp: async (name: string, email: string, password: string) => {
         const u = await authService.register(name, email, password);
         const t = await session.getToken();
         setUser(u);
         setToken(t);
-      },
-      continueAsGuest: async () => {
-        const guestUser: User = {
-          id: 'guest-lucas',
-          name: 'Lucas',
-          email: 'lucas@charlie.local',
-        };
-        await session.save({ token: 'charlie_guest_token', user: guestUser });
-        setUser(guestUser);
-        setToken('charlie_guest_token');
+        deviceDiscoveryService.autoDiscoverAndLink().catch(() => {});
       },
       setPairedUser: (paired: User) => {
         setUser(paired);
@@ -96,6 +93,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       signOut: async () => {
         await session.clear();
+        await authStorage.clearPairedCredentials();
         setUser(null);
         setToken(null);
       },

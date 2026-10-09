@@ -12,8 +12,16 @@ function normalizeApiUrl(value: string): string {
 export const configuredApiUrl = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL);
 
 export async function getApiUrl(): Promise<string> {
-  const override = await SecureStore.getItemAsync(API_OVERRIDE_KEY);
-  return override ? normalizeApiUrl(override) : configuredApiUrl;
+  try {
+    const override = await SecureStore.getItemAsync(API_OVERRIDE_KEY);
+    if (override && (override.includes('192.168.') || override.includes('localhost') || override.includes('127.0.0.1') || override.includes(':8005') || override.includes(':8000'))) {
+      await SecureStore.deleteItemAsync(API_OVERRIDE_KEY);
+      return configuredApiUrl;
+    }
+    return override ? normalizeApiUrl(override) : configuredApiUrl;
+  } catch {
+    return configuredApiUrl;
+  }
 }
 
 export async function setApiUrl(value: string): Promise<string> {

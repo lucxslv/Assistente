@@ -54,6 +54,11 @@ export function DesktopRemotePad({ onActionExecuted }: DesktopRemotePadProps) {
         const res = await desktopControlService.getDeviceStatus();
         if (mounted) {
           setDeviceStatus(res);
+          const vol = (res as any).volume;
+          if (vol && typeof vol.level === 'number') {
+            setVolume(vol.level);
+            setIsMuted(Boolean(vol.is_muted));
+          }
         }
       } catch {
         // Ignora
@@ -402,23 +407,15 @@ export function DesktopRemotePad({ onActionExecuted }: DesktopRemotePadProps) {
       <View style={styles.appsRow}>
         <Pressable
           style={styles.appPill}
-          onPress={() => handleOpenApp('spotify:', 'Spotify')}
+          onPress={() => handleOpenApp('terminal', 'Terminal')}
         >
-          <Ionicons name="musical-notes-outline" size={14} color="#1DB954" />
-          <Text style={styles.appPillText}>Spotify</Text>
+          <Ionicons name="terminal-outline" size={14} color="#A78BFA" />
+          <Text style={styles.appPillText}>Terminal</Text>
         </Pressable>
 
         <Pressable
           style={styles.appPill}
-          onPress={() => handleOpenApp('https://google.com', 'Google Chrome')}
-        >
-          <Ionicons name="globe-outline" size={14} color="#38BDF8" />
-          <Text style={styles.appPillText}>Chrome</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.appPill}
-          onPress={() => handleOpenApp('vscode:', 'VS Code')}
+          onPress={() => handleOpenApp('code', 'VS Code')}
         >
           <Ionicons name="code-slash-outline" size={14} color="#818CF8" />
           <Text style={styles.appPillText}>VS Code</Text>
@@ -426,10 +423,34 @@ export function DesktopRemotePad({ onActionExecuted }: DesktopRemotePadProps) {
 
         <Pressable
           style={styles.appPill}
-          onPress={() => handleOpenApp('wt:', 'Terminal')}
+          onPress={() => handleOpenApp('explorer', 'Explorador')}
         >
-          <Ionicons name="terminal-outline" size={14} color="#A78BFA" />
-          <Text style={styles.appPillText}>Terminal</Text>
+          <Ionicons name="folder-outline" size={14} color="#F59E0B" />
+          <Text style={styles.appPillText}>Explorer</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.appPill}
+          onPress={() => handleOpenApp('chrome', 'Google Chrome')}
+        >
+          <Ionicons name="globe-outline" size={14} color="#38BDF8" />
+          <Text style={styles.appPillText}>Chrome</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.appPill}
+          onPress={() => handleOpenApp('calc', 'Calculadora')}
+        >
+          <Ionicons name="calculator-outline" size={14} color="#22C55E" />
+          <Text style={styles.appPillText}>Calc</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.appPill}
+          onPress={() => handleOpenApp('spotify', 'Spotify')}
+        >
+          <Ionicons name="musical-notes-outline" size={14} color="#1DB954" />
+          <Text style={styles.appPillText}>Spotify</Text>
         </Pressable>
       </View>
 
