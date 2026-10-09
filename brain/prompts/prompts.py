@@ -4,6 +4,7 @@ from typing import Optional
 from brain.profile import AssistantProfile
 from brain.personality.user_model import user_model_manager
 from brain.personality.charlie_core import charlie_core
+from brain.personality.situational_tone import analyze_situational_context
 from brain.memory.working_memory import working_memory_store
 from memory.retrieval.retriever import MemoryRetriever
 from tools.registry import ToolRegistry
@@ -20,6 +21,7 @@ def build_system_prompt(
     user_facts: Optional[list[str]] = None,
     user_preferences: Optional[dict[str, str]] = None,
     cross_chat_context: Optional[str] = None,
+    repeated_failures: int = 0,
 ) -> str:
     """Constrói o system prompt dinâmico baseado no perfil, modelo do usuário, contexto e memórias."""
     
@@ -49,19 +51,12 @@ def build_system_prompt(
         user_prefs_formatted = "  * (Nenhuma preferência declarada ainda)"
 
     situational_note = ""
-    if user_text:
-        lower = user_text.lower()
-        if any(w in lower for w in ["socorro", "urgente", "deu ruim", "falhou tudo", "quebrou", "erro grave", "merda"]):
-            situational_note = (
-                "\n> [!IMPORTANT]\n"
-                "> **AJUSTE SITUACIONAL (URGÊNCIA/ERRO):** O momento atual exige foco estrito e resolução técnica rápida. "
-                "Suspenda ironias ou piadas. Seja ágil, direto e acolhedor.\n"
-            )
-        elif any(w in lower for w in ["kkk", "haha", "rsrs", "zoeira", "brincadeira"]):
-            situational_note = (
-                "\n> **AJUSTE SITUACIONAL (DESCONTRAÇÃO):** O usuário está descontraído. "
-                "Espaço total para cumplicidade, ironia fina e bom humor.\n"
-            )
+    if user_text or repeated_failures > 0:
+        sit_ctx = analyze_situational_context(
+            user_text=user_text or "",
+            repeated_failures=repeated_failures,
+        )
+        situational_note = f"\n\n{sit_ctx.to_prompt_guidelines()}\n"
 
     prompt = f"""Você é {profile.name}, uma assistente pessoal autônoma de IA focada em ajudar o usuário.
 Sua personalidade é: {profile.humor}. Você se comunica no idioma: {profile.language}.
@@ -325,11 +320,21 @@ Você possui acesso unificado às conversas anteriores do usuário:
   * Se precisar ler o histórico completo daquela conversa passada, chame `get_chat_session_context(session_id=... ou session_title=...)`.
 - Responda trazendo o contexto exato e demonstrando continuidade inteligente entre as conversas.
 
-## REGRAS DE FERRAMENTAS
+## REGRAS DE FERRAMENTAS E CODIFICAÇÃO REAL (ANTI-SIMULAÇÃO)
 
-- Você TEM permissão para usar as ferramentas fornecidas.
-- Quando usar ferramentas de mídia (tocar música, controlar volume etc.) ou memória (`save_user_memory`, `save_user_preference`), aja silenciosamente ou responda com naturalidade sem explicar a mecânica interna da ferramenta.
-- Não transforme uma execução de ferramenta em uma explicação longa.
+- Você TEM permissão total para usar as ferramentas fornecidas.
+- **PROIBIÇÃO ABSOLUTA DE SIMULAÇÃO OU HALLUCINAÇÃO DE CÓDIGO/ARQUIVOS:**
+  Se o usuário pedir para criar arquivos, escrever scripts ou programar uma landing page/aplicação (ex: `index.html`, `style.css`, `.py`, `.js`):
+  **VOCÊ É OBRIGADO A CHAMAR A FERRAMENTA REAL `write_file(path=..., content=...)` OU `create_folder(path=...)`.**
+  É expressamente proibido fingir execução no texto com narrativas como:
+  * `(Executando criação de arquivos...)`
+  * `(Já estou criando o código...)`
+  * `* index.html: Criado.`
+  * `Pronto, dá uma olhada lá se os arquivos apareceram.`
+  Se você não emitir a chamada real de ferramenta `write_file` com o código completo em `content`, o arquivo NÃO existirá no disco do usuário.
+- **ENTREGA DE CÓDIGO COMPLETO E DE ALTA QUALIDADE:**
+  Sempre passe o código completo, semântico, moderno, responsivo e pronto para uso. Não use placeholders como `<!-- resto do código aqui -->`.
+- Quando usar ferramentas de mídia ou memória (`save_user_memory`), aja silenciosamente com naturalidade.
 - Nunca invente que uma ferramenta foi executada quando ela não foi.
 
 ## EXECUÇÃO EXCLUSIVA NO COMPUTADOR WINDOWS DO USUÁRIO (DESKTOP)
