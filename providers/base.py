@@ -45,3 +45,17 @@ class BaseLLMProvider(ABC):
         """Gera chunks de resposta em streaming. Pode ser sobrescrito pelo provedor."""
         response = await self.chat(system_prompt, messages, tools, model_override=model_override)
         yield StreamChunk(text=response.content, tool_calls=response.tool_calls, is_done=True)
+
+    async def generate(
+        self,
+        prompt: str,
+        system_instruction: str = "",
+        temperature: float = 0.2,
+        model_override: Optional[str] = None,
+    ) -> LLMResponse:
+        """Gera resposta direta a partir de um prompt e instrução de sistema."""
+        return await self.chat(
+            system_prompt=system_instruction,
+            messages=[{"role": "user", "content": prompt}],
+            model_override=model_override,
+        )

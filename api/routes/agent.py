@@ -125,3 +125,36 @@ async def agent_events_stream():
             "X-Accel-Buffering": "no",
         },
     )
+
+
+class PermissionResolveRequest(BaseModel):
+    approved: bool
+    reason: Optional[str] = None
+
+
+@router.get("/permissions/pending")
+async def get_pending_permissions():
+    """Lista permissões de sistema que aguardam autorização do usuário."""
+    from brain.agent.governance import permission_gate
+    return {"pending": permission_gate.get_pending_requests()}
+
+
+@router.post("/permissions/{permission_id}/resolve")
+async def resolve_permission(
+    permission_id: str,
+    req: PermissionResolveRequest,
+    user: Optional[dict] = Depends(get_current_user_optional),
+):
+    """Aprova ou rejeita uma ação de risco solicitada pelo Charlie Agent Runtime."""
+    from brain.agent.governance import permission_gate
+    user_name = (user or {}).get("name") or "Usuário"
+    success = permission_gate.resolve_permission(
+        permission_id=permission_id,
+        approved=req.approved,
+        user_name=user_name,
+        reason=req.reason,
+    )
+    if not success:
+        return {"status": "error", "message": "Permissão não encontrada ou expirada."}
+    return {"status": "resolved", "approved": req.approved, "permission_id": permission_id}
+

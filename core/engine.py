@@ -18,8 +18,8 @@ class AssistantEngine:
     """Gerencia o loop principal da assistente de voz."""
 
     def __init__(self) -> None:
-        self.pipeline = AssistantPipeline()
-        self.wakeword = WakeWordDetector()
+        self.pipeline = AssistantPipeline(init_audio=True)
+        self.wakeword = WakeWordDetector() if WakeWordDetector else None
         self.consolidator = MemoryConsolidator(self.pipeline)
         self._running = False
 
@@ -47,6 +47,7 @@ class AssistantEngine:
                     # Pede o texto no terminal sem bloquear o loop assíncrono
                     user_text = await asyncio.to_thread(input, "📝 Digite seu comando: ")
                 else:
+                    print("\n🎤 Microfone aberto... Pode falar!")
                     media_manager.set_ducking(True)
                     try:
                         user_text = await self.pipeline.process_voice_input()
@@ -61,13 +62,19 @@ class AssistantEngine:
                     continuous_mode = False
                     continue
 
+                print(f"\n💬 Você: {user_text}")
+
                 if self._is_exit_command(user_text):
+                    print("🤖 Charlie: Até logo!\n")
                     await self.pipeline.tts.speak("Até logo!")
                     continuous_mode = False
                     break
 
                 try:
-                    await self.pipeline.run_pipeline(user_text)
+                    print("⏳ Charlie pensando...")
+                    reply = await self.pipeline.run_pipeline(user_text)
+                    if reply:
+                        print(f"\n🤖 Charlie: {reply}\n")
                     continuous_mode = True
                 except Exception:
                     logger.exception("Erro ao processar solicitação")
@@ -83,7 +90,8 @@ class AssistantEngine:
         self._running = False
         print("\n🧠 Consolidando memórias do dia, um momento...")
         await self.consolidator.consolidate()
-        await self.wakeword.close()
+        if self.wakeword:
+            await self.wakeword.close()
 
     @staticmethod
     def _is_exit_command(text: str) -> bool:

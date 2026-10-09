@@ -26,6 +26,9 @@ class TextToSpeech:
         self.elevenlabs_api_key: str = config.elevenlabs_api_key
         self.elevenlabs_voice_id: str = config.elevenlabs_voice_id
         self.elevenlabs_model_id: str = config.elevenlabs_model_id
+        self.chatterbox_api_url: str = config.chatterbox_api_url
+        self.chatterbox_model_type: str = config.chatterbox_model_type
+        self.chatterbox_exaggeration: float = config.chatterbox_exaggeration
 
     def _clean_text(self, text: str) -> str:
         """Higieniza o texto removendo blocos de código markdown, links e símbolos brutos para fala fluida."""
@@ -61,6 +64,13 @@ class TextToSpeech:
 
     async def _synthesize(self, text: str) -> Optional[Path]:
         """Sintetiza áudio selecionando o provedor configurado com fallback automático."""
+        if self.provider == "chatterbox":
+            audio_path = await self._synthesize_chatterbox(text)
+            if audio_path:
+                return audio_path
+            logger.warning("Falha na síntese com Chatterbox. Acionando fallback automático para Edge-TTS...")
+            return await self._synthesize_edge(text)
+
         if self.provider == "elevenlabs":
             audio_path = await self._synthesize_elevenlabs(text)
             if audio_path:
@@ -69,6 +79,43 @@ class TextToSpeech:
             return await self._synthesize_edge(text)
 
         return await self._synthesize_edge(text)
+
+    async def _synthesize_chatterbox(self, text: str) -> Optional[Path]:
+        """Sintetiza áudio via API Serverless do Chatterbox (Modal ou endpoint customizado)."""
+        if not self.chatterbox_api_url:
+            logger.warning("Chatterbox configurado mas CHATTERBOX_API_URL não informado.")
+            return None
+
+        url = self.chatterbox_api_url.strip().rstrip("/")
+        if not (url.endswith("/tts") or url.endswith("/speech")):
+            url = f"{url}/tts"
+
+        payload = {
+            "text": text,
+            "language_id": "pt",
+            "model_type": self.chatterbox_model_type or "multilingual",
+            "exaggeration": self.chatterbox_exaggeration,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code == 200:
+                    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                    tmp.write(response.content)
+                    tmp_path = Path(tmp.name)
+                    tmp.close()
+                    return tmp_path
+                else:
+                    logger.warning(
+                        "Erro na API Chatterbox (HTTP %d): %s",
+                        response.status_code,
+                        response.text[:200],
+                    )
+                    return None
+        except Exception as e:
+            logger.warning("Exceção ao chamar Chatterbox API (%s): %s", url, e)
+            return None
 
     async def _synthesize_elevenlabs(self, text: str) -> Optional[Path]:
         """Sintetiza voz de alta qualidade via API oficial do ElevenLabs."""
