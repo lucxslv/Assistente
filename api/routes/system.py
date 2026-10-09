@@ -7,7 +7,7 @@ import subprocess
 import time
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 try:
     import psutil
@@ -16,6 +16,7 @@ except ImportError:
 
 from api.db import get_db_pool
 from api.state import state
+from api.routes.auth import get_current_user
 from brain.context.presence import presence_manager
 from config import config
 from tools.system_control import set_system_volume, system_power_action, execute_system_command
@@ -111,8 +112,8 @@ async def system_presence():
 
 
 @router.post("/remote")
-async def remote_control(req: RemoteControlRequest):
-    """Executa ações de controle remoto nativo do desktop Windows."""
+async def remote_control(req: RemoteControlRequest, user: dict = Depends(get_current_user)):
+    """Executa ações de controle remoto nativo do desktop Windows (requer autenticação)."""
     action = req.action.lower()
 
     if action == "volume":

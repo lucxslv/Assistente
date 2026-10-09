@@ -1,8 +1,10 @@
 """Provedor Gemini."""
 
 import asyncio
+import base64
 import json
 import logging
+import uuid
 from typing import Any, Optional
 
 from config import config
@@ -18,69 +20,132 @@ class GeminiProvider(BaseLLMProvider):
         tools: list[dict[str, Any]] | None = None,
         model_override: Optional[str] = None,
     ) -> LLMResponse:
-        import google.generativeai as genai
-        from google.generativeai.types import content_types
-
-        genai.configure(api_key=config.gemini_api_key)
-        
-        # Mapeamento de tools JSON Schema para Tools do Gemini
-        gemini_tools = []
-        if tools:
-            for t in tools:
-                func = t.get("function", {})
-                gemini_tools.append(
-                    genai.types.FunctionDeclaration(
-                        name=func.get("name"),
-                        description=func.get("description"),
-                        parameters=func.get("parameters")
-                    )
-                )
-
-        target_model = model_override or config.gemini_model
+        raw_model = model_override or config.gemini_model
+        # Mapeia aliases legados para modelos modernos compatíveis
+        target_model = "gemini-3.8-flash" if raw_model in ("gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash") else (
+            "gemini-3.5-flash-lite" if raw_model in ("gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite", "gemini-flash-lite-latest") else raw_model
+        )
         models_to_try = [target_model]
-        if "gemini-3.1-flash-lite" not in models_to_try:
-            models_to_try.append("gemini-3.1-flash-lite")
+        if "gemini-3.8-flash" not in models_to_try:
+            models_to_try.append("gemini-3.8-flash")
+        if "gemini-3.5-flash-lite" not in models_to_try:
+            models_to_try.append("gemini-3.5-flash-lite")
 
         history = self._normalize_messages(messages)
-        
         if not history:
             return LLMResponse(content="Como posso ajudar?")
 
-        response = None
-        for current_model_name in models_to_try:
-            try:
-                model = genai.GenerativeModel(
-                    model_name=current_model_name,
-                    system_instruction=system_prompt,
-                    tools=gemini_tools if gemini_tools else None
-                )
-                response = await asyncio.to_thread(model.generate_content, history)
-                break
-            except Exception as e:
-                logger.warning("Falha com modelo %s (%s). Tentando fallback...", current_model_name, e)
-                if current_model_name == models_to_try[-1]:
-                    logger.exception("Erro ao chamar o Gemini: %s", e)
-                    return LLMResponse(content="Ocorreu um erro interno de API do Gemini.")
+        # 1. Tenta com o moderno SDK google-genai
+        try:
+            from google import genai
+            from google.genai import types
 
-        # Extrair tool calls, se houver
-        tool_calls: list[ToolCall] = []
-        content = ""
-        
-        for part in response.parts:
-            if part.function_call:
-                # O Gemini retorna os argumentos como um proto map, convertemos para dict
-                args = {k: v for k, v in part.function_call.args.items()}
-                tool_calls.append(
-                    ToolCall(
-                        id=f"call_{part.function_call.name}",
-                        name=part.function_call.name,
-                        arguments=args
+            client = genai.Client(api_key=config.gemini_api_key)
+
+            gemini_tools = []
+            if tools:
+                func_decls = []
+                for t in tools:
+                    func = t.get("function", {})
+                    func_decls.append(
+                        types.FunctionDeclaration(
+                            name=func.get("name"),
+                            description=func.get("description"),
+                            parameters=func.get("parameters"),
+                        )
                     )
-                )
-            elif part.text:
-                content += part.text
+                if func_decls:
+                    gemini_tools = [types.Tool(function_declarations=func_decls)]
 
-        return LLMResponse(content=content.strip(), tool_calls=tool_calls)
+            gen_config = types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                tools=gemini_tools if gemini_tools else None,
+            )
+
+            genai_contents = self._convert_to_genai_contents(history, types)
+
+            for current_model_name in models_to_try:
+                try:
+                    response = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=current_model_name,
+                        contents=genai_contents,
+                        config=gen_config,
+                    )
+
+                    tool_calls: list[ToolCall] = []
+                    content = ""
+
+                    if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                        for part in response.candidates[0].content.parts:
+                            if part.function_call:
+                                args = dict(part.function_call.args) if part.function_call.args else {}
+                                tool_calls.append(
+                                    ToolCall(
+                                        id=f"call_{part.function_call.name}_{uuid.uuid4().hex[:6]}",
+                                        name=part.function_call.name,
+                                        arguments=args,
+                                    )
+                                )
+                            elif part.text:
+                                content += part.text
+
+                    return LLMResponse(content=content.strip(), tool_calls=tool_calls)
+                except Exception as model_err:
+                    logger.warning("Falha com modelo %s no google-genai: %s", current_model_name, model_err)
+                    if current_model_name == models_to_try[-1]:
+                        raise model_err
+
+        except Exception as genai_err:
+            logger.warning("Aviso no SDK google-genai: %s. Tentando fallback legado...", genai_err)
+
+        # 2. Fallback legado para google.generativeai caso necessário
+        try:
+            import google.generativeai as legacy_genai
+            legacy_genai.configure(api_key=config.gemini_api_key)
+
+            gemini_tools = []
+            if tools:
+                for t in tools:
+                    func = t.get("function", {})
+                    gemini_tools.append(
+                        legacy_genai.types.FunctionDeclaration(
+                            name=func.get("name"),
+                            description=func.get("description"),
+                            parameters=func.get("parameters"),
+                        )
+                    )
+
+            for current_model_name in models_to_try:
+                try:
+                    model = legacy_genai.GenerativeModel(
+                        model_name=current_model_name,
+                        system_instruction=system_prompt,
+                        tools=gemini_tools if gemini_tools else None,
+                    )
+                    response = await asyncio.to_thread(model.generate_content, history)
+                    tool_calls: list[ToolCall] = []
+                    content = ""
+                    for part in response.parts:
+                        if part.function_call:
+                            args = {k: v for k, v in part.function_call.args.items()}
+                            tool_calls.append(
+                                ToolCall(
+                                    id=f"call_{part.function_call.name}",
+                                    name=part.function_call.name,
+                                    arguments=args,
+                                )
+                            )
+                        elif part.text:
+                            content += part.text
+                    return LLMResponse(content=content.strip(), tool_calls=tool_calls)
+                except Exception as leg_err:
+                    if current_model_name == models_to_try[-1]:
+                        logger.exception("Erro definitivo no fallback do Gemini: %s", leg_err)
+                        return LLMResponse(content="Ocorreu um erro interno de API do Gemini.")
+        except Exception as f_err:
+            logger.exception("Erro em ambos SDKs do Gemini: %s", f_err)
+            return LLMResponse(content="Ocorreu um erro interno de API do Gemini.")
 
     async def chat_stream(
         self,
@@ -91,28 +156,18 @@ class GeminiProvider(BaseLLMProvider):
     ):
         import asyncio
         import threading
-        from collections.abc import AsyncGenerator
+        import uuid
         from providers.base import StreamChunk
-        import google.generativeai as genai
 
-        genai.configure(api_key=config.gemini_api_key)
-
-        gemini_tools = []
-        if tools:
-            for t in tools:
-                func = t.get("function", {})
-                gemini_tools.append(
-                    genai.types.FunctionDeclaration(
-                        name=func.get("name"),
-                        description=func.get("description"),
-                        parameters=func.get("parameters")
-                    )
-                )
-
-        target_model = model_override or config.gemini_model
+        raw_model = model_override or config.gemini_model
+        target_model = "gemini-3.8-flash" if raw_model in ("gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash") else (
+            "gemini-3.5-flash-lite" if raw_model in ("gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite", "gemini-flash-lite-latest") else raw_model
+        )
         models_to_try = [target_model]
-        if "gemini-3.1-flash-lite" not in models_to_try:
-            models_to_try.append("gemini-3.1-flash-lite")
+        if "gemini-3.8-flash" not in models_to_try:
+            models_to_try.append("gemini-3.8-flash")
+        if "gemini-3.5-flash-lite" not in models_to_try:
+            models_to_try.append("gemini-3.5-flash-lite")
 
         history = self._normalize_messages(messages)
         if not history:
@@ -121,15 +176,122 @@ class GeminiProvider(BaseLLMProvider):
 
         loop = asyncio.get_running_loop()
 
+        # 1. Tenta streaming via google-genai moderno
         for current_model_name in models_to_try:
             q: asyncio.Queue = asyncio.Queue()
 
-            def worker(m_name=current_model_name):
+            def worker_modern(m_name=current_model_name):
                 try:
-                    mod = genai.GenerativeModel(
+                    from google import genai
+                    from google.genai import types
+
+                    client = genai.Client(api_key=config.gemini_api_key)
+
+                    gemini_tools = []
+                    if tools:
+                        func_decls = []
+                        for t in tools:
+                            func = t.get("function", {})
+                            func_decls.append(
+                                types.FunctionDeclaration(
+                                    name=func.get("name"),
+                                    description=func.get("description"),
+                                    parameters=func.get("parameters"),
+                                )
+                            )
+                        if func_decls:
+                            gemini_tools = [types.Tool(function_declarations=func_decls)]
+
+                    gen_config = types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        tools=gemini_tools if gemini_tools else None,
+                    )
+
+                    genai_contents = self._convert_to_genai_contents(history, types)
+                    stream_resp = client.models.generate_content_stream(
+                        model=m_name,
+                        contents=genai_contents,
+                        config=gen_config,
+                    )
+
+                    for c in stream_resp:
+                        chunk_tool_calls: list[ToolCall] = []
+                        chunk_text = ""
+
+                        if c.candidates and c.candidates[0].content and c.candidates[0].content.parts:
+                            for part in c.candidates[0].content.parts:
+                                if part.function_call:
+                                    args = dict(part.function_call.args) if part.function_call.args else {}
+                                    chunk_tool_calls.append(
+                                        ToolCall(
+                                            id=f"call_{part.function_call.name}_{uuid.uuid4().hex[:6]}",
+                                            name=part.function_call.name,
+                                            arguments=args,
+                                        )
+                                    )
+                                elif part.text:
+                                    chunk_text += part.text
+
+                        if chunk_text or chunk_tool_calls:
+                            chunk = StreamChunk(text=chunk_text if chunk_text else None, tool_calls=chunk_tool_calls)
+                            loop.call_soon_threadsafe(q.put_nowait, ("chunk", chunk))
+
+                    loop.call_soon_threadsafe(q.put_nowait, ("done", None))
+                except Exception as ex:
+                    loop.call_soon_threadsafe(q.put_nowait, ("error", ex))
+
+            threading.Thread(target=worker_modern, daemon=True).start()
+
+            got_any_chunk = False
+            failed = False
+            error_val = None
+
+            while True:
+                kind, val = await q.get()
+                if kind == "chunk":
+                    got_any_chunk = True
+                    yield val
+                elif kind == "done":
+                    yield StreamChunk(is_done=True)
+                    return
+                elif kind == "error":
+                    logger.warning("Falha no streaming moderno com modelo %s (%s).", current_model_name, val)
+                    failed = True
+                    error_val = val
+                    break
+
+            if failed:
+                if got_any_chunk:
+                    raise RuntimeError(f"Falha mid-stream no modelo {current_model_name}: {error_val}")
+                # Continua para o próximo modelo na lista
+                continue
+
+        # 2. Se todos os modelos falharem no SDK moderno, tenta fallback legado
+        logger.warning("Tentando streaming de emergência via SDK legado google.generativeai...")
+        for current_model_name in models_to_try:
+            q_leg: asyncio.Queue = asyncio.Queue()
+
+            def worker_legacy(m_name=current_model_name):
+                try:
+                    import google.generativeai as legacy_genai
+                    legacy_genai.configure(api_key=config.gemini_api_key)
+
+                    gemini_tools = []
+                    if tools:
+                        for t in tools:
+                            func = t.get("function", {})
+                            gemini_tools.append(
+                                legacy_genai.types.FunctionDeclaration(
+                                    name=func.get("name"),
+                                    description=func.get("description"),
+                                    parameters=func.get("parameters"),
+                                )
+                            )
+
+                    mod = legacy_genai.GenerativeModel(
                         model_name=m_name,
                         system_instruction=system_prompt,
-                        tools=gemini_tools if gemini_tools else None
+                        tools=gemini_tools if gemini_tools else None,
                     )
                     stream_resp = mod.generate_content(history, stream=True)
                     for c in stream_resp:
@@ -140,26 +302,26 @@ class GeminiProvider(BaseLLMProvider):
                                 args = {k: v for k, v in part.function_call.args.items()}
                                 chunk_tool_calls.append(
                                     ToolCall(
-                                        id=f"call_{part.function_call.name}",
+                                        id=f"call_{part.function_call.name}_{uuid.uuid4().hex[:6]}",
                                         name=part.function_call.name,
-                                        arguments=args
+                                        arguments=args,
                                     )
                                 )
                             elif part.text:
                                 chunk_text += part.text
                         if chunk_text or chunk_tool_calls:
                             chunk = StreamChunk(text=chunk_text if chunk_text else None, tool_calls=chunk_tool_calls)
-                            loop.call_soon_threadsafe(q.put_nowait, ("chunk", chunk))
-                    loop.call_soon_threadsafe(q.put_nowait, ("done", None))
+                            loop.call_soon_threadsafe(q_leg.put_nowait, ("chunk", chunk))
+                    loop.call_soon_threadsafe(q_leg.put_nowait, ("done", None))
                 except Exception as ex:
-                    loop.call_soon_threadsafe(q.put_nowait, ("error", ex))
+                    loop.call_soon_threadsafe(q_leg.put_nowait, ("error", ex))
 
-            threading.Thread(target=worker, daemon=True).start()
+            threading.Thread(target=worker_legacy, daemon=True).start()
 
             got_any_chunk = False
             failed = False
             while True:
-                kind, val = await q.get()
+                kind, val = await q_leg.get()
                 if kind == "chunk":
                     got_any_chunk = True
                     yield val
@@ -167,17 +329,14 @@ class GeminiProvider(BaseLLMProvider):
                     yield StreamChunk(is_done=True)
                     return
                 elif kind == "error":
-                    logger.warning("Falha com streaming no modelo %s (%s). Tentando fallback...", current_model_name, val)
+                    logger.warning("Falha com streaming legado no modelo %s (%s).", current_model_name, val)
                     failed = True
                     break
 
-            if failed:
-                if got_any_chunk:
-                    # Se já transmitiu dados parciais ao cliente, lança erro para o pipeline coordenar reset e fallback limpo
-                    raise RuntimeError(f"Falha mid-stream no modelo {current_model_name}: {val}")
-                if current_model_name == models_to_try[-1]:
-                    logger.exception("Erro definitivo no streaming do Gemini")
-                    raise RuntimeError(f"Erro em todos os modelos do Gemini: {val}")
+            if failed and got_any_chunk:
+                raise RuntimeError(f"Falha mid-stream legado no modelo {current_model_name}: {val}")
+
+        raise RuntimeError("Erro ao estabelecer conexão de streaming com os modelos Gemini.")
 
 
     @staticmethod
@@ -242,3 +401,29 @@ class GeminiProvider(BaseLLMProvider):
                     normalized.append({"role": "user", "parts": parts})
                     
         return normalized
+
+    @staticmethod
+    def _convert_to_genai_contents(history: list[dict[str, Any]], types) -> list[Any]:
+        """Converte mensagens normalizadas para a lista de tipos types.Content exigidos pelo SDK google-genai."""
+        genai_contents = []
+        for item in history:
+            role = item.get("role", "user")
+            genai_role = "model" if role in ("model", "assistant") else "user"
+            parts = []
+            for p in item.get("parts", []):
+                if isinstance(p, str):
+                    parts.append(types.Part.from_text(text=p))
+                elif isinstance(p, dict) and "inline_data" in p:
+                    try:
+                        raw_bytes = base64.b64decode(p["inline_data"]["data"])
+                        parts.append(types.Part.from_bytes(
+                            data=raw_bytes,
+                            mime_type=p["inline_data"].get("mime_type", "image/png"),
+                        ))
+                    except Exception as b64_err:
+                        logger.warning(f"Erro ao decodificar imagem base64: {b64_err}")
+                else:
+                    parts.append(types.Part.from_text(text=str(p)))
+            if parts:
+                genai_contents.append(types.Content(role=genai_role, parts=parts))
+        return genai_contents

@@ -35,3 +35,15 @@ desktop/src-tauri/target/
 *.sqlite
 *.sqlite3
 data/
+
+# Dependencies & Package Managers
+node_modules/
+*/node_modules/
+.npm/
+
+# Mobile & Expo artifacts
+.expo/
+*/.expo/
+mobile/android/
+mobile/ios/
+mobile/dist/

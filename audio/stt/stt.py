@@ -151,7 +151,7 @@ class SpeechToText:
         language = config.language.split("-")[0] if config.language else "pt"
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
         headers = {"Authorization": f"Bearer {config.groq_api_key}"}
-        stt_model = getattr(config, "groq_stt_model", "whisper-large-v3") or "whisper-large-v3"
+        stt_model = getattr(config, "groq_stt_model", "whisper-large-v3-turbo") or "whisper-large-v3-turbo"
 
         files = {"file": ("audio.wav", wav_io, "audio/wav")}
         data = {
@@ -165,6 +165,22 @@ class SpeechToText:
         try:
             logger.debug("Enviando áudio para nuvem Groq (%s)...", stt_model)
             response = httpx.post(url, headers=headers, files=files, data=data, timeout=30.0)
+
+            # Se o modelo configurado estiver bloqueado ou não autorizado pelo projeto Groq, alterna para whisper-large-v3-turbo
+            if response.status_code in (400, 403) and stt_model != "whisper-large-v3-turbo":
+                logger.warning(
+                    "Modelo Groq '%s' restrito ou bloqueado pelo projeto (%s). Alternando automaticamente para 'whisper-large-v3-turbo'...",
+                    stt_model,
+                    response.status_code,
+                )
+                wav_io.seek(0)
+                files = {"file": ("audio.wav", wav_io, "audio/wav")}
+                data["model"] = "whisper-large-v3-turbo"
+                response = httpx.post(url, headers=headers, files=files, data=data, timeout=30.0)
+
+            if response.status_code != 200:
+                logger.error("Erro na resposta do Groq STT: %s - %s", response.status_code, response.text)
+
             response.raise_for_status()
             
             result = response.json()
@@ -184,6 +200,9 @@ class SpeechToText:
                 "deixe seu like",
                 "até o próximo vídeo",
                 "legendado por",
+                "legenda por",
+                "legendas por",
+                "subtitles by",
                 "áudio:",
             ]
             if any(bp in lower_text for bp in bad_phrases):

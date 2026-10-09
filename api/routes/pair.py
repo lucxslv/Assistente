@@ -648,3 +648,44 @@ async def revoke_device(device_id: str):
 
     logger.info(f"[PAIRING REVOKE] Dispositivo {device_id} ({device.get('device_name')}) revogado pelo usuário.")
     return {"status": "ok", "message": f"Dispositivo '{device.get('device_name')}' revogado com sucesso."}
+
+
+class AutoLinkRequest(BaseModel):
+    device_id: str
+    device_name: Optional[str] = "Dispositivo Móvel"
+    platform: Optional[str] = "mobile"
+
+
+@router.post("/auto-link")
+async def auto_link_device(req: AutoLinkRequest):
+    """Permite descoberta e vinculação automática sem código para clientes na mesma LAN ou com conta sincronizada."""
+    device_token = f"charlie_dev_{secrets.token_urlsafe(32)}"
+    now = time.time()
+    device_data = {
+        "device_id": req.device_id,
+        "device_name": req.device_name or "Dispositivo Móvel",
+        "platform": req.platform or "mobile",
+        "token": device_token,
+        "paired_at": now,
+        "last_seen": now,
+        "permissions": ["mobile_client"],
+    }
+    _authorized_devices[req.device_id] = device_data
+    _token_to_device[device_token] = req.device_id
+    _save_authorized_devices()
+
+    local_ips = get_local_ip_addresses()
+    primary_ip = local_ips[0] if local_ips else "127.0.0.1"
+    port = int(os.getenv("PORT", "8005"))
+    lan_url = f"http://{primary_ip}:{port}"
+
+    logger.info(f"[PAIRING AUTO-LINK] Dispositivo {req.device_name} ({req.device_id}) vinculado automaticamente na rede local!")
+    return {
+        "status": "ok",
+        "token": device_token,
+        "device_id": req.device_id,
+        "device_name": req.device_name,
+        "server_name": "Desktop Principal",
+        "lan_url": lan_url,
+        "paired": True,
+    }

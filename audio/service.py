@@ -85,6 +85,7 @@ class VoiceService:
             "tts_provider": config.tts_provider,
             "tts_voice": config.tts_voice,
             "stt_provider": config.stt_provider,
+            "chatterbox_api_url": getattr(config, "chatterbox_api_url", ""),
         }
 
     async def start(self) -> None:

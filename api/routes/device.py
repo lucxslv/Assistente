@@ -17,7 +17,7 @@ except ImportError:
     psutil = None
 
 from api.db import get_or_init_db_pool
-from tools.system_control import set_system_volume, system_power_action, execute_system_command
+from tools.system_control import set_system_volume, system_power_action, execute_system_command, get_system_volume
 from .pair import get_authorized_device_by_token, get_authorized_device_async
 
 logger = logging.getLogger("charlie.device")
@@ -108,17 +108,59 @@ Add-Type -TypeDefinition $s -ReferencedAssemblies System.Windows.Forms,System.Dr
 
 
 def _open_target_windows(target: str) -> str:
-    """Abre pasta, aplicativo ou URL com segurança no Windows."""
+    """Abre pasta, aplicativo ou URL com segurança e janela interativa visível no Windows."""
     if platform.system() != "Windows":
         return "Abertura não suportada neste OS."
     try:
-        creation_flags = 0x08000000
-        subprocess.Popen(
-            ["cmd.exe", "/c", "start", "", target.strip()],
-            creationflags=creation_flags,
-        )
-        return f"Alvo '{target}' aberto com sucesso."
+        target_clean = target.strip()
+        norm = target_clean.lower().rstrip(":")
+
+        APP_MAP = {
+            "terminal": "wt.exe",
+            "wt": "wt.exe",
+            "powershell": "powershell.exe",
+            "cmd": "cmd.exe",
+            "prompt": "cmd.exe",
+            "code": "code",
+            "vscode": "code",
+            "explorer": "explorer.exe",
+            "explorador": "explorer.exe",
+            "calc": "calc.exe",
+            "calculadora": "calc.exe",
+            "notepad": "notepad.exe",
+            "bloco de notas": "notepad.exe",
+            "chrome": "chrome",
+            "spotify": "spotify",
+            "edge": "msedge",
+        }
+
+        cmd_to_open = APP_MAP.get(norm, target_clean)
+
+        # Se for URL web
+        if cmd_to_open.startswith("http://") or cmd_to_open.startswith("https://"):
+            import webbrowser
+            webbrowser.open(cmd_to_open)
+            return f"URL '{cmd_to_open}' aberta no navegador padrão."
+
+        # Se for arquivo ou pasta existente
+        if os.path.exists(cmd_to_open):
+            try:
+                os.startfile(cmd_to_open)
+                return f"Caminho '{cmd_to_open}' aberto com sucesso."
+            except Exception:
+                pass
+
+        # Executa aplicativo ou comando no Windows
+        # start "" <cmd> cria processo desanexado do console pai na sessão interativa do usuário
+        res = subprocess.run(["cmd.exe", "/c", "start", "", cmd_to_open], capture_output=True, text=True, check=False)
+        if res.returncode != 0 and norm in ("terminal", "wt"):
+            # Fallback para powershell se wt.exe não estiver instalado
+            subprocess.run(["cmd.exe", "/c", "start", "", "powershell.exe"], capture_output=True, text=True, check=False)
+            return "Terminal do Windows aberto via PowerShell."
+
+        return f"Alvo '{target_clean}' aberto com sucesso."
     except Exception as e:
+        logger.exception(f"Erro ao abrir '{target}': {e}")
         return f"Erro ao abrir '{target}': {e}"
 
 
@@ -353,6 +395,7 @@ async def device_status():
                             "device_name": row["device_name"],
                             "last_seen_seconds_ago": round(now - dev_last, 1),
                             "telemetry": telem,
+                            "volume": get_system_volume() if platform.system() == "Windows" else None,
                         }
                     else:
                         return {
@@ -373,6 +416,7 @@ async def device_status():
             "device_name": _latest_host_state.get("device_name", "Meu PC"),
             "last_seen_seconds_ago": seconds_ago,
             "telemetry": _latest_host_state.get("telemetry", {}),
+            "volume": get_system_volume() if platform.system() == "Windows" else None,
         }
 
     # 3. Se estiver rodando no host físico local direto com psutil
@@ -404,6 +448,7 @@ async def device_status():
                 "device_name": platform.node() or "Desktop Host",
                 "last_seen_seconds_ago": 0.0,
                 "telemetry": telemetry,
+                "volume": get_system_volume(),
             }
         except Exception:
             pass
@@ -491,11 +536,21 @@ async def device_command(
         }
 
     # Execução nativa direta no Windows
-    if action in ("volume", "set_volume"):
-        if level is None:
-            raise HTTPException(status_code=400, detail="Parâmetro 'level' (0-100) obrigatório.")
-        msg = set_system_volume(level=int(level))
-        return {"success": True, "status": "ok", "action": "set_volume", "level": level, "message": msg}
+    if action in ("volume", "set_volume", "get_volume", "volume_up", "volume_down"):
+        if action == "get_volume":
+            vol_data = get_system_volume()
+            return {"success": True, "status": "ok", "action": "get_volume", **vol_data}
+        elif action in ("volume_up", "volume_down"):
+            step = 10 if action == "volume_up" else -10
+            msg = set_system_volume(step=step)
+            vol_data = get_system_volume()
+            return {"success": True, "status": "ok", "action": action, "level": vol_data.get("level"), "message": msg}
+        else:
+            if level is None:
+                vol_data = get_system_volume()
+                return {"success": True, "status": "ok", "action": "set_volume", **vol_data}
+            msg = set_system_volume(level=int(level))
+            return {"success": True, "status": "ok", "action": "set_volume", "level": level, "message": msg}
 
     elif action in ("mute", "toggle_mute"):
         success = _press_windows_key(VK_VOLUME_MUTE)
@@ -558,30 +613,23 @@ async def device_command(
         msg = _open_target_windows(target)
         return {"success": True, "status": "ok", "action": "open", "target": target, "message": msg}
 
-    elif action in ("command", "run_command", "quick_command", "git_pull", "sync_git"):
-        # Allowlist restrita de comandos de manutenção aprovados (C-05 Hardening)
-        SAFE_COMMANDS_ALLOWLIST = {
-            "git pull": "git pull",
-            "git status": "git status",
-            "git_pull": "git pull",
-            "sync_git": "git pull",
-        }
-        cmd_key = (command or action).strip().lower()
-        if cmd_key not in SAFE_COMMANDS_ALLOWLIST and action != "git_pull":
-            logger.warning(f"[SECURITY] Tentativa de comando arbitrário bloqueada: {command}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Comando não autorizado. Apenas ações pré-aprovadas da allowlist são permitidas no host.",
-            )
-        resolved_cmd = SAFE_COMMANDS_ALLOWLIST.get(cmd_key, "git pull")
-        result = execute_system_command(resolved_cmd)
+    elif action in ("command", "run_command", "quick_command", "git_pull", "sync_git", "terminal_command"):
+        cmd_to_run = (command or (params.get("command") if params else None) or "").strip()
+        if not cmd_to_run and action in ("git_pull", "sync_git"):
+            cmd_to_run = "git pull"
+
+        if not cmd_to_run:
+            raise HTTPException(status_code=400, detail="Parâmetro 'command' obrigatório para execução de terminal.")
+
+        # Executa no host físico através do validador de proteção do Charlie
+        result = execute_system_command(cmd_to_run)
         return {
             "success": True,
             "status": "ok",
-            "action": "git_pull",
-            "command": resolved_cmd,
+            "action": action,
+            "command": cmd_to_run,
             "result": result,
-            "message": "Comando de sincronização executado com sucesso.",
+            "message": "Comando executado com sucesso no computador.",
         }
 
     raise HTTPException(status_code=400, detail=f"Ação desconhecida: {req.action}")

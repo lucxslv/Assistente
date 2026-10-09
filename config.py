@@ -35,7 +35,7 @@ class Config:
 
     # Áudio
     stt_provider: str = os.getenv("STT_PROVIDER", "whisper")
-    groq_stt_model: str = os.getenv("GROQ_STT_MODEL", "whisper-large-v3")
+    groq_stt_model: str = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
     whisper_model: str = os.getenv("WHISPER_MODEL", "base")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "auto")
     whisper_compute_type: str = os.getenv("WHISPER_COMPUTE_TYPE", "default")
@@ -49,6 +49,9 @@ class Config:
     elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "")
     elevenlabs_model_id: str = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+    chatterbox_api_url: str = os.getenv("CHATTERBOX_API_URL", "")
+    chatterbox_model_type: str = os.getenv("CHATTERBOX_MODEL_TYPE", "multilingual")
+    chatterbox_exaggeration: float = float(os.getenv("CHATTERBOX_EXAGGERATION", "0.5"))
     wake_word: str = os.getenv("WAKE_WORD", "hey_jarvis")
     wake_word_enabled: bool = _bool(os.getenv("WAKE_WORD_ENABLED"), False)
 

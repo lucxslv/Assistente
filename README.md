@@ -36,6 +36,7 @@ assistente/
 │
 └── ⚡ Scripts Rápidos (Raiz)
     ├── run_desktop.bat          # Inicializa API + Charlie Desktop em 1 clique
+    ├── run_mobile.bat           # Inicializa Metro Bundler (Expo Go) + API
     ├── deploy-web.bat           # Sincroniza e faz deploy na Vercel (Web-Charlie)
     ├── iniciar_charlie.vbs      # Executa assistente em background sem terminal
     └── adicionar_ao_startup.bat # Registra o Charlie na inicialização do Windows
@@ -73,7 +74,21 @@ npm run tauri dev
 
 ---
 
-### 🌐 4. Charlie Web Chat (Frontend Web Standalone)
+### 📱 4. Charlie Mobile (React Native + Expo Go)
+Para abrir o aplicativo móvel no seu smartphone com o **Expo Go**:
+```cmd
+run_mobile.bat
+```
+Ou manualmente:
+```bash
+cd mobile
+npm start
+```
+Escaneie o QR Code exibido no terminal utilizando o aplicativo **Expo Go** (Android ou iOS).
+
+---
+
+### 🌐 5. Charlie Web Chat (Frontend Web Standalone)
 Para executar o cliente web localmente:
 ```bash
 cd web-chat
@@ -90,7 +105,7 @@ O script isola as alterações via `git subtree` e envia diretamente para o repo
 
 ---
 
-### 🧠 5. Charlie Cloud Brain (API Backend)
+### 🧠 6. Charlie Cloud Brain (API Backend)
 Para rodar apenas o servidor de API localmente:
 ```bash
 uv run python -m api.main

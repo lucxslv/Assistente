@@ -5,12 +5,11 @@ import logging
 import os
 import platform
 
+from config import config
 from brain.context.manager import ContextManager
 from brain.planner.planner import IntentPlanner, IntentCategory
 from brain.profile import AssistantProfile
-from brain.prompts.prompts import build_system_prompt
-from brain.router.router import LLMRouter
-from config import config
+from brain.router.router import LLMRouter, RouteMode
 from core.memory import ConversationMemory
 from memory.retrieval.retriever import MemoryRetriever
 from providers import (
@@ -219,6 +218,71 @@ class AssistantPipeline:
 
         active_tools = self.tools.get_schemas()
 
+        # Etapa 6.1: Transição Fluida para o Modo Agêntico (Chat-to-Agent Seamless Flow)
+        if route_decision.mode == RouteMode.AGENTIC:
+            from brain.agent.runtime import agent_runtime
+            yield StreamEvent(type="status", data={"status": "thinking", "text": "Iniciando Agent Runtime: planejando grafo de tarefas (DAG)..."})
+
+            listener_queue: asyncio.Queue = asyncio.Queue()
+            agent_runtime.register_listener(listener_queue)
+
+            try:
+                graph = await agent_runtime.start_session(goal=user_text, project="Charlie")
+                yield StreamEvent(type="agent_plan", data=graph.to_dict())
+
+                loop_timeout = 600.0
+                start_time = asyncio.get_event_loop().time()
+
+                while not agent_runtime.is_cancelled:
+                    if asyncio.get_event_loop().time() - start_time > loop_timeout:
+                        yield StreamEvent(type="error", data={"error": "Tempo limite de execução da meta excedido."})
+                        break
+
+                    try:
+                        ev = await asyncio.wait_for(listener_queue.get(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        continue
+
+                    ev_type = ev.get("type", "")
+                    ev_data = ev.get("data", {})
+
+                    if ev_type == "agent.started":
+                        yield StreamEvent(type="status", data={"status": "thinking", "text": f"Agente iniciado para meta: {user_text}"})
+                    elif ev_type == "agent.perception_parsed":
+                        yield StreamEvent(type="agent_plan", data={"parsedGoal": ev_data.get("parsedGoal")})
+                    elif ev_type == "task.created":
+                        yield StreamEvent(type="agent_plan", data=ev_data)
+                    elif ev_type == "thought.generated":
+                        yield StreamEvent(type="thought", data={"thought": ev_data.get("thought"), "role": ev_data.get("role")})
+                    elif ev_type in ("task.started", "task.completed"):
+                        yield StreamEvent(type="task_step", data=ev_data)
+                    elif ev_type == "tool.started":
+                        yield StreamEvent(type="tool_start", data={"name": ev_data.get("tool"), "args": ev_data.get("arguments"), "taskId": ev_data.get("taskId")})
+                    elif ev_type in ("tool.completed", "tool.failed"):
+                        yield StreamEvent(type="tool_end", data={"name": ev_data.get("tool"), "result": ev_data.get("result") or ev_data.get("error"), "taskId": ev_data.get("taskId")})
+                    elif ev_type == "verification.completed":
+                        yield StreamEvent(type="evidence", data=ev_data)
+                    elif ev_type == "reflection.diagnosed":
+                        yield StreamEvent(type="reflection", data=ev_data)
+                    elif ev_type == "agent.permission_requested":
+                        yield StreamEvent(type="permission_requested", data=ev_data)
+                    elif ev_type == "task.recovered":
+                        yield StreamEvent(type="status", data={"status": "thinking", "text": f"Auto-correção aplicada: {ev_data.get('reason')}"})
+                    elif ev_type == "agent.completed":
+                        agent_summary = ev_data.get("summary", "Meta concluída com sucesso.")
+                        yield StreamEvent(type="token", data={"token": f"\n\n### Relatório da Execução Agêntica\n{agent_summary}"})
+                        yield StreamEvent(type="done", data={"reply": agent_summary, "thread_id": thread_id, "model": route_decision.model_name})
+                        return
+                    elif ev_type == "agent.failed":
+                        reason = ev_data.get("reason", "Falha definitiva após auto-correções.")
+                        err_msg = f"A execução da meta agêntica não pôde ser concluída: {reason}"
+                        yield StreamEvent(type="error", data={"error": err_msg})
+                        yield StreamEvent(type="done", data={"reply": err_msg, "thread_id": thread_id, "model": route_decision.model_name})
+                        return
+
+            finally:
+                agent_runtime.unregister_listener(listener_queue)
+
         MAX_ITERATIONS = 5
         iterations = 0
         final_reply = ""
@@ -253,7 +317,7 @@ class AssistantPipeline:
                 logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
                 fallback_model = config.gemini_model
                 if fallback_model == route_decision.model_name:
-                    fallback_model = "gemini-2.5-flash" if route_decision.model_name != "gemini-2.5-flash" else "gemini-3.1-flash-lite"
+                    fallback_model = "gemini-flash-lite-latest" if route_decision.model_name != "gemini-flash-lite-latest" else "gemini-3.5-flash-lite"
 
                 if fallback_model != route_decision.model_name:
                     if emitted_any_token:
@@ -336,6 +400,9 @@ class AssistantPipeline:
                         "tools": client_tools_to_exec,
                     },
                 )
+                cloud_reply = "Comando de dispositivo enviado para execução no seu computador."
+                yield StreamEvent(type="token", data={"token": cloud_reply})
+                yield StreamEvent(type="done", data={"reply": cloud_reply, "thread_id": thread_id, "model": self.last_model_used})
                 return
 
             # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
