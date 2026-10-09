@@ -69,3 +69,61 @@ def test_prompt_repeated_failures_instructs_material_pivot(base_profile, empty_t
     )
     assert "FALHAS REPETIDAS DETECTADAS" in prompt
     assert "Mude materialmente de estratégia" in prompt
+
+
+def test_prompt_contains_canonical_creator_and_identity_hierarchy(base_profile, empty_tools):
+    """Garante que a diretriz de identidade canônica está presente no prompt."""
+    prompt = build_system_prompt(
+        profile=base_profile,
+        context="",
+        memory_summary="",
+        tools=empty_tools,
+        user_text="Olá Charlie",
+    )
+    assert "IDENTIDADE CANÔNICA E AUTORIDADE" in prompt
+    assert "Lucas" in prompt
+    assert "Identidade Declarada vs. Canônica" in prompt
+
+
+def test_prompt_contains_7_innegotiable_principles(base_profile, empty_tools):
+    """Garante que os princípios inegociáveis de identidade conversacional estão presentes."""
+    prompt = build_system_prompt(
+        profile=base_profile,
+        context="",
+        memory_summary="",
+        tools=empty_tools,
+        user_text="Olá",
+    )
+    assert "Personalidade não substitui competência técnica" in prompt
+    assert "Competência técnica não exige formalidade constante" in prompt
+    assert "Ser direto não significa ser hostil" in prompt
+    assert "Ser útil não significa transformar tudo em produtividade" in prompt
+
+
+def test_prompt_casual_chat_forbids_corporate_support_and_forced_structure(base_profile, empty_tools):
+    """Garante que conversas casuais proíbem atitude de atendente e listas forçadas."""
+    prompt = build_system_prompt(
+        profile=base_profile,
+        context="",
+        memory_summary="",
+        tools=empty_tools,
+        user_text="e aí Charlie, tudo bem contigo?",
+    )
+    assert "CONVERSA CASUAL (SEM FORÇAR PRODUTIVIDADE)" in prompt
+    assert "atendente corporativo" in prompt.lower()
+    assert "listas de tarefas" in prompt.lower()
+
+
+def test_prompt_idea_exploration_instructs_cocreation(base_profile, empty_tools):
+    """Garante que compartilhamento de ideias recebe estímulo de curiosidade e co-criação."""
+    prompt = build_system_prompt(
+        profile=base_profile,
+        context="",
+        memory_summary="",
+        tools=empty_tools,
+        user_text="Tive uma ideia absurda pro MegaBrain",
+    )
+    assert "EXPLORAÇÃO DE IDEIAS / BRAINSTORMING" in prompt
+    assert "CURIOSIDADE" in prompt
+    assert "CO-CRIAÇÃO" in prompt
+
