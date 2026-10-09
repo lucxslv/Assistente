@@ -84,6 +84,15 @@ def parse_assistant_message_content(raw_text: str) -> Tuple[str, Dict[str, Any]]
     return final_content, metadata
 
 
+# Conjunto de todos os prefixos parciais válidos de tags internas (abertura e fechamento)
+_INTERNAL_TAG_PREFIXES = set()
+for _t in INTERNAL_METADATA_TAGS:
+    for _i in range(1, len(f"<{_t}>") + 1):
+        _INTERNAL_TAG_PREFIXES.add(f"<{_t}>"[:_i].lower())
+    for _i in range(1, len(f"</{_t}>") + 1):
+        _INTERNAL_TAG_PREFIXES.add(f"</{_t}>"[:_i].lower())
+
+
 class StreamingMessageParser:
     """Parser com estado para processar chunks durante o streaming contínuo.
 
@@ -106,9 +115,9 @@ class StreamingMessageParser:
         self._buffer += chunk
         emit_text = ""
 
-        while self._buffer:
+        while self._buffer or (self._in_internal_tag and self._tag_buffer):
             if self._in_internal_tag is None:
-                # Verifica se há início de tag interna
+                # Verifica se há início de tag interna completa
                 earliest_idx = -1
                 found_tag = None
 
@@ -120,10 +129,10 @@ class StreamingMessageParser:
                         found_tag = tag
 
                 if earliest_idx == -1:
-                    # Nenhuma tag interna conhecida; verifica se há um '<' parcial no final do buffer
+                    # Nenhuma tag interna conhecida completa; verifica se há um prefixo de tag no fim do buffer
                     last_lt = self._buffer.rfind("<")
-                    if last_lt != -1 and (len(self._buffer) - last_lt) < 25:
-                        # Possível tag em corte no final do chunk; emite o que está antes
+                    if last_lt != -1 and self._buffer[last_lt:].lower() in _INTERNAL_TAG_PREFIXES:
+                        # Possível tag interna em corte no final do chunk; emite o que está antes
                         emit_part = self._buffer[:last_lt]
                         self._buffer = self._buffer[last_lt:]
                         emit_text += emit_part
@@ -140,17 +149,20 @@ class StreamingMessageParser:
                     self._in_internal_tag = found_tag
                     self._tag_buffer = ""
             else:
-                # Estamos dentro de uma tag interna; procura pelo fechamento </tag>
+                # Estamos dentro de uma tag interna; combina com tag_buffer para não perder fechamento fragmentado
+                combined = self._tag_buffer + self._buffer
                 close_tag = f"</{self._in_internal_tag}>"
-                close_idx = self._buffer.lower().find(close_tag)
+                close_idx = combined.lower().find(close_tag)
+
                 if close_idx != -1:
-                    self._tag_buffer += self._buffer[:close_idx]
-                    self.internal_thoughts.append(self._tag_buffer.strip())
-                    self._buffer = self._buffer[close_idx + len(close_tag):]
+                    thought = combined[:close_idx]
+                    if thought.strip():
+                        self.internal_thoughts.append(thought.strip())
+                    self._buffer = combined[close_idx + len(close_tag):]
                     self._in_internal_tag = None
                     self._tag_buffer = ""
                 else:
-                    self._tag_buffer += self._buffer
+                    self._tag_buffer = combined
                     self._buffer = ""
                     break
 
@@ -159,8 +171,15 @@ class StreamingMessageParser:
 
     def flush(self) -> Tuple[str, Dict[str, Any]]:
         """Finaliza o parsing e retorna o conteúdo completo final e metadados."""
-        # Se restou algo no buffer que não seja tag interna, adiciona ao conteúdo final
-        if self._buffer and self._in_internal_tag is None:
+        # Se restou tag aberta órfã no final do stream, fecha e salva em thoughts
+        if self._in_internal_tag is not None:
+            if self._tag_buffer.strip():
+                self.internal_thoughts.append(self._tag_buffer.strip())
+            self._in_internal_tag = None
+            self._tag_buffer = ""
+
+        # Se restou algo no buffer que não seja tag interna, adiciona ao conteúdo do usuário
+        if self._buffer:
             self.accumulated_user_content += self._buffer
             self._buffer = ""
 
