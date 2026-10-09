@@ -428,12 +428,9 @@ class AssistantPipeline:
                 final_reply = iteration_reply or "Atingi o limite máximo de ações consecutivas."
                 break
 
-        import re
-        final_reply = re.sub(r'<[^>]+>', '', final_reply).strip()
-        final_reply = re.sub(r'Chamando ferramenta:[^\n]*', '', final_reply).strip()
-        final_reply = re.sub(r'ToolCall\([^\)]*\)', '', final_reply).strip()
-        final_reply = re.sub(r'\{.*?"name".*?\}', '', final_reply, flags=re.DOTALL).strip()
-        final_reply = re.sub(r'\{.*?"action".*?\}', '', final_reply, flags=re.DOTALL).strip()
+        from core.message_parser import parse_assistant_message_content
+        final_reply, _ = parse_assistant_message_content(final_reply)
+
         if not final_reply or final_reply.startswith("Chamando ferramenta:"):
             final_reply = "Ação concluída com sucesso."
 
