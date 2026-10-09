@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 BLOCKED_COMMAND_PATTERNS = [
     (r"\b(?:rmdir|rd)\s+/[sS]\b", "remoção recursiva de diretórios via CMD"),
-    (r"\bformat\b", "formatação de unidade de disco"),
+    (r"(?<![-\w])format(?:\.exe)?\s+[a-zA-Z]:", "formatação de unidade de disco"),
     (r"\bdel\s+(?:/[a-zA-Z0-9_-]+\s+)*[cC]:", "exclusão em massa na raiz do disco C:"),
-    (r"\bRemove-Item\b.*-Recurse\b.*[cC]:", "exclusão recursiva do PowerShell visando o disco C:"),
-    (r"\brm\s+-r(?:f)?\s+[cC]:", "exclusão recursiva visando o disco C:"),
+    (r"\bRemove-Item\b(?=.*(?:-r|-recurse))(?=.*[cC]:)", "exclusão recursiva do PowerShell visando o disco C:"),
+    (r"\brm\b(?=.*-(?:r|rf|fr))(?=.*[cC]:)", "exclusão recursiva visando o disco C:"),
     (r"\bClear-Disk\b", "limpeza/formatação de disco físico"),
     (r"\bStop-Computer\b", "desligamento forçado de máquina via PowerShell"),
     (r"\bdiskpart\b", "manipulação de partições em baixo nível"),
@@ -43,15 +43,57 @@ def validate_system_command(command: str) -> tuple[bool, Optional[str]]:
 
     return True, None
 
-def set_system_volume(level: int = None, mute: bool = None) -> str:
+def get_system_volume() -> dict:
+    """Retorna o nível de volume atual (0-100) e estado de mudo do Windows."""
+    if AudioUtilities is None:
+        return {"level": 50, "is_muted": False, "error": "pycaw indisponível"}
+
+    try:
+        import comtypes
+        comtypes.CoInitialize()
+    except Exception:
+        pass
+
+    try:
+        devices = AudioUtilities.GetSpeakers()
+        volume = devices.EndpointVolume
+        scalar = volume.GetMasterVolumeLevelScalar()
+        muted = bool(volume.GetMute())
+        return {
+            "level": int(round(scalar * 100)),
+            "is_muted": muted,
+            "success": True,
+        }
+    except Exception as e:
+        logger.warning(f"Erro ao obter volume do sistema: {e}")
+        return {"level": 50, "is_muted": False, "error": str(e)}
+
+
+def set_system_volume(level: int = None, mute: bool = None, step: int = None) -> str:
     """Altera o volume do sistema do Windows ou muta/desmuta.
     
     Args:
         level: Nível de volume desejado (0 a 100).
         mute: True para mutar, False para desmutar. Se None, ignora.
+        step: Ajuste relativo positivo ou negativo (ex: +10, -10).
     """
     if AudioUtilities is None:
+        # Fallback para teclas de hardware virtuais
+        if step is not None:
+            vk = 0xAF if step > 0 else 0xAE  # VK_VOLUME_UP / VK_VOLUME_DOWN
+            try:
+                ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(vk, 0, 2, 0)
+                return f"Volume ajustado via teclas multimídia ({step:+d})."
+            except Exception:
+                pass
         return "Erro: A biblioteca pycaw não está instalada no sistema."
+
+    try:
+        import comtypes
+        comtypes.CoInitialize()
+    except Exception:
+        pass
 
     try:
         devices = AudioUtilities.GetSpeakers()
@@ -60,17 +102,17 @@ def set_system_volume(level: int = None, mute: bool = None) -> str:
         response_parts = []
 
         if mute is not None:
-            # 1 é mutado, 0 é desmutado
             volume.SetMute(1 if mute else 0, None)
             state = "mutado" if mute else "desmutado"
             response_parts.append(f"O áudio do sistema foi {state}.")
 
+        if step is not None and level is None:
+            current_scalar = volume.GetMasterVolumeLevelScalar()
+            current_level = int(round(current_scalar * 100))
+            level = max(0, min(100, current_level + int(step)))
+
         if level is not None:
-            # Garante que está entre 0 e 100
             level = max(0, min(100, int(level)))
-            
-            # O volume na pycaw é medido em dB (decibéis). Para facilitar, 
-            # podemos usar a função SetMasterVolumeLevelScalar que aceita um float entre 0.0 e 1.0.
             scalar_volume = level / 100.0
             volume.SetMasterVolumeLevelScalar(scalar_volume, None)
             response_parts.append(f"O volume do sistema foi ajustado para {level}%.")

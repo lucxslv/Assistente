@@ -7,7 +7,7 @@ import json
 import os
 import sqlite3
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AgentPersistence:
@@ -88,7 +88,7 @@ class AgentPersistence:
         progress = int(session_data.get("progress", 0))
         summary = session_data.get("summary")
         started_at = session_data.get("startedAt") or session_data.get("started_at")
-        updated_at = session_data.get("updatedAt") or session_data.get("updated_at") or datetime.utcnow().isoformat()
+        updated_at = session_data.get("updatedAt") or session_data.get("updated_at") or datetime.now(timezone.utc).isoformat()
         completed_at = None
         if status in ("completed", "failed"):
             completed_at = updated_at
@@ -142,14 +142,21 @@ class AgentPersistence:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT payload_json FROM agent_sessions WHERE id = ?", (session_id,)
+                "SELECT * FROM agent_sessions WHERE id = ?", (session_id,)
             )
             row = cursor.fetchone()
-            if row and row["payload_json"]:
-                try:
-                    return json.loads(row["payload_json"])
-                except Exception:
-                    return None
+            if row:
+                result = dict(row)
+                if row["payload_json"]:
+                    try:
+                        payload = json.loads(row["payload_json"])
+                        result.update(payload)
+                    except Exception:
+                        pass
+                result["tasks_count"] = row["tasks_count"]
+                result["completed_count"] = row["completed_count"]
+                result["failed_count"] = row["failed_count"]
+                return result
             return None
 
     def list_sessions(
