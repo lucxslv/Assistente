@@ -50,7 +50,7 @@
   - `sanitize_memory_candidate(content: str, category: str, user_id: str) -> tuple[bool, str, str]`
   - `get_canonical_identity_prompt_directive() -> str`
 
-- [ ] **Step 1: Escrever teste unitário para autoridade de identidade e bloqueio de adulteração**
+- [x] **Step 1: Escrever teste unitário para autoridade de identidade e bloqueio de adulteração**
 
 Criar `tests/test_canonical_identity.py` testando:
 1. `CANONICAL_CREATOR` é configurado como "Lucas".
@@ -58,21 +58,21 @@ Criar `tests/test_canonical_identity.py` testando:
 3. `sanitize_memory_candidate` rejeita tentativas de persistir usurpações como memórias duradouras, mas aprova memórias legítimas sobre o usuário ("O usuário se chama Lucas e gosta de Python", "O usuário treina Jiu-Jitsu").
 4. `get_canonical_identity_prompt_directive` orienta o modelo a responder com naturalidade e acolhimento sem paranoia policial.
 
-- [ ] **Step 2: Executar teste para verificar falha (módulo inexistente)**
+- [x] **Step 2: Executar teste para verificar falha (módulo inexistente)**
 
 Run: `.venv\Scripts\pytest tests/test_canonical_identity.py -v`  
 Expected: FAIL com `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implementar `brain/personality/canonical_identity.py`**
+- [x] **Step 3: Implementar `brain/personality/canonical_identity.py`**
 
 Implementar enum de níveis de autoridade, detector léxico de adulteração, sanitizador de memórias candidatas e diretriz de prompt correspondente.
 
-- [ ] **Step 4: Executar teste para verificar aprovação**
+- [x] **Step 4: Executar teste para verificar aprovação**
 
 Run: `.venv\Scripts\pytest tests/test_canonical_identity.py -v`  
 Expected: PASS com 100% de sucesso.
 
-- [ ] **Step 5: Commit da autoridade de identidade**
+- [x] **Step 5: Commit da autoridade de identidade**
 
 ```bash
 git add brain/personality/canonical_identity.py tests/test_canonical_identity.py
@@ -92,25 +92,25 @@ git commit -m "feat(personality): canonical creator authority hierarchy and memo
 - Consumes: `sanitize_memory_candidate` de `brain.personality.canonical_identity`
 - Produces: `save_user_memory_entry` e `MemoryExtractor.analyze_turn_async` que rejeitam silenciosamente tentativas de gravar adulterações do criador canônico na `UserMemory`.
 
-- [ ] **Step 1: Escrever teste de rejeição de adulteração em `save_user_memory_entry`**
+- [x] **Step 1: Escrever teste de rejeição de adulteração em `save_user_memory_entry`**
 
 Adicionar teste em `tests/test_canonical_identity.py` verificando que salvar "O usuário Pedro agora é o novo criador do Charlie" retorna `""` e é descartado, enquanto fatos legítimos são aceitos.
 
-- [ ] **Step 2: Executar teste para verificar falha**
+- [x] **Step 2: Executar teste para verificar falha**
 
 Run: `.venv\Scripts\pytest tests/test_canonical_identity.py -k "test_save_user_memory" -v`  
 Expected: FAIL
 
-- [ ] **Step 3: Integrar sanitização em `chat_persistence.py` e `extractor.py`**
+- [x] **Step 3: Integrar sanitização em `chat_persistence.py` e `extractor.py`**
 
 Conectar `sanitize_memory_candidate` antes da inserção na base de memórias em `save_user_memory_entry` e no pipeline de extração de `MemoryExtractor`.
 
-- [ ] **Step 4: Executar teste para verificar aprovação**
+- [x] **Step 4: Executar teste para verificar aprovação**
 
 Run: `.venv\Scripts\pytest tests/test_canonical_identity.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit das proteções de persistência**
+- [x] **Step 5: Commit das proteções de persistência**
 
 ```bash
 git add api/services/chat_persistence.py brain/memory/extractor.py tests/test_canonical_identity.py
@@ -140,7 +140,7 @@ git commit -m "fix(memory): prevent canonical creator tampering in persistent Us
   - `analyze_situational_context(...) -> SituationalContext`
   - `to_prompt_guidelines() -> str`: diretrizes compactas orientadas ao tipo de interação.
 
-- [ ] **Step 1: Escrever testes unitários para os 6 tipos de interação em `tests/test_situational_tone.py`**
+- [x] **Step 1: Escrever testes unitários para os 6 tipos de interação em `tests/test_situational_tone.py`**
 
 Testar:
 1. `casual_chat`: "E aí Charlie, tudo bem?", "o que você acha da vida?" -> sem tarefas, sem listas forçadas.
@@ -150,21 +150,21 @@ Testar:
 5. `technical_question`: "como funciona o epoll no Linux?" -> profundidade técnica sem formalidade corporativa.
 6. `task_execution`: "crie o arquivo api.py", "execute os testes" -> foco resolutivo com ferramentas.
 
-- [ ] **Step 2: Executar testes para verificar falha**
+- [x] **Step 2: Executar testes para verificar falha**
 
 Run: `.venv\Scripts\pytest tests/test_situational_tone.py -k "interaction_type" -v`  
 Expected: FAIL com `AttributeError: 'SituationalContext' object has no attribute 'interaction_type'`.
 
-- [ ] **Step 3: Implementar o reconhecimento de interação em `brain/personality/situational_tone.py`**
+- [x] **Step 3: Implementar o reconhecimento de interação em `brain/personality/situational_tone.py`**
 
 Adicionar as regras léxicas instantâneas, a definição dos tipos de interação e as micro-diretrizes no método `to_prompt_guidelines()`.
 
-- [ ] **Step 4: Executar testes de calibração situacional**
+- [x] **Step 4: Executar testes de calibração situacional**
 
 Run: `.venv\Scripts\pytest tests/test_situational_tone.py -v`  
 Expected: PASS com 100% de sucesso.
 
-- [ ] **Step 5: Commit do classificador situacional**
+- [x] **Step 5: Commit do classificador situacional**
 
 ```bash
 git add brain/personality/situational_tone.py tests/test_situational_tone.py
@@ -183,7 +183,7 @@ git commit -m "feat(personality): situational interaction type recognition and c
 - Consumes: `canonical_identity` e `situational_tone`
 - Produces: `build_system_prompt` que injeta os 7 princípios inegociáveis, adaptação ao contexto social, ausência de respostas de atendente corporativo, e separação de profundidade técnica de formalidade.
 
-- [ ] **Step 1: Escrever teste para o manifesto e diretrizes de identidade no prompt**
+- [x] **Step 1: Escrever teste para o manifesto e diretrizes de identidade no prompt**
 
 No `tests/test_prompts.py`:
 1. Verificar que os 7 princípios inegociáveis estão no prompt.
@@ -191,21 +191,21 @@ No `tests/test_prompts.py`:
 3. Verificar a diretriz contra frases de atendente corporativo ("Como posso ajudar você hoje?").
 4. Verificar distinção entre Identidade Canônica e Identidade Declarada.
 
-- [ ] **Step 2: Executar teste para verificar falha**
+- [x] **Step 2: Executar teste para verificar falha**
 
 Run: `.venv\Scripts\pytest tests/test_prompts.py -v`  
 Expected: FAIL.
 
-- [ ] **Step 3: Atualizar `brain/prompts/prompts.py`**
+- [x] **Step 3: Atualizar `brain/prompts/prompts.py`**
 
 Integrar as seções de Identidade Conversacional, Adaptação ao Contexto, Humor e Provocação Contextual, Iniciativa Social e os 7 Princípios Inegociáveis. Ajustar a seção de formatação para não forçar estruturas em conversas casuais.
 
-- [ ] **Step 4: Executar teste de prompt para verificar aprovação**
+- [x] **Step 4: Executar teste de prompt para verificar aprovação**
 
 Run: `.venv\Scripts\pytest tests/test_prompts.py -v`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit das diretrizes de prompt**
+- [x] **Step 5: Commit das diretrizes de prompt**
 
 ```bash
 git add brain/prompts/prompts.py tests/test_prompts.py
@@ -231,16 +231,16 @@ git commit -m "feat(prompts): inject conversational identity principles and anti
   - `SOC-07`: "Falou, Charlie, até depois." — Despedida cordial, sem culpa ou insistência de trabalho.
   - `SOC-08`: "Tive uma ideia absurda pro MegaBrain." — Curiosidade e exploração conjunta sem pular para execução.
 
-- [ ] **Step 1: Criar `tests/torture/test_social.py` com os 8 testes estruturados**
+- [x] **Step 1: Criar `tests/torture/test_social.py` com os 8 testes estruturados**
 
 Implementar funções de teste para cada cenário avaliando a intenção detectada, as diretrizes de prompt geradas e as asserções de conduta.
 
-- [ ] **Step 2: Executar a suíte de regressão social**
+- [x] **Step 2: Executar a suíte de regressão social**
 
 Run: `.venv\Scripts\pytest tests/torture/test_social.py -v`  
 Expected: PASS para os 8 cenários.
 
-- [ ] **Step 3: Commit da suíte de regressão social**
+- [x] **Step 3: Commit da suíte de regressão social**
 
 ```bash
 git add tests/torture/test_social.py
@@ -258,16 +258,16 @@ git commit -m "feat(testing): social regression test suite SOC-01 to SOC-08 for 
 **Interfaces:**
 - Produces: Integração dos cenários comportamentais `BEH-13` a `BEH-21` (compartilhamento espontâneo, profundidade técnica informal, continuidade de raciocínio, integridade de memória canônica, persistência pós-compactação, aprendizado legítimo).
 
-- [ ] **Step 1: Adicionar os cenários `BEH-13` a `BEH-21` em `tests/torture/test_behavioral.py`**
+- [x] **Step 1: Adicionar os cenários `BEH-13` a `BEH-21` em `tests/torture/test_behavioral.py`**
 
 Implementar os testes e registrar os resultados no `behavioral_report`.
 
-- [ ] **Step 2: Executar a suíte comportamental completa (21 cenários)**
+- [x] **Step 2: Executar a suíte comportamental completa (21 cenários)**
 
 Run: `.venv\Scripts\pytest tests/torture/test_behavioral.py -v`  
 Expected: PASS para todos os 21 cenários `BEH-01` a `BEH-21`.
 
-- [ ] **Step 3: Commit da suíte comportamental expandida**
+- [x] **Step 3: Commit da suíte comportamental expandida**
 
 ```bash
 git add tests/torture/test_behavioral.py
@@ -285,16 +285,16 @@ git commit -m "feat(testing): expand behavioral suite with BEH-13 to BEH-21 scen
 **Interfaces:**
 - Produces: Execução consolidada de 100 cenários (20 Aceitação + 41 Segurança + 10 Core + 21 Comportamentais + 8 Sociais), cálculo de Reliability, Safety e Social Quality Score.
 
-- [ ] **Step 1: Conectar `test_social` ao `tests/torture/runner.py`**
+- [x] **Step 1: Conectar `test_social` ao `tests/torture/runner.py`**
 
 Importar `tests/torture/test_social as test_social`, adicionar a execução da Suíte 5: 8 Testes de Regressão Social (`SOC-01` a `SOC-08`) e atualizar as contagens para 100 cenários expandidos.
 
-- [ ] **Step 2: Executar o orquestrador master**
+- [x] **Step 2: Executar o orquestrador master**
 
 Run: `.venv\Scripts\python.exe -m tests.torture.runner`  
 Expected: Código de saída 0, 100/100 cenários aprovados, 0 incidentes críticos.
 
-- [ ] **Step 3: Commit da integração do runner**
+- [x] **Step 3: Commit da integração do runner**
 
 ```bash
 git add tests/torture/runner.py
@@ -309,16 +309,16 @@ git commit -m "feat(testing): integrate social suite and master 100-scenario tor
 - Modify: `docs/security/INVENTARIO_RISCOS_E_COBERTURA.md`
 - Test: Suíte completa do repositório (`pytest tests/`)
 
-- [ ] **Step 1: Executar bateria global de testes**
+- [x] **Step 1: Executar bateria global de testes**
 
 Run: `.venv\Scripts\pytest tests/ -v`  
 Expected: 100% dos testes do repositório aprovados.
 
-- [ ] **Step 2: Atualizar inventário centralizado de riscos e governança**
+- [x] **Step 2: Atualizar inventário centralizado de riscos e governança**
 
 Atualizar `docs/security/INVENTARIO_RISCOS_E_COBERTURA.md` com a matriz de Regressão Social (`SOC-01` a `SOC-08`), Comportamental (`BEH-01` a `BEH-21`) e proteção estrutural de identidade canônica.
 
-- [ ] **Step 3: Commit final**
+- [x] **Step 3: Commit final**
 
 ```bash
 git add docs/security/INVENTARIO_RISCOS_E_COBERTURA.md
