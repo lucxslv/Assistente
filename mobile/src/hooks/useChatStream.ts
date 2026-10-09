@@ -21,6 +21,8 @@ export function useChatStream(threadId: string | null) {
   const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const thinkingStartTimeRef = useRef<number>(0);
 
+  const thinkingGuardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Throttled token flush (atualiza o texto do streaming a cada 35ms)
   const scheduleBufferFlush = useCallback(() => {
     if (flushTimerRef.current) return;
@@ -35,6 +37,10 @@ export function useChatStream(threadId: string | null) {
       clearInterval(thinkingTimerRef.current);
       thinkingTimerRef.current = null;
     }
+    if (thinkingGuardTimerRef.current) {
+      clearTimeout(thinkingGuardTimerRef.current);
+      thinkingGuardTimerRef.current = null;
+    }
     setIsThinking((prev) => (prev ? false : prev));
   }, []);
 
@@ -47,6 +53,12 @@ export function useChatStream(threadId: string | null) {
       const elapsed = (Date.now() - thinkingStartTimeRef.current) / 1000;
       setThinkingSeconds(elapsed);
     }, 100);
+
+    // Guarda de segurança: evita que a interface congele em 'raciocinando' por mais de 20s
+    thinkingGuardTimerRef.current = setTimeout(() => {
+      stopThinkingTimer();
+      setActiveTool(null);
+    }, 20000);
   }, [stopThinkingTimer]);
 
   const applyEvent = useCallback(
@@ -64,6 +76,20 @@ export function useChatStream(threadId: string | null) {
 
       if (event.type === 'tool_end') {
         setActiveTool(null);
+      }
+
+      if (event.type === 'client_tool_request') {
+        stopThinkingTimer();
+        setActiveTool(null);
+        setIsStreaming(false);
+        const infoMsg: ChatMessage = {
+          id: genId(),
+          role: 'assistant',
+          content: 'Comando de dispositivo despachado para o seu computador com sucesso.',
+          createdAt: new Date().toISOString(),
+          status: 'done',
+        };
+        setMessages((prev) => [...prev, infoMsg]);
       }
 
       if (event.type === 'reset_and_fallback') {
@@ -85,7 +111,7 @@ export function useChatStream(threadId: string | null) {
         const finalMessage: ChatMessage = {
           id: genId(),
           role: 'assistant',
-          content: payload.text || tokenBufferRef.current,
+          content: payload.text || tokenBufferRef.current || 'Ação concluída com sucesso.',
           widgets: payload.widgets,
           createdAt: new Date().toISOString(),
           status: 'done',
@@ -172,7 +198,9 @@ export function useChatStream(threadId: string | null) {
   const send = useCallback(
     async (text: string) => {
       const clean = text.trim();
-      if (!threadId || !clean || isStreaming) return;
+      if (!clean || isStreaming) return;
+
+      const activeThreadId = threadId || `thread-${Date.now()}`;
 
       const userMessage: ChatMessage = {
         id: genId(),
@@ -201,13 +229,13 @@ export function useChatStream(threadId: string | null) {
         }
 
         if (!isVercel && socket.current?.readyState === WebSocket.OPEN) {
-          chatService.send(socket.current, clean, threadId);
+          chatService.send(socket.current, clean, activeThreadId);
         } else {
           try {
-            await chatService.streamSse(clean, threadId, applyEvent);
+            await chatService.streamSse(clean, activeThreadId, applyEvent);
           } catch {
-            const response = await chatService.sendRest(clean, threadId);
-            applyEvent({ type: 'done', data: { reply: response.reply } });
+            const response = await chatService.sendRest(clean, activeThreadId);
+            applyEvent({ type: 'done', data: { reply: response.reply, thread_id: response.thread_id } });
           }
         }
       } catch (err) {

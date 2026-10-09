@@ -7,6 +7,7 @@ import {
   NativeSyntheticEvent,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,8 +25,62 @@ import { StreamingMessageBubble } from '@/src/components/StreamingMessageBubble'
 import { useChatStream } from '@/src/hooks/useChatStream';
 import { useServerConnection } from '@/src/hooks/useServerConnection';
 import { useDeviceConnection } from '@/src/hooks/useDeviceConnection';
+import { desktopControlService } from '@/src/services/desktopControl';
 import { threadsService } from '@/src/services/threads';
 import { Thread } from '@/src/types/api';
+
+interface QuickActionChip {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  prompt: string;
+}
+
+const QUICK_CHIPS: QuickActionChip[] = [
+  {
+    id: 'pc_status',
+    label: 'Status do PC',
+    icon: 'speedometer-outline',
+    color: '#38BDF8',
+    prompt: 'Qual é o status atual do meu computador? Uso de CPU, memória e tarefas ativas?',
+  },
+  {
+    id: 'screenshot',
+    label: 'Tirar Print',
+    icon: 'camera-outline',
+    color: '#818CF8',
+    prompt: 'Tire uma captura de tela do computador e me descreva o que está aberto.',
+  },
+  {
+    id: 'lock',
+    label: 'Bloquear PC',
+    icon: 'lock-closed-outline',
+    color: '#EF4444',
+    prompt: 'Bloqueie a estação de trabalho do meu computador agora.',
+  },
+  {
+    id: 'media',
+    label: 'Pausar Mídia',
+    icon: 'play-outline',
+    color: '#F59E0B',
+    prompt: 'Pause ou retome a mídia em reprodução no computador.',
+  },
+  {
+    id: 'projects',
+    label: 'Git Status',
+    icon: 'git-branch-outline',
+    color: '#22C55E',
+    prompt: 'Execute o git status no projeto atual e liste as modificações pendentes.',
+  },
+  {
+    id: 'minimize',
+    label: 'Minimizar Tudo',
+    icon: 'contract-outline',
+    color: '#A855F7',
+    prompt: 'Minimize todas as janelas abertas no desktop.',
+  },
+];
 
 export default function CharlieScreen() {
   const insets = useSafeAreaInsets();
@@ -34,9 +89,9 @@ export default function CharlieScreen() {
 
   const [thread, setThread] = useState<Thread | null>(null);
   const [input, setInput] = useState('');
-  const [writing, setWriting] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   // Controle inteligente de auto-scroll
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -70,7 +125,7 @@ export default function CharlieScreen() {
     };
   }, []);
 
-  // Inicializa sessão de thread real (zero mocks)
+  // Inicializa sessão de thread real
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -83,7 +138,17 @@ export default function CharlieScreen() {
         if (!mounted) return;
         setMessages(history || []);
       } catch {
-        if (mounted) setMessages([]);
+        if (mounted) {
+          const now = new Date().toISOString();
+          const fallbackThread: Thread = {
+            id: `thread-${Date.now()}`,
+            name: 'Conversa Principal',
+            createdAt: now,
+            updatedAt: now,
+          };
+          setThread(fallbackThread);
+          setMessages([]);
+        }
       }
     })();
     return () => {
@@ -91,7 +156,7 @@ export default function CharlieScreen() {
     };
   }, []);
 
-  // Auto-scroll não bloqueante: só rola se o usuário já estiver colado no fim
+  // Auto-scroll
   useEffect(() => {
     if (isStreaming && isAtBottom) {
       listRef.current?.scrollToEnd({ animated: true });
@@ -114,17 +179,49 @@ export default function CharlieScreen() {
     setShowScrollBottomBtn(false);
   };
 
-  const handleSubmit = async () => {
-    if (!input.trim()) return;
-    const text = input.trim();
-    setInput('');
+  const handleSubmit = async (textToSend?: string) => {
+    const messageContent = (textToSend || input).trim();
+    if (!messageContent || isStreaming) return;
+
+    if (!textToSend) setInput('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await send(text);
+    await send(messageContent);
   };
 
-  const handleStartWriting = () => {
-    Haptics.selectionAsync();
-    setWriting(true);
+  const handleChipPress = async (chip: QuickActionChip) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Se for ação direta simples de bloqueio ou mídia, executa localmente se o PC estiver online
+    if (chip.id === 'lock') {
+      try {
+        await desktopControlService.lockPC();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {}
+    } else if (chip.id === 'media') {
+      try {
+        await desktopControlService.sendMediaKey('play_pause');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {}
+    } else if (chip.id === 'minimize') {
+      try {
+        await desktopControlService.minimizeAll();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {}
+    }
+
+    // Também envia como prompt conversacional para o Charlie responder com inteligência
+    await handleSubmit(chip.prompt);
+  };
+
+  const toggleMic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setIsListening((prev) => !prev);
+    if (!isListening) {
+      // Simula ativação de voz ou prepara gravação
+      setTimeout(() => {
+        setIsListening(false);
+      }, 5000);
+    }
   };
 
   const handleNewThread = async () => {
@@ -133,9 +230,7 @@ export default function CharlieScreen() {
       const newThread = await threadsService.create('Nova Conversa');
       setThread(newThread);
       setMessages([]);
-    } catch {
-      // Degradação graciosa
-    }
+    } catch {}
   };
 
   const handleSelectThread = async (selected: Thread) => {
@@ -156,12 +251,16 @@ export default function CharlieScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
       >
-        {/* Cabeçalho com Status Desacoplado: Servidor API vs PC Físico */}
+        {/* Cabeçalho */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.title}>Charlie</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>Charlie</Text>
+              <View style={styles.modelPill}>
+                <Text style={styles.modelPillText}>Gemini 3.1</Text>
+              </View>
+            </View>
             <View style={styles.statusRow}>
-              {/* Status da API */}
               <View style={styles.statusBadge}>
                 <View
                   style={[
@@ -170,11 +269,10 @@ export default function CharlieScreen() {
                   ]}
                 />
                 <Text style={styles.statusText}>
-                  Servidor: {serverConn.isOnline ? 'Online' : 'Offline'}
+                  {serverConn.isOnline ? 'Nuvem Conectada' : 'Offline'}
                 </Text>
               </View>
 
-              {/* Status do Computador Físico */}
               <View style={styles.statusBadge}>
                 <View
                   style={[
@@ -183,16 +281,13 @@ export default function CharlieScreen() {
                   ]}
                 />
                 <Text style={styles.statusText}>
-                  {deviceConn.isPcOnline
-                    ? `${deviceConn.pcName} (${serverConn.latencyMs ? `${serverConn.latencyMs}ms` : 'Online'})`
-                    : `${deviceConn.pcName} (Offline)`}
+                  {deviceConn.isPcOnline ? `${deviceConn.pcName} (Ativo)` : `${deviceConn.pcName} (Ausente)`}
                 </Text>
               </View>
             </View>
           </View>
 
           <View style={styles.headerActions}>
-            {/* Botão de Histórico de Conversas */}
             <Pressable
               style={({ pressed }) => [styles.headerIconButton, pressed && styles.iconButtonPressed]}
               onPress={() => {
@@ -200,10 +295,9 @@ export default function CharlieScreen() {
                 setHistoryModalOpen(true);
               }}
             >
-              <Ionicons name="time-outline" size={20} color="#F5F7FA" />
+              <Ionicons name="time-outline" size={18} color="#F5F7FA" />
             </Pressable>
 
-            {/* Botão Nova Conversa */}
             <Pressable
               style={({ pressed }) => [
                 styles.headerIconButton,
@@ -212,12 +306,12 @@ export default function CharlieScreen() {
               ]}
               onPress={handleNewThread}
             >
-              <Ionicons name="add" size={20} color="#818CF8" />
+              <Ionicons name="add" size={18} color="#818CF8" />
             </Pressable>
           </View>
         </View>
 
-        {/* Feed de Mensagens com Toque para Fechar Teclado */}
+        {/* Feed de Mensagens */}
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={styles.feedWrapper}>
             <FlatList
@@ -231,7 +325,7 @@ export default function CharlieScreen() {
               scrollEventThrottle={32}
               contentContainerStyle={[
                 styles.feed,
-                { paddingBottom: isKeyboardVisible ? 20 : 80 + insets.bottom },
+                { paddingBottom: isKeyboardVisible ? 12 : 24 },
               ]}
               renderItem={({ item }) => (
                 <MessageItem
@@ -243,11 +337,27 @@ export default function CharlieScreen() {
               ListEmptyComponent={
                 !isStreaming ? (
                   <View style={styles.emptyContainer}>
-                    <Ionicons name="chatbubbles-outline" size={42} color="#334155" />
-                    <Text style={styles.emptyTitle}>Inicie uma conversa com o Charlie</Text>
+                    <View style={styles.emptyIconCircle}>
+                      <Ionicons name="sparkles" size={32} color="#818CF8" />
+                    </View>
+                    <Text style={styles.emptyTitle}>Como posso te ajudar agora?</Text>
                     <Text style={styles.emptySubtitle}>
-                      Pergunte sobre código, monitore seu computador ou dê ordens de automação.
+                      Tenho controle total sobre o seu computador e acesso à nuvem. Toque em uma sugestão abaixo ou digite um comando.
                     </Text>
+
+                    {/* Grade de Sugestões de Início */}
+                    <View style={styles.emptyGrid}>
+                      {QUICK_CHIPS.slice(0, 4).map((chip) => (
+                        <Pressable
+                          key={chip.id}
+                          style={styles.emptyCard}
+                          onPress={() => handleChipPress(chip)}
+                        >
+                          <Ionicons name={chip.icon} size={18} color={chip.color} />
+                          <Text style={styles.emptyCardText}>{chip.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
                 ) : null
               }
@@ -261,93 +371,88 @@ export default function CharlieScreen() {
               }
             />
 
-            {/* Botão Flutuante de Auto-Scroll ao Final */}
+            {/* Botão Flutuante de Auto-Scroll */}
             {showScrollBottomBtn && (
               <Pressable style={styles.floatingScrollBtn} onPress={scrollToBottom}>
-                <Ionicons name="arrow-down" size={13} color="#0D0F12" />
+                <Ionicons name="arrow-down" size={12} color="#0D0F12" />
                 <Text style={styles.floatingScrollText}>Novas mensagens</Text>
               </Pressable>
             )}
           </View>
         </TouchableWithoutFeedback>
 
-        {/* Bloco de Entrada Primário */}
-        {writing ? (
-          <View
-            style={[
-              styles.composerContainer,
-              {
-                paddingBottom: isKeyboardVisible ? 8 : Math.max(12, insets.bottom),
-              },
-            ]}
+        {/* Faixa Horizontal de Chips de Ação Rápida */}
+        <View style={styles.chipsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsScroll}
           >
-            <TextInput
-              autoFocus
-              value={input}
-              onChangeText={setInput}
-              onSubmitEditing={handleSubmit}
-              editable={!isStreaming}
-              placeholder="Fale ou escreva para o Charlie..."
-              placeholderTextColor="#77809A"
-              style={styles.composerInput}
-              multiline
+            {QUICK_CHIPS.map((chip) => (
+              <Pressable
+                key={chip.id}
+                style={styles.chip}
+                onPress={() => handleChipPress(chip)}
+              >
+                <Ionicons name={chip.icon} size={14} color={chip.color} />
+                <Text style={styles.chipLabel}>{chip.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Barra de Entrada / Composer Funcional */}
+        <View
+          style={[
+            styles.composerContainer,
+            {
+              paddingBottom: isKeyboardVisible ? 8 : Math.max(10, insets.bottom),
+            },
+          ]}
+        >
+          {/* Botão Microfone / Voz */}
+          <Pressable
+            style={[styles.composerIconButton, isListening && styles.micActive]}
+            onPress={toggleMic}
+          >
+            <Ionicons
+              name={isListening ? 'radio' : 'mic-outline'}
+              size={18}
+              color={isListening ? '#EF4444' : '#8791A4'}
             />
-            <Pressable
-              style={({ pressed }) => [styles.sendButton, pressed && styles.sendButtonPressed]}
-              onPress={handleSubmit}
-            >
-              <Ionicons name="arrow-up" size={18} color="#0D0F12" />
-            </Pressable>
-          </View>
-        ) : (
-          <View
+          </Pressable>
+
+          {/* Campo de Texto */}
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={() => handleSubmit()}
+            editable={!isStreaming}
+            placeholder={isListening ? 'Ouvindo...' : 'Fale ou escreva para o Charlie...'}
+            placeholderTextColor="#64748B"
+            style={[styles.composerInput, { maxHeight: 100 }]}
+            multiline
+          />
+
+          {/* Botão de Enviar */}
+          <Pressable
             style={[
-              styles.dockCard,
-              {
-                marginBottom: isKeyboardVisible ? 8 : Math.max(14, insets.bottom),
-              },
+              styles.sendButton,
+              (!input.trim() || isStreaming) && styles.sendButtonDisabled,
             ]}
+            onPress={() => handleSubmit()}
+            disabled={!input.trim() || isStreaming}
           >
-            <Text style={styles.dockPrompt}>Fale ou escreva para o Charlie...</Text>
-            <View style={styles.dockActions}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dockButton,
-                  styles.dockButtonPrimary,
-                  pressed && styles.dockButtonPressed,
-                ]}
-                onPress={handleStartWriting}
-              >
-                <Text style={styles.dockButtonPrimaryText}>Falar</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dockButton,
-                  styles.dockButtonSecondary,
-                  pressed && styles.dockButtonPressed,
-                ]}
-                onPress={handleStartWriting}
-              >
-                <Text style={styles.dockButtonSecondaryText}>Texto</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dockButton,
-                  styles.dockButtonSecondary,
-                  pressed && styles.dockButtonPressed,
-                ]}
-                onPress={handleStartWriting}
-              >
-                <Text style={styles.dockButtonSecondaryText}>Câmera</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={input.trim() && !isStreaming ? '#0D0F12' : '#64748B'}
+            />
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
 
-      {/* Drawer / Modal de Histórico de Conversas */}
+      {/* Drawer de Histórico */}
       <ChatHistoryModal
         visible={historyModalOpen}
         activeThreadId={thread?.id}
@@ -368,9 +473,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#1A202C',
   },
@@ -378,48 +483,66 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     color: '#F5F7FA',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.5,
+  },
+  modelPill: {
+    backgroundColor: 'rgba(129, 140, 248, 0.15)',
+    borderColor: 'rgba(129, 140, 248, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  modelPillText: {
+    color: '#818CF8',
+    fontSize: 10,
+    fontWeight: '700',
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     flexWrap: 'wrap',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: '#161A22',
     borderColor: '#212631',
     borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   statusDot: {
-    width: 6,
-    height: 6,
+    width: 5,
+    height: 5,
     borderRadius: 3,
   },
   statusText: {
     color: '#8791A4',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerIconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#161A22',
     borderColor: '#212631',
     borderWidth: 1,
@@ -438,128 +561,156 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   feed: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     gap: 12,
   },
   emptyContainer: {
-    flex: 1,
+    paddingTop: 30,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: 'rgba(129, 140, 248, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
-    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(129, 140, 248, 0.25)',
   },
   emptyTitle: {
     color: '#F5F7FA',
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '800',
   },
   emptySubtitle: {
-    color: '#64748B',
-    fontSize: 12,
+    color: '#8791A4',
+    fontSize: 13,
     textAlign: 'center',
-    maxWidth: 260,
     lineHeight: 18,
+    maxWidth: 280,
+  },
+  emptyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    width: '100%',
+    marginTop: 14,
+  },
+  emptyCard: {
+    width: '48%',
+    backgroundColor: '#161A22',
+    borderWidth: 1,
+    borderColor: '#212631',
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyCardText: {
+    color: '#F5F7FA',
+    fontSize: 12,
+    fontWeight: '700',
   },
   floatingScrollBtn: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 12,
     alignSelf: 'center',
+    backgroundColor: '#818CF8',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#818CF8',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   floatingScrollText: {
     color: '#0D0F12',
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  chipsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#1A202C',
+    paddingVertical: 8,
+    backgroundColor: '#0D0F12',
+  },
+  chipsScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#161A22',
+    borderColor: '#212631',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  chipLabel: {
+    color: '#F5F7FA',
+    fontSize: 11,
     fontWeight: '700',
   },
   composerContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    alignItems: 'flex-end',
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    backgroundColor: '#0D0F12',
+    gap: 8,
+  },
+  composerIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#161A22',
-    borderTopWidth: 1,
-    borderTopColor: '#212631',
-    gap: 10,
+    borderWidth: 1,
+    borderColor: '#212631',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  micActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: '#EF4444',
   },
   composerInput: {
     flex: 1,
-    minHeight: 42,
-    maxHeight: 100,
-    backgroundColor: '#0D0F12',
-    borderColor: '#212631',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: '#F5F7FA',
-    fontSize: 14,
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#818CF8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonPressed: {
-    opacity: 0.8,
-  },
-  dockCard: {
-    marginHorizontal: 16,
     backgroundColor: '#161A22',
     borderColor: '#212631',
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
-    gap: 12,
-  },
-  dockPrompt: {
-    color: '#8791A4',
+    borderRadius: 16,
+    color: '#F5F7FA',
+    paddingHorizontal: 14,
+    paddingTop: 9,
+    paddingBottom: 9,
     fontSize: 13,
-    paddingHorizontal: 4,
+    minHeight: 40,
   },
-  dockActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dockButton: {
-    flex: 1,
-    height: 42,
-    borderRadius: 14,
+  sendButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#818CF8',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 2,
   },
-  dockButtonPrimary: {
-    backgroundColor: '#818CF8',
-  },
-  dockButtonSecondary: {
-    backgroundColor: '#212631',
-  },
-  dockButtonPressed: {
-    opacity: 0.8,
-  },
-  dockButtonPrimaryText: {
-    color: '#0D0F12',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  dockButtonSecondaryText: {
-    color: '#F5F7FA',
-    fontWeight: '600',
-    fontSize: 13,
+  sendButtonDisabled: {
+    backgroundColor: '#1E232E',
+    borderWidth: 1,
+    borderColor: '#212631',
   },
 });

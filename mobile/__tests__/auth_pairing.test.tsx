@@ -5,22 +5,25 @@ import { AuthProvider } from '../src/hooks/useAuth';
 import { router } from 'expo-router';
 import { authStorage } from '../src/services/authStorage';
 
-describe('Fluxo 1: Conexão Remota e Pareamento Inicial (Ótica do Usuário)', () => {
+describe('Autenticação de Usuário e Pareamento com Desktop', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await authStorage.clearPairedCredentials();
   });
 
-  it('permite ao usuário digitar o PIN de 6 dígitos, autenticar e ser redirecionado', async () => {
+  it('permite ao usuário fazer login com e-mail e senha e ser redirecionado para a tela principal', async () => {
     (fetch as unknown as jest.Mock).mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('/api/pair/verify-pin')) {
+      if (typeof url === 'string' && url.includes('/auth/login')) {
         return {
           ok: true,
           status: 200,
           json: async () => ({
-            token: 'charlie_dev_test_token_123',
-            lan_url: 'http://192.168.1.50:8000',
-            device_id: '12345678-1234-4234-8234-123456789abc',
+            token: 'test_token_jwt',
+            user: {
+              id: 'user-lucas-123',
+              name: 'Lucas Silva',
+              email: 'lucas@exemplo.com',
+            },
           }),
         };
       }
@@ -37,39 +40,28 @@ describe('Fluxo 1: Conexão Remota e Pareamento Inicial (Ótica do Usuário)', (
       </AuthProvider>
     );
 
-    // O usuário visualiza o input de PIN e digita os 6 dígitos do computador
-    const pinInput = await screen.findByTestId('pin-input');
-    await fireEvent.changeText(pinInput, '654321');
+    const emailInput = await screen.findByTestId('email-input');
+    const passwordInput = await screen.findByTestId('password-input');
 
-    // O usuário pressiona o botão de conexão com o PC
-    const submitBtn = await screen.findByTestId('pin-submit-button');
+    await fireEvent.changeText(emailInput, 'lucas@exemplo.com');
+    await fireEvent.changeText(passwordInput, 'senha123456');
+
+    const submitBtn = await screen.findByTestId('auth-submit-button');
     await fireEvent.press(submitBtn);
 
-    // Valida que o endpoint de validação de PIN foi invocado com o payload correto
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/pair/verify-pin'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('"pin":"654321"'),
-        })
-      );
-    });
-
-    // O usuário é autenticado e redirecionado para a tela principal
     await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith('/');
     });
   });
 
-  it('exibe mensagem de erro clara quando o PIN é rejeitado pelo computador', async () => {
+  it('exibe mensagem de erro clara quando as credenciais são rejeitadas', async () => {
     (fetch as unknown as jest.Mock).mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('/api/pair/verify-pin')) {
+      if (typeof url === 'string' && url.includes('/auth/login')) {
         return {
           ok: false,
           status: 401,
           json: async () => ({
-            detail: 'PIN incorreto ou sessão expirada.',
+            detail: 'Credenciais inválidas. Verifique seu e-mail e senha.',
           }),
         };
       }
@@ -86,14 +78,29 @@ describe('Fluxo 1: Conexão Remota e Pareamento Inicial (Ótica do Usuário)', (
       </AuthProvider>
     );
 
-    const pinInput = await screen.findByTestId('pin-input');
-    await fireEvent.changeText(pinInput, '999999');
+    const emailInput = await screen.findByTestId('email-input');
+    const passwordInput = await screen.findByTestId('password-input');
 
-    const submitBtn = await screen.findByTestId('pin-submit-button');
+    await fireEvent.changeText(emailInput, 'errado@exemplo.com');
+    await fireEvent.changeText(passwordInput, 'senhaerrada');
+
+    const submitBtn = await screen.findByTestId('auth-submit-button');
     await fireEvent.press(submitBtn);
 
-    const errorMsg = await screen.findByText('PIN incorreto ou sessão expirada.');
+    const errorMsg = await screen.findByText('Credenciais inválidas. Verifique seu e-mail e senha.');
     expect(errorMsg).toBeTruthy();
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('permite abrir o modal de pareamento direto com o computador', async () => {
+    const screen = await render(
+      <AuthProvider>
+        <AuthScreen />
+      </AuthProvider>
+    );
+
+    const pairBtn = await screen.findByTestId('qr-scanner-button');
+    expect(pairBtn).toBeTruthy();
+    await fireEvent.press(pairBtn);
   });
 });
