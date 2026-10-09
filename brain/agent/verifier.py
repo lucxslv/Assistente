@@ -1,20 +1,233 @@
 """Módulo de Verificação de Evidências do Charlie Agent Runtime («Conclusão exige evidência»)."""
 
+from __future__ import annotations
 import ast
+from datetime import datetime, timezone
+import enum
 import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
 from brain.agent.task_graph import TaskEvidence, TaskNode
-
-VerificationResult = TaskEvidence
 
 logger = logging.getLogger("charlie.agent.verifier")
 
 
+class VerificationCheckType(str, enum.Enum):
+    """Dimensão 1: Qual tipo de verificação foi efetivamente executado pelo sistema."""
+    NONE = "none"
+    STATIC_ANALYSIS = "static_analysis"
+    COMPILATION = "compilation"
+    TEST_SUITE = "test_suite"
+    MANUAL_EXECUTION = "manual_execution"
+
+
+class VerificationStatus(str, enum.Enum):
+    """Dimensão 2: Qual foi o resultado concreto da verificação executada."""
+    NOT_EXECUTED = "not_executed"
+    PASSED = "passed"
+    FAILED = "failed"
+    TOOL_ERROR = "tool_error"
+
+
+@dataclass
+class VerificationResult:
+    """Registro estruturado de evidência determinística vinculada à versão do código."""
+    check_type: VerificationCheckType
+    status: VerificationStatus
+    command: Optional[str] = None
+    exit_code: Optional[int] = None
+    duration_ms: Optional[float] = None
+    target_path: Optional[str] = None
+    target_file_hash: Optional[str] = None
+    evidence_id: Optional[str] = None
+    summary: str = ""
+    details: Optional[str] = None
+    verified_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def to_task_evidence(self) -> TaskEvidence:
+        """Converte para o formato de persistência do TaskGraph mantendo compatibilidade."""
+        return TaskEvidence(
+            type=self.check_type.value,
+            summary=self.summary,
+            details=self.details,
+            passed=(self.status == VerificationStatus.PASSED),
+            verified_at=self.verified_at,
+        )
+
+
 class Verifier:
     """Valida evidências tangíveis antes de autorizar a transição de uma tarefa para SUCCESS."""
+
+    @classmethod
+    def calculate_file_hash(cls, path_or_content: str | Path) -> str:
+        """Calcula hash SHA-256 do arquivo ou conteúdo para vincular a evidência à versão exata."""
+        try:
+            if isinstance(path_or_content, Path) or (isinstance(path_or_content, str) and os.path.exists(path_or_content)):
+                p = Path(path_or_content)
+                if p.is_file():
+                    content = p.read_text(encoding="utf-8", errors="ignore")
+                    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+            # Se for string de código direto
+            if isinstance(path_or_content, str):
+                return hashlib.sha256(path_or_content.encode("utf-8")).hexdigest()
+        except Exception as e:
+            logger.debug(f"Falha ao calcular hash de arquivo: {e}")
+        return ""
+
+    @classmethod
+    def is_evidence_valid_for_file(cls, evidence: VerificationResult, current_file_path: str) -> bool:
+        """Invalida a evidência se o arquivo tiver sido modificado após a verificação."""
+        if not evidence.target_file_hash or not os.path.exists(current_file_path):
+            return False
+        current_hash = cls.calculate_file_hash(current_file_path)
+        return current_hash == evidence.target_file_hash
+
+    @classmethod
+    def evaluate_verification(
+        cls,
+        task: TaskNode,
+        tool_name: str,
+        tool_result: str,
+        exit_code: Optional[int] = None,
+        command: Optional[str] = None,
+    ) -> VerificationResult:
+        """Classifica determinísticamente a verificação nas duas dimensões obrigatórias.
+
+        Regra: Código gerado != código compilado != testes aprovados.
+        O sistema determina o status baseado em evidências físicas e exit codes.
+        """
+        cmd_str = (command or task.arguments.get("command") or "").strip().lower()
+        res_lower = tool_result.lower()
+        code_content = task.arguments.get("content") or task.arguments.get("code") or ""
+        path_arg = task.arguments.get("path") or ""
+
+        # Identificação de Suíte de Testes Reais
+        is_test_command = any(
+            t in cmd_str for t in ("pytest", "npm test", "jest", "vitest", "cargo test", "python -m unittest", "go test")
+        )
+        # Identificação de Compilação / Linter / Build
+        is_compilation_command = any(
+            c in cmd_str for c in ("npm run build", "tsc", "cargo build", "gcc", "go build", "mvn compile", "gradle build")
+        )
+
+        file_hash = None
+        if path_arg and os.path.exists(path_arg):
+            file_hash = cls.calculate_file_hash(path_arg)
+        elif code_content:
+            file_hash = cls.calculate_file_hash(code_content)
+
+        # 1. Caso: Execução de Suíte de Teste Real
+        if is_test_command:
+            has_fail = (
+                (exit_code is not None and exit_code != 0)
+                or "failed" in res_lower
+                or "failure" in res_lower
+                or "error" in res_lower
+            )
+            passed = not has_fail
+            status = VerificationStatus.PASSED if passed else VerificationStatus.FAILED
+            summary = (
+                f"Suíte de testes aprovada: {tool_result[:140]}"
+                if passed
+                else f"Suíte de testes reprovada com erros: {tool_result[:140]}"
+            )
+            return VerificationResult(
+                check_type=VerificationCheckType.TEST_SUITE,
+                status=status,
+                command=cmd_str,
+                exit_code=exit_code if exit_code is not None else (0 if passed else 1),
+                target_path=path_arg or None,
+                target_file_hash=file_hash,
+                summary=summary,
+                details=tool_result,
+            )
+
+        # 2. Caso: Compilação / Build
+        if is_compilation_command:
+            has_fail = (
+                (exit_code is not None and exit_code != 0)
+                or "error:" in res_lower
+                or "failed" in res_lower
+            )
+            passed = not has_fail
+            status = VerificationStatus.PASSED if passed else VerificationStatus.FAILED
+            summary = (
+                "Compilação concluída com sucesso. (Execução de runtime não realizada)"
+                if passed
+                else "Falha durante compilação do projeto."
+            )
+            return VerificationResult(
+                check_type=VerificationCheckType.COMPILATION,
+                status=status,
+                command=cmd_str,
+                exit_code=exit_code if exit_code is not None else (0 if passed else 1),
+                target_path=path_arg or None,
+                target_file_hash=file_hash,
+                summary=summary,
+                details=tool_result,
+            )
+
+        # 3. Caso: Análise Sintática Estática (AST Python ou similar em write_file)
+        if tool_name in ("write_file", "replace_in_file"):
+            is_py = path_arg.endswith(".py") or any(kw in code_content for kw in ("def ", "class ", "import "))
+            if is_py and code_content:
+                try:
+                    ast.parse(code_content, filename=path_arg or "<dynamic_code>")
+                    return VerificationResult(
+                        check_type=VerificationCheckType.STATIC_ANALYSIS,
+                        status=VerificationStatus.PASSED,
+                        command=None,
+                        exit_code=0,
+                        target_path=path_arg or None,
+                        target_file_hash=file_hash,
+                        summary="Sintaxe Python validada com sucesso via AST. (Testes de runtime não executados)",
+                        details=tool_result,
+                    )
+                except SyntaxError as e:
+                    return VerificationResult(
+                        check_type=VerificationCheckType.STATIC_ANALYSIS,
+                        status=VerificationStatus.FAILED,
+                        command=None,
+                        exit_code=1,
+                        target_path=path_arg or None,
+                        target_file_hash=file_hash,
+                        summary=f"Erro de sintaxe Python na linha {e.lineno}, coluna {e.offset}: {e.msg}",
+                        details=str(e),
+                    )
+
+            # Arquivo não Python gravado
+            return VerificationResult(
+                check_type=VerificationCheckType.MANUAL_EXECUTION,
+                status=VerificationStatus.PASSED,
+                command=None,
+                exit_code=0,
+                target_path=path_arg or None,
+                target_file_hash=file_hash,
+                summary="Arquivo gravado no disco com sucesso. (Validação e testes não executados)",
+                details=tool_result,
+            )
+
+        # 4. Caso: Comando Genérico de Sistema
+        has_error = (
+            (exit_code is not None and exit_code != 0)
+            or "erro" in res_lower
+            or "command not found" in res_lower
+            or "não é reconhecido" in res_lower
+        )
+        passed = not has_error
+        return VerificationResult(
+            check_type=VerificationCheckType.MANUAL_EXECUTION,
+            status=VerificationStatus.PASSED if passed else VerificationStatus.FAILED,
+            command=cmd_str or None,
+            exit_code=exit_code if exit_code is not None else (0 if passed else 1),
+            target_path=path_arg or None,
+            target_file_hash=file_hash,
+            summary=f"Execução de comando concluída com exit code {exit_code or 0}. (Sem suíte de testes)",
+            details=tool_result[:300],
+        )
 
     @classmethod
     async def verify_task(
@@ -23,10 +236,7 @@ class Verifier:
         tool_result: str,
         system_context: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, TaskEvidence]:
-        """
-        Avalia se o resultado da ferramenta e o estado do sistema satisfazem os critérios de conclusão.
-        Retorna (sucesso, TaskEvidence).
-        """
+        """Avalia se o resultado da ferramenta satisfaz os critérios de conclusão."""
         ev_type = task.expected_evidence_type or "system"
         criteria = task.expected_evidence_criteria or {}
 
@@ -39,7 +249,6 @@ class Verifier:
         elif ev_type == "visual":
             return cls._verify_visual(task, tool_result, criteria)
 
-        # Fallback padrão
         return cls._verify_generic(task, tool_result)
 
     @classmethod
@@ -67,7 +276,7 @@ class Verifier:
             else:
                 return False, TaskEvidence(
                     type="file",
-                    summary="Falha de verificação: Impossível auditar evidência. Nenhum arquivo físico foi especificado para verificação.",
+                    summary="Falha de verificação: Nenhum arquivo físico foi especificado para verificação.",
                     details=tool_result,
                     passed=False,
                 )
@@ -83,16 +292,13 @@ class Verifier:
                 passed=False,
             )
 
-        # Verifica conteúdo se especificado
         expected_substring = criteria.get("contains")
-        file_hash = None
+        file_hash = cls.calculate_file_hash(target)[:12]
         ast_verified = False
+
         if target.is_file():
             try:
                 content = target.read_text(encoding="utf-8", errors="ignore")
-                file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
-
-                # Validação sintática AST para scripts Python
                 if target.suffix.lower() == ".py":
                     try:
                         ast.parse(content, filename=str(target))
@@ -106,16 +312,12 @@ class Verifier:
                         )
 
                 if expected_substring and expected_substring not in content:
-                    # Se for arquivo de estilo/código com conteúdo substancial, releva discrepância de texto de marca
-                    if target.suffix.lower() in (".css", ".js", ".json") and len(content.strip()) > 50:
-                        pass
-                    else:
-                        return False, TaskEvidence(
-                            type="file",
-                            summary=f"Falha: Conteúdo esperado '{expected_substring}' não encontrado em '{target.name}'.",
-                            details=f"SHA256: {file_hash}",
-                            passed=False,
-                        )
+                    return False, TaskEvidence(
+                        type="file",
+                        summary=f"Falha: Conteúdo esperado '{expected_substring}' não encontrado em '{target.name}'.",
+                        details=f"SHA256: {file_hash}",
+                        passed=False,
+                    )
             except Exception as e:
                 logger.warning(f"Erro ao ler arquivo para verificação: {e}")
 
@@ -135,77 +337,29 @@ class Verifier:
 
     @classmethod
     def _verify_code(cls, task: TaskNode, tool_result: str, criteria: Dict[str, Any]) -> Tuple[bool, TaskEvidence]:
-        """Verifica exit codes, erros de sintaxe via AST ou resultados de suites de teste."""
-        # 1. Validação Sintática Determinística com AST se for código Python
-        code_content = task.arguments.get("content") or task.arguments.get("code")
-        path_arg = task.arguments.get("path") or ""
-        is_python_code = path_arg.endswith(".py") or (
-            code_content and any(kw in code_content for kw in ("def ", "class ", "import ", "print("))
+        """Verifica exit codes determinísticos sem atribuir selos falsos de teste."""
+        eval_res = cls.evaluate_verification(
+            task=task,
+            tool_name=task.tool or "execute_command",
+            tool_result=tool_result,
+            exit_code=criteria.get("exit_code"),
+            command=task.arguments.get("command"),
         )
-        ast_validated = False
-
-        if code_content and is_python_code:
-            try:
-                ast.parse(code_content, filename=path_arg or "<dynamic_code>")
-                ast_validated = True
-            except SyntaxError as e:
-                return False, TaskEvidence(
-                    type="code",
-                    summary=f"Erro de sintaxe Python na linha {e.lineno}, coluna {e.offset}: {e.msg}",
-                    details=f"SyntaxError: {e}\n{tool_result}",
-                    passed=False,
-                )
-
-        lower_res = tool_result.lower()
-        has_error = (
-            "error" in lower_res
-            or "failed" in lower_res
-            or "falha" in lower_res
-            or "exception" in lower_res
-            or "traceback" in lower_res
-        )
-        passed = not has_error or "0 errors" in lower_res or "tests passed" in lower_res
-
-        if not passed:
-            summary = "Erros detectados durante execução de código."
-        elif ast_validated and task.tool in ("write_file", "replace_in_file"):
-            summary = "Sintaxe Python validada com sucesso via AST."
-        else:
-            summary = "Compilação/Testes validados com sucesso."
-
-        return passed, TaskEvidence(
-            type="code",
-            summary=summary,
-            details=tool_result[:300],
-            passed=passed,
-        )
+        return (eval_res.status == VerificationStatus.PASSED), eval_res.to_task_evidence()
 
     @classmethod
     def _verify_system(cls, task: TaskNode, tool_result: str, criteria: Dict[str, Any]) -> Tuple[bool, TaskEvidence]:
-        """Verifica se comandos de sistema ou serviços foram executados sem exceções."""
-        lower_res = tool_result.lower()
-        has_fail = (
-            "erro" in lower_res
-            or "falha" in lower_res
-            or "exception" in lower_res
-            or "não é reconhecido" in lower_res
-            or "not recognized" in lower_res
-            or "cannot find" in lower_res
-            or "stderr:" in lower_res
-            or "comando inválido" in lower_res
+        eval_res = cls.evaluate_verification(
+            task=task,
+            tool_name="execute_command",
+            tool_result=tool_result,
+            exit_code=criteria.get("exit_code"),
+            command=task.arguments.get("command"),
         )
-
-        passed = not has_fail
-        return passed, TaskEvidence(
-            type="system",
-            summary=f"Verificação do sistema: {tool_result[:100]}",
-            details=tool_result,
-            passed=passed,
-        )
+        return (eval_res.status == VerificationStatus.PASSED), eval_res.to_task_evidence()
 
     @classmethod
     def _verify_visual(cls, task: TaskNode, tool_result: str, criteria: Dict[str, Any]) -> Tuple[bool, TaskEvidence]:
-        """Verifica captura de telas ou abertura de janelas de interface."""
         passed = "erro" not in tool_result.lower()
         return passed, TaskEvidence(
             type="visual",
