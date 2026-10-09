@@ -12,7 +12,11 @@ def _get_client():
     global _client
     if _client is None and config.gemini_api_key:
         try:
-            from google import genai
+            try:
+                from google import genai
+            except (ImportError, AttributeError):
+                import importlib
+                genai = importlib.import_module("google.genai")
             _client = genai.Client(api_key=config.gemini_api_key)
         except Exception as e:
             logger.warning("Falha ao inicializar google.genai Client: %s", e)
