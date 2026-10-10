@@ -910,12 +910,19 @@ ${t3 ? t3.slice(0, 1500) : "Processos auditados sem bloqueios ou falhas crítica
               status: "applied",
             });
 
-            // Se for relatório (.md, .json, report, analysis), registrar como Artifact
+            // Se for relatório legítimo (.md, .json, report, analysis) e NÃO for arquivo interno/efêmero de execução, registrar como Artifact
+            const isInternalEphemeral =
+              fileName.startsWith("Charlie_exec_") ||
+              filePath.includes("Charlie_exec_") ||
+              filePath.toLowerCase().endsWith(".tmp") ||
+              filePath.toLowerCase().endsWith(".log");
+
             if (
-              filePath.endsWith(".md") ||
-              filePath.endsWith(".json") ||
-              filePath.toLowerCase().includes("report") ||
-              filePath.toLowerCase().includes("analis")
+              !isInternalEphemeral &&
+              (filePath.endsWith(".md") ||
+                filePath.endsWith(".json") ||
+                filePath.toLowerCase().includes("report") ||
+                filePath.toLowerCase().includes("analis"))
             ) {
               this.addArtifact({
                 name: fileName,

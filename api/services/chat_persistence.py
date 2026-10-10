@@ -16,13 +16,28 @@ def generate_session_title(prompt: Optional[str]) -> str:
     """Gera um título natural e conciso para a sessão a partir das primeiras palavras do prompt."""
     if not prompt or not prompt.strip():
         return "Nova Conversa"
-    words = prompt.strip().split()
+    cleaned = prompt.strip().replace("\n", " ")
+    words = cleaned.split()
     if not words:
         return "Nova Conversa"
-    title = " ".join(words[:6])
-    if len(title) > 38:
-        title = title[:38].rsplit(" ", 1)[0]
-    return title.strip() or "Nova Conversa"
+
+    # Pega até 8 palavras mantendo limite de 46 caracteres
+    title_words = words[:8]
+    title = " ".join(title_words)
+    if len(title) > 46:
+        title = title[:46].rsplit(" ", 1)[0]
+
+    # Remove preposições / conectivos soltos que ficaram no final da frase
+    dangling_tokens = {
+        "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+        "para", "por", "com", "e", "ou", "a", "o", "as", "os", "que", "se"
+    }
+    parts = title.strip().split()
+    while parts and parts[-1].lower().rstrip(".,;:?!") in dangling_tokens and len(parts) > 1:
+        parts.pop()
+
+    final_title = " ".join(parts).strip()
+    return final_title or title.strip() or "Nova Conversa"
 
 
 class _db_connection_scope:

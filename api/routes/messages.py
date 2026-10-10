@@ -58,6 +58,7 @@ async def list_messages(
             SELECT id, role, content, created_at
             FROM public.chat_messages
             WHERE session_id = $1 AND role IN ('user', 'assistant')
+              AND content != 'Comando de dispositivo enviado para execução no seu computador.'
             ORDER BY created_at ASC
         """, t_uuid)
 
@@ -78,6 +79,7 @@ async def list_messages(
             SELECT id, name, type, output, "createdAt"
             FROM "Step"
             WHERE "threadId" = $1 AND type IN ('user_message', 'assistant_message')
+              AND output != 'Comando de dispositivo enviado para execução no seu computador.'
             ORDER BY "createdAt" ASC
         """, t_uuid)
 

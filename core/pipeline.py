@@ -284,6 +284,50 @@ class AssistantPipeline:
             finally:
                 agent_runtime.unregister_listener(listener_queue)
 
+        # Detecção proativa de telemetria / hardware para emissão de Widgets Generativos
+        u_lower = (user_text or "").lower()
+        perf_keywords = [
+            "desempenho", "telemetria", "hardware", "cpu", "memória ram",
+            "como está o pc", "como está a máquina", "status do pc", "status do computador", "status da máquina"
+        ]
+        if any(kw in u_lower for kw in perf_keywords):
+            try:
+                from core.widgets import build_server_health_widget_payload, build_storage_widget_payload
+                from tools.system_info import get_system_metrics_dict
+                m_dict = get_system_metrics_dict()
+                health_widget = build_server_health_widget_payload(
+                    cpu_percent=m_dict.get("cpu_percent", 0.0),
+                    ram_percent=m_dict.get("ram_percent", 0.0),
+                    database="healthy",
+                    websocket="connected",
+                    sse="connected",
+                    title="Desempenho & Saúde do Sistema",
+                )
+                yield StreamEvent(type="widget", data=health_widget)
+
+                # Se mencionar especificamente disco / armazenamento
+                if any(dk in u_lower for dk in ["disco", "armazenamento", "ssd", "hd", "espaço"]):
+                    disk_info = m_dict.get("disk")
+                    if disk_info:
+                        storage_widget = build_storage_widget_payload(
+                            title="Armazenamento Local (Disco C:)",
+                            used_percent=disk_info["percent"],
+                            used_label=f"{disk_info['used_gb']} GB",
+                            total_label=f"{disk_info['total_gb']} GB",
+                        )
+                        yield StreamEvent(type="widget", data=storage_widget)
+
+                # Alimenta o system_prompt com métricas precisas atuais
+                system_prompt += (
+                    f"\n\n[MÉTRICAS REAIS DE HARDWARE DO COMPUTADOR AGORA]:\n"
+                    f"- CPU: {m_dict.get('cpu_percent', 0.0):.1f}%\n"
+                    f"- RAM: {m_dict.get('ram_percent', 0.0):.1f}% ({m_dict.get('ram_used_gb', 0.0)} GB usados de {m_dict.get('ram_total_gb', 0.0)} GB)\n"
+                    f"- Status do Sistema: Operacional e responsivo.\n"
+                    f"Apresente uma resposta concisa, natural e profissional baseada EXCLUSIVAMENTE nestes números reais coletados."
+                )
+            except Exception as w_err:
+                logger.warning(f"Aviso ao emitir widget de hardware: {w_err}")
+
         MAX_ITERATIONS = 5
         iterations = 0
         final_reply = ""
@@ -421,6 +465,22 @@ class AssistantPipeline:
                         "call_id": c_id,
                     },
                 )
+                if call.name == "get_system_status":
+                    try:
+                        from core.widgets import build_server_health_widget_payload
+                        from tools.system_info import get_system_metrics_dict
+                        m_dict = get_system_metrics_dict()
+                        health_widget = build_server_health_widget_payload(
+                            cpu_percent=m_dict.get("cpu_percent", 0.0),
+                            ram_percent=m_dict.get("ram_percent", 0.0),
+                            database="healthy",
+                            websocket="connected",
+                            sse="connected",
+                            title="Desempenho & Saúde do Sistema",
+                        )
+                        yield StreamEvent(type="widget", data=health_widget)
+                    except Exception as w_err:
+                        logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
 
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 

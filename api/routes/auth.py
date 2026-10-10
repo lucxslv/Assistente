@@ -113,24 +113,24 @@ async def verify_supabase_token(token: str) -> Optional[dict]:
             return dev_user
         return None
 
-    # 2. Modo Convidado / Demonstração Local (Lucas)
-    if clean_token == "charlie_guest_token":
-        guest_user = {
-            "id": "guest-lucas",
+    # 2. Modo Usuário Local Direto (Lucas)
+    if clean_token in ("charlie_guest_token", "charlie_local_token"):
+        local_user = {
+            "id": "lucas-local",
             "email": "lucas@charlie.local",
-            "name": "Lucas (Demonstração)",
-            "is_admin": False,
-            "role": "guest",
+            "name": "Lucas",
+            "is_admin": True,
+            "role": "admin",
         }
-        _token_cache.set(clean_token, guest_user)
-        return guest_user
+        _token_cache.set(clean_token, local_user)
+        return local_user
 
     # 3. Modo Administrador Local (Lucas)
     if clean_token == "charlie_admin_local_token":
         admin_user = {
             "id": "admin-lucas",
             "email": config.admin_email or "lucassilvacosta060@gmail.com",
-            "name": config.admin_username or "Lucas (Admin)",
+            "name": config.admin_username or "Lucas",
             "is_admin": True,
             "role": "admin",
         }
@@ -342,16 +342,16 @@ async def register(data: RegisterRequest, response: Response):
 
 @router.post("/guest", response_model=AuthResponse)
 async def guest_login(response: Response):
-    """Inicia sessão local como convidado/demonstração imediatamente sem senha."""
+    """Inicia sessão local como Lucas diretamente."""
     token = "charlie_guest_token"
-    guest_user = {
-        "id": "guest-lucas",
+    local_user = {
+        "id": "lucas-local",
         "email": "lucas@charlie.local",
         "name": "Lucas",
-        "is_admin": False,
-        "role": "guest",
+        "is_admin": True,
+        "role": "admin",
     }
-    _token_cache.set(token, guest_user)
+    _token_cache.set(token, local_user)
     response.set_cookie(
         key="charlie_session",
         value=token,
@@ -363,11 +363,11 @@ async def guest_login(response: Response):
     )
     return AuthResponse(
         user=UserResponse(
-            id="guest-lucas",
+            id="lucas-local",
             name="Lucas",
             email="lucas@charlie.local",
-            is_admin=False,
-            role="guest",
+            is_admin=True,
+            role="admin",
         ),
         token=token,
     )

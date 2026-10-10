@@ -10,6 +10,9 @@ import os
 import sys
 import time
 
+# Garante a raiz do projeto no PYTHONPATH para execução direta via script
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 from tests.torture.framework import TortureReport, Verdict, global_safety_monitor
 import tests.torture.test_acceptance as test_acceptance
 import tests.torture.test_security as test_security

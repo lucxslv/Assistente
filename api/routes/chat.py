@@ -219,14 +219,18 @@ async def chat_post(
     from api.services.audit_service import estimate_tokens
     tokens_count = estimate_tokens(reply)
 
-    await _store_assistant_message(
-        thread_id=thread_id,
-        reply=reply,
-        user_id=str(user["id"]),
-        model=model_used,
-        tokens=tokens_count,
-        background_tasks=background_tasks,
-    )
+    if reply.strip() not in (
+        "Comando de dispositivo enviado para execução no seu computador.",
+        "Comando de dispositivo despachado para o seu computador com sucesso.",
+    ):
+        await _store_assistant_message(
+            thread_id=thread_id,
+            reply=reply,
+            user_id=str(user["id"]),
+            model=model_used,
+            tokens=tokens_count,
+            background_tasks=background_tasks,
+        )
 
     # Gravação assíncrona de telemetria e custo em USD
     try:
@@ -308,6 +312,13 @@ async def chat_stream_sse(
         finally:
             state.set_status(CharlieStatus.IDLE)
             if final_reply and final_reply.strip():
+                # Suprime gravação no banco de mensagens transitórias de transporte de dispositivo
+                if final_reply.strip() in (
+                    "Comando de dispositivo enviado para execução no seu computador.",
+                    "Comando de dispositivo despachado para o seu computador com sucesso.",
+                ):
+                    return
+
                 from api.services.audit_service import estimate_tokens
                 tokens_count = estimate_tokens(final_reply)
 
