@@ -63,6 +63,7 @@ class ToolRegistry:
         arguments: dict[str, Any],
         prefer_remote: bool = False,
         call_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> str:
         handler = self._handlers.get(name)
         if handler is None:
@@ -90,13 +91,13 @@ class ToolRegistry:
                 or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
             )
 
-            # 1. Se estiver na nuvem e prefer_remote for solicitado (e houver dispositivo WebSocket ativo)
+            # 1. Se estiver na nuvem e prefer_remote for solicitado (e houver dispositivo WebSocket ativo do usuário)
             if is_cloud and prefer_remote:
                 try:
                     from brain.broker.device_broker import device_broker
-                    if device_broker.has_active_device():
+                    if device_broker.has_active_device(user_id=user_id):
                         c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
-                        return await device_broker.dispatch_device_tool(c_id, name, arguments)
+                        return await device_broker.dispatch_device_tool(c_id, name, arguments, user_id=user_id)
                 except Exception as e:
                     logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Prosseguindo com resposta desktop.")
 

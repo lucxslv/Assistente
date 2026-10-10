@@ -22,6 +22,7 @@ from providers import (
 )
 from collections.abc import AsyncGenerator
 from core.streaming import StreamEvent
+from core.message_parser import StreamingMessageParser, parse_assistant_message_content
 from brain.prompts.prompts import build_system_prompt
 from tools.registry import ToolRegistry
 
@@ -339,6 +340,7 @@ class AssistantPipeline:
             tool_calls = []
 
             # Streaming dos chunks e detecção de tool calls com suporte a fallback
+            stream_parser = StreamingMessageParser()
             try:
                 async for chunk in self.llm.chat_stream(
                     system_prompt=system_prompt,
@@ -355,9 +357,15 @@ class AssistantPipeline:
                             logger.warning(f"[pipeline] Suprimindo vazamento de ferramenta no stream: {stripped[:80]}")
                             continue
                         iteration_reply += chunk_text
-                        if not chunk.tool_calls:
+                        clean_token = stream_parser.feed(chunk_text)
+                        if stream_parser.internal_thoughts:
+                            for thought_item in stream_parser.internal_thoughts:
+                                yield StreamEvent(type="thought", data={"thought": thought_item})
+                            stream_parser.internal_thoughts.clear()
+
+                        if not chunk.tool_calls and clean_token:
                             emitted_any_token = True
-                            yield StreamEvent(type="token", data={"token": chunk_text})
+                            yield StreamEvent(type="token", data={"token": clean_token})
             except Exception as e:
                 logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
                 fallback_model = config.gemini_model
@@ -378,6 +386,7 @@ class AssistantPipeline:
                     tool_calls.clear()
                     emitted_any_token = False
                     self.last_model_used = fallback_model
+                    stream_parser = StreamingMessageParser()
 
                     try:
                         async for chunk in self.llm.chat_stream(
@@ -395,9 +404,15 @@ class AssistantPipeline:
                                     logger.warning(f"[pipeline] Suprimindo vazamento de ferramenta no stream fallback: {stripped[:80]}")
                                     continue
                                 iteration_reply += chunk_text
-                                if not chunk.tool_calls:
+                                clean_token = stream_parser.feed(chunk_text)
+                                if stream_parser.internal_thoughts:
+                                    for thought_item in stream_parser.internal_thoughts:
+                                        yield StreamEvent(type="thought", data={"thought": thought_item})
+                                    stream_parser.internal_thoughts.clear()
+
+                                if not chunk.tool_calls and clean_token:
                                     emitted_any_token = True
-                                    yield StreamEvent(type="token", data={"token": chunk_text})
+                                    yield StreamEvent(type="token", data={"token": clean_token})
                     except Exception as fb_err:
                         logger.error(f"[pipeline] Falha também no modelo de fallback {fallback_model}: {fb_err}")
                         yield StreamEvent(type="error", data={"error": f"Erro nos modelos de linguagem: {fb_err}"})
@@ -410,7 +425,14 @@ class AssistantPipeline:
                     break
 
             if not tool_calls:
-                final_reply = iteration_reply or "Ação concluída."
+                remaining_clean, meta = stream_parser.flush()
+                if meta.get("internal_thoughts"):
+                    for thought_item in meta["internal_thoughts"]:
+                        yield StreamEvent(type="thought", data={"thought": thought_item})
+                if remaining_clean and not emitted_any_token:
+                    emitted_any_token = True
+                    yield StreamEvent(type="token", data={"token": remaining_clean})
+                final_reply = remaining_clean or iteration_reply or "Ação concluída."
                 break
 
             req_memory.add_assistant_tool_calls(tool_calls)
@@ -454,7 +476,7 @@ class AssistantPipeline:
             for call in tool_calls:
                 scope_enum = self.tools.get_scope(call.name)
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
-                res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id)
+                res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
                 yield StreamEvent(
                     type="tool_end",

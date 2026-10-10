@@ -385,7 +385,7 @@ async def chat_ws(websocket: WebSocket):
     # Apenas o Desktop Tauri AUTENTICADO é registrado como executor de ferramentas nativas
     is_desktop_broker_client = (client_type == "desktop" and ws_user is not None)
     if is_desktop_broker_client:
-        device_broker.register_device_connection(websocket)
+        device_broker.register_device_connection(websocket, user_id=str(ws_user["id"]))
 
     # Envia estado inicial do Charlie
     await websocket.send_json({"type": "state", "data": state.to_dict()})
@@ -415,14 +415,14 @@ async def chat_ws(websocket: WebSocket):
                 if declared_type:
                     client_type = declared_type.lower()
                     if client_type == "mobile" and is_desktop_broker_client:
-                        device_broker.unregister_device_connection(websocket)
+                        device_broker.unregister_device_connection(websocket, user_id=str(ws_user["id"]) if ws_user else None)
                         is_desktop_broker_client = False
                 if auth_tok:
                     from api.routes.auth import verify_supabase_token
                     ws_user = await verify_supabase_token(auth_tok)
                     # Registra no device_broker se autenticado com sucesso e for desktop
                     if ws_user and client_type == "desktop" and not is_desktop_broker_client:
-                        device_broker.register_device_connection(websocket)
+                        device_broker.register_device_connection(websocket, user_id=str(ws_user["id"]))
                         is_desktop_broker_client = True
                     await websocket.send_json({"type": "auth_status", "authenticated": ws_user is not None})
             elif msg_type == "device_tool_result":
@@ -444,12 +444,24 @@ async def chat_ws(websocket: WebSocket):
                     continue
                 presence_manager.register_or_heartbeat(client_id=client_id, active_thread_id=thread_id)
 
+                thread_history = await _load_thread_history(thread_id, user_id=str(ws_user["id"]))
+                if not thread_history and data.get("history"):
+                    thread_history = data.get("history")
+
                 final_reply = ""
                 final_model = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
                 state.set_status(CharlieStatus.THINKING)
 
                 try:
-                    async for ev in pipeline.run_pipeline_stream(text, thread_id=thread_id, user_id=str(ws_user["id"])):
+                    async for ev in pipeline.run_pipeline_stream(
+                        text,
+                        thread_id=thread_id,
+                        user_id=str(ws_user["id"]),
+                        user_name=ws_user.get("name"),
+                        history=thread_history,
+                        images=data.get("images"),
+                        tool_results=data.get("tool_results"),
+                    ):
                         if ev.type == "token":
                             final_reply += ev.data.get("token", "")
                         elif ev.type == "reset_and_fallback":
@@ -482,6 +494,6 @@ async def chat_ws(websocket: WebSocket):
         logger.info(f"Cliente WebSocket {client_id} ({client_type}) desconectado.")
     finally:
         if is_desktop_broker_client:
-            device_broker.unregister_device_connection(websocket)
+            device_broker.unregister_device_connection(websocket, user_id=str(ws_user["id"]) if ws_user else None)
         presence_manager.unregister(client_id)
         state.unsubscribe(on_state_change)
