@@ -46,3 +46,6 @@ packages = ["api", "audio", "brain", "core", "memory", "providers", "tools", "ev
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

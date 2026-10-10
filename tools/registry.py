@@ -179,7 +179,6 @@ class ToolRegistry:
             name="get_system_status",
             handler=system_info.get_system_status,
             description="Retorna informações básicas do sistema (CPU, memória, disco).",
-            scope=ToolScope.DEVICE,
         )
         self.register(
             name="control_device",

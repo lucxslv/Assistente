@@ -171,7 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-[260px] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col p-4 select-none h-full shrink-0">
+    <aside className="w-[272px] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col p-4 select-none h-full shrink-0">
       {/* 1. Header do Logo e Status */}
       <div className="px-1 py-1 mb-3 flex items-center justify-between">
         <div>
@@ -373,7 +373,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </form>
                           ) : (
                             <>
-                              <span className="truncate flex-1 pr-2">
+                              <span className="truncate flex-1 pr-2" title={t.name || "Conversa sem título"}>
                                 {t.name || "Conversa sem título"}
                               </span>
 

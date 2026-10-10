@@ -501,12 +501,20 @@ export function App() {
             agentRuntimeStore.addLog("TOOL", `Invocando ${ev.data.name}`, ev.data.args);
             if (ev.data.args?.path) {
               const p = String(ev.data.args.path);
-              agentRuntimeStore.recordFile({
-                path: p,
-                name: p.split(/[/\\]/).pop() || p,
-                category: "analyzed",
-                size: 1024,
-              });
+              const fName = p.split(/[/\\]/).pop() || p;
+              if (
+                !fName.startsWith("Charlie_exec_") &&
+                !p.includes("Charlie_exec_") &&
+                !fName.toLowerCase().endsWith(".tmp") &&
+                !fName.toLowerCase().endsWith(".log")
+              ) {
+                agentRuntimeStore.recordFile({
+                  path: p,
+                  name: fName,
+                  category: "analyzed",
+                  size: 1024,
+                });
+              }
             }
             // Executa ferramentas locais nativamente no Windows
             if (

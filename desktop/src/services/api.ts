@@ -169,9 +169,9 @@ export function getStoredUser(): UserProfile | null {
   if (typeof window === "undefined") return null;
   try {
     const data = localStorage.getItem("charlie_user");
-    return data ? JSON.parse(data) : { id: "guest-lucas", name: "Lucas", email: "lucas@charlie.local" };
+    return data ? JSON.parse(data) : { id: "lucas-local", name: "Lucas", email: "lucas@charlie.local" };
   } catch {
-    return { id: "guest-lucas", name: "Lucas", email: "lucas@charlie.local" };
+    return { id: "lucas-local", name: "Lucas", email: "lucas@charlie.local" };
   }
 }
 
@@ -275,7 +275,7 @@ export async function loginAsGuest(): Promise<AuthResponse> {
   }
   const fallbackData: AuthResponse = {
     user: {
-      id: "guest-lucas",
+      id: "lucas-local",
       name: "Lucas",
       email: "lucas@charlie.local",
     },

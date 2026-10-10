@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -25,7 +25,6 @@ import {
   LayoutDashboard,
   Sparkles,
   ArrowRight,
-  Smartphone,
 } from "lucide-react";
 import { Message, ToolCallInfo, AgentArtifact } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -208,7 +207,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   hasActiveWorkspace,
   activeArtifacts = [],
   onOpenArtifact,
-  onOpenMobilePair,
+  onOpenMobilePair: _onOpenMobilePair,
 }) => {
   const [input, setInput] = useState("");
   const [voiceActive, setVoiceActive] = useState(false);
@@ -428,7 +427,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     { label: "Como está o desempenho?", prompt: "Como está o desempenho atual do processador e memória do meu computador?" },
   ];
 
-  const isEmptyState = messages.length === 0;
+  const displayMessages = useMemo((): Message[] => {
+    return messages.filter((m: Message) => {
+      const isTransientNotice =
+        m.content?.trim() === "Comando de dispositivo enviado para execução no seu computador." &&
+        (!m.tools || m.tools.length === 0) &&
+        !m.widget;
+      return !isTransientNotice;
+    });
+  }, [messages]);
+
+  const isEmptyState = displayMessages.length === 0;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--background)] relative overflow-hidden">
@@ -439,13 +448,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         data-tauri-drag-region
         className="h-[52px] border-b border-[var(--border)] flex items-center justify-between px-6 select-none bg-[var(--background)] shrink-0 z-20"
       >
-        <div data-tauri-drag-region className="flex items-center gap-2.5 text-[13px] text-[var(--text-muted)] cursor-default">
+        <div data-tauri-drag-region className="flex items-center gap-2.5 text-[13px] text-[var(--text-muted)] cursor-default min-w-0 max-w-[calc(100vw-360px)]">
           <img
             src="/charlie-logo.svg"
             alt="Charlie"
-            className="w-4 h-4 object-contain opacity-90 drop-shadow-[0_0_6px_rgba(139,124,255,0.4)]"
+            className="w-4 h-4 object-contain opacity-90 drop-shadow-[0_0_6px_rgba(139,124,255,0.4)] shrink-0"
           />
-          <span className="font-medium text-[var(--text-secondary)]">
+          <span
+            className="font-medium text-[var(--text-secondary)] truncate"
+            title={currentThreadName || "Charlie"}
+          >
             {currentThreadName || "Charlie"}
           </span>
         </div>
@@ -468,18 +480,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {hasActiveWorkspace && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
               )}
-            </button>
-          )}
-
-          {onOpenMobilePair && (
-            <button
-              type="button"
-              onClick={onOpenMobilePair}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 transition-all text-[11.5px] font-medium cursor-pointer mr-1 group shadow-sm"
-              title="Parear Aplicativo Mobile (QR Code / PIN)"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
-              <span className="hidden sm:inline">Parear Celular</span>
             </button>
           )}
 
@@ -705,7 +705,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             ================================================================ */
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            {messages.map((m, idx) => {
+            {displayMessages.map((m: Message, idx: number) => {
               const isUser = m.type === "user_message";
               const messageId = m.id || `msg-${idx}`;
               const isCopied = copiedMessageId === messageId;
@@ -753,7 +753,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           {/* Ferramentas executadas com accordion expansível */}
                           {m.tools && m.tools.length > 0 && (
                             <div className="flex flex-col gap-1 mb-2">
-                              {m.tools.map((t, tIdx) => (
+                              {m.tools.map((t: ToolCallInfo, tIdx: number) => (
                                 <ToolExecutionBadge key={tIdx} tool={t} />
                               ))}
                             </div>
@@ -886,44 +886,61 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             {m.streaming && m.content && (
                               <span className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--accent)] animate-pulse align-middle rounded-full" />
                             )}
-                            {/* Cartão de Artefato Conectado ao Workspace */}
-                            {activeArtifacts && activeArtifacts.length > 0 && !isUser && (idx === messages.length - 1 || m.content?.toLowerCase().includes("workspace") || m.content?.toLowerCase().includes("relatório") || m.content?.toLowerCase().includes(".md")) && (
-                              <div className="mt-3 pt-3 border-t border-white/[0.08] space-y-2">
-                                <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                                  <Sparkles className="w-3 h-3 text-indigo-400" />
-                                  <span>Trabalho Produzido no Workspace</span>
-                                </div>
-                                {activeArtifacts.slice(-2).map((art) => (
-                                  <div
-                                    key={art.id}
-                                    onClick={() => {
-                                      if (!isWorkspaceOpen && onToggleWorkspace) onToggleWorkspace();
-                                      if (onOpenArtifact) onOpenArtifact(art.id);
-                                    }}
-                                    className="p-2.5 rounded-lg bg-[#0C0D12] border border-indigo-500/25 hover:border-indigo-400/50 flex items-center justify-between gap-3 cursor-pointer transition group shadow-sm"
-                                  >
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <span className="text-base">📄</span>
-                                      <div className="min-w-0">
-                                        <div className="text-xs font-mono font-medium text-zinc-200 group-hover:text-white transition truncate">
-                                          {art.name}
-                                        </div>
-                                        <div className="text-[10px] text-zinc-400">
-                                          {Math.round((art.sizeBytes || 0) / 1024) || 1} KB • Disponível para consulta no painel lateral
+                            {/* Cartão de Artefato Conectado ao Workspace (apenas para entregas reais) */}
+                            {(() => {
+                              const cleanArtifacts = (activeArtifacts || []).filter(
+                                (art) =>
+                                  !art.name.startsWith("Charlie_exec_") &&
+                                  !art.path?.includes("Charlie_exec_") &&
+                                  !art.name.toLowerCase().endsWith(".tmp") &&
+                                  !art.name.toLowerCase().endsWith(".log")
+                              );
+                              const shouldShow =
+                                cleanArtifacts.length > 0 &&
+                                !isUser &&
+                                (m.content?.toLowerCase().includes("workspace") ||
+                                  m.content?.toLowerCase().includes("relatório") ||
+                                  m.content?.toLowerCase().includes("entregue") ||
+                                  m.content?.toLowerCase().includes(".md"));
+                              if (!shouldShow) return null;
+                              return (
+                                <div className="mt-3 pt-3 border-t border-white/[0.08] space-y-2">
+                                  <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                                    <span>Trabalho Produzido no Workspace</span>
+                                  </div>
+                                  {cleanArtifacts.slice(-2).map((art) => (
+                                    <div
+                                      key={art.id}
+                                      onClick={() => {
+                                        if (!isWorkspaceOpen && onToggleWorkspace) onToggleWorkspace();
+                                        if (onOpenArtifact) onOpenArtifact(art.id);
+                                      }}
+                                      className="p-2.5 rounded-lg bg-[#0C0D12] border border-indigo-500/25 hover:border-indigo-400/50 flex items-center justify-between gap-3 cursor-pointer transition group shadow-sm"
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <span className="text-base">📄</span>
+                                        <div className="min-w-0">
+                                          <div className="text-xs font-mono font-medium text-zinc-200 group-hover:text-white transition truncate">
+                                            {art.name}
+                                          </div>
+                                          <div className="text-[10px] text-zinc-400">
+                                            {Math.round((art.sizeBytes || 0) / 1024) || 1} KB • Disponível para consulta no painel lateral
+                                          </div>
                                         </div>
                                       </div>
+                                      <button
+                                        type="button"
+                                        className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 group-hover:bg-indigo-500 group-hover:text-white text-xs font-mono transition flex items-center gap-1 shrink-0"
+                                      >
+                                        <span>Abrir</span>
+                                        <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                                      </button>
                                     </div>
-                                    <button
-                                      type="button"
-                                      className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 group-hover:bg-indigo-500 group-hover:text-white text-xs font-mono transition flex items-center gap-1 shrink-0"
-                                    >
-                                      <span>Abrir</span>
-                                      <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       )}
