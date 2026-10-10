@@ -39,7 +39,7 @@ async def list_threads(user: dict = Depends(get_current_user)):
                    COALESCE(t."updatedAt", cs.updated_at) as "updatedAt"
             FROM public.chat_sessions cs
             FULL OUTER JOIN "Thread" t ON t.id = cs.id
-            WHERE (t."deletedAt" IS NULL OR t."deletedAt" IS NULL)
+            WHERE t."deletedAt" IS NULL
               AND (
                 cs.user_id = $1 OR cs.user_id = $2
                 OR (t."userId" IS NOT NULL AND t."userId" = $3)
