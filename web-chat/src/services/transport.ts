@@ -13,16 +13,31 @@ export interface ImageAttachmentPayload {
   data: string; // Base64 limpo sem prefixo data:image/...;base64,
 }
 
+export interface DocumentAttachmentPayload {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  extracted_text?: string;
+  textPreview?: string;
+}
+
 export interface SendMessageOptions {
   message: string;
   threadId: string;
+  requestId?: string;
   skipTts?: boolean;
+  skipUserMessageSave?: boolean;
   history?: Array<{ role: string; content: string }>;
   images?: ImageAttachmentPayload[];
+  attachments?: DocumentAttachmentPayload[];
   onToken: (token: string) => void;
   onToolCall?: (name: string, args: Record<string, unknown>) => void;
+  onToolStart?: (name: string, friendlyName: string | undefined, args: Record<string, unknown>) => void;
+  onToolEnd?: (name: string, friendlyName: string | undefined, result: unknown, status?: string) => void;
   onResetAndFallback?: (fallbackModel?: string, reason?: string) => void;
-  onDone: (fullReply: string) => void;
+  onCancelled?: (partialReply: string) => void;
+  onDone: (fullReply: string, meta?: { assistantMessageId?: string; requestId?: string }) => void;
   onError: (error: string) => void;
   signal?: AbortSignal;
 }
@@ -43,12 +58,18 @@ export class SSEChatTransport implements ChatTransport {
     const {
       message,
       threadId,
+      requestId,
       skipTts = true,
+      skipUserMessageSave = false,
       history,
       images,
+      attachments,
       onToken,
       onToolCall,
+      onToolStart,
+      onToolEnd,
       onResetAndFallback,
+      onCancelled,
       onDone,
       onError,
       signal,
@@ -63,9 +84,12 @@ export class SSEChatTransport implements ChatTransport {
       const requestPayload = {
         message,
         thread_id: threadId,
+        request_id: requestId,
         skip_tts: skipTts,
+        skip_user_message_save: skipUserMessageSave,
         history,
         images: images && images.length > 0 ? images : undefined,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
       };
 
       try {
@@ -76,6 +100,9 @@ export class SSEChatTransport implements ChatTransport {
           signal,
         });
       } catch (fetchErr) {
+        if ((fetchErr as Error)?.name === 'AbortError' || signal?.aborted) {
+          return;
+        }
         if (baseUrl !== 'https://assistente-xi.vercel.app/api') {
           console.warn('[Charlie Web] Streaming local indisponível. Alternando para Cloud API...');
           baseUrl = 'https://assistente-xi.vercel.app/api';
@@ -150,11 +177,28 @@ export class SSEChatTransport implements ChatTransport {
                   typeof data.fallback_model === 'string' ? data.fallback_model : undefined,
                   typeof data.reason === 'string' ? data.reason : undefined
                 );
-              } else if (currentEventType === 'tool_call' || data.name !== undefined) {
-                onToolCall?.(data.name || 'ferramenta', data.args || {});
+              } else if (currentEventType === 'tool_start') {
+                const tName = String(data.name || 'ferramenta');
+                const fName = typeof data.friendly_name === 'string' ? data.friendly_name : undefined;
+                onToolStart?.(tName, fName, (data.args as Record<string, unknown>) || {});
+                onToolCall?.(tName, (data.args as Record<string, unknown>) || {});
+              } else if (currentEventType === 'tool_end') {
+                const tName = String(data.name || 'ferramenta');
+                const fName = typeof data.friendly_name === 'string' ? data.friendly_name : undefined;
+                onToolEnd?.(tName, fName, data.result, typeof data.status === 'string' ? data.status : undefined);
+              } else if (currentEventType === 'tool_call') {
+                onToolCall?.(String(data.name || 'ferramenta'), (data.args as Record<string, unknown>) || {});
+              } else if (currentEventType === 'cancelled') {
+                accumulatedReply = typeof data.reply === 'string' && data.reply ? data.reply : accumulatedReply;
+                onCancelled?.(accumulatedReply);
+                return;
               } else if (currentEventType === 'done' || data.reply !== undefined) {
                 accumulatedReply = data.reply || accumulatedReply;
-                onDone(accumulatedReply);
+                onDone(accumulatedReply, {
+                  assistantMessageId:
+                    typeof data.assistant_message_id === 'string' ? data.assistant_message_id : undefined,
+                  requestId: typeof data.request_id === 'string' ? data.request_id : undefined,
+                });
                 return;
               } else if (currentEventType === 'error' || data.error !== undefined) {
                 const errMsg = data.error || 'Erro desconhecido no streaming';
@@ -173,7 +217,7 @@ export class SSEChatTransport implements ChatTransport {
 
       onDone(accumulatedReply);
     } catch (err: unknown) {
-      if ((err as Error)?.name === 'AbortError') {
+      if ((err as Error)?.name === 'AbortError' || signal?.aborted) {
         return; // Cancelamento intencional
       }
       onError((err as Error)?.message || 'Erro durante a transmissão SSE.');

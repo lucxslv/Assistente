@@ -5,6 +5,7 @@ import { MessageFeed } from './components/chat/MessageFeed';
 import { PromptDock } from './components/chat/PromptDock';
 import { Component as SignInFlo } from './components/ui/sign-in-flo';
 import { AuditDashboard } from './components/admin/AuditDashboard';
+import { ProfileModal } from './components/profile/ProfileModal';
 import { useChat } from './hooks/useChat';
 import { useAuth } from './hooks/useAuth';
 import { useMobileViewport } from './hooks/useMobileViewport';
@@ -34,6 +35,7 @@ function isSecretRoute(): boolean {
 export const App: React.FC = () => {
   const { isKeyboardOpen } = useMobileViewport();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'audit'>(() =>
     isSecretRoute() ? 'audit' : 'chat'
   );
@@ -74,6 +76,7 @@ export const App: React.FC = () => {
     setAuthError,
     login,
     register,
+    updateProfile,
     logout,
   } = useAuth();
 
@@ -91,10 +94,14 @@ export const App: React.FC = () => {
     setActiveThreadId,
     createNewThread,
     renameThread,
+    togglePinThread,
+    toggleArchiveThread,
     deleteThread,
     sendMessage,
     stopStreaming,
-    regenerateLastMessage,
+    editUserMessage,
+    regenerateAssistantMessage,
+    submitMessageFeedback,
     retryAssistantMessage,
     resendUserMessage,
     clearCurrentChat,
@@ -120,6 +127,26 @@ export const App: React.FC = () => {
       window.removeEventListener('hashchange', handleRouteChange);
     };
   }, []);
+
+  // Atalho global Ctrl + Alt + Space para foco imediato na barra de prompt
+  useEffect(() => {
+    const handleGlobalShortcut = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && (e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault();
+        setIsProfileOpen(false);
+        setIsSidebarOpen(false);
+        if (currentView !== 'chat') {
+          setCurrentView('chat');
+          window.history.pushState({}, '', '/');
+        }
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('charlie:focus-prompt'));
+        }, 20);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalShortcut);
+  }, [currentView]);
 
   // Se o usuário faz login/logout, atualiza conversas
   useEffect(() => {
@@ -203,7 +230,10 @@ export const App: React.FC = () => {
           createNewThread('Nova Conversa');
         }}
         onRenameThread={(id, newName) => renameThread(id, newName)}
+        onTogglePinThread={(id) => togglePinThread(id)}
+        onToggleArchiveThread={(id) => toggleArchiveThread(id)}
         onDeleteThread={(id) => deleteThread(id)}
+        onOpenProfile={() => setIsProfileOpen(true)}
         onLogout={() => {
           logout();
           setActiveThreadId(null);
@@ -211,6 +241,14 @@ export const App: React.FC = () => {
         }}
         onOpenAudit={() => navigateTo('audit')}
         isAdmin={isAdmin}
+      />
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        user={user}
+        onClose={() => setIsProfileOpen(false)}
+        onSaveProfile={updateProfile}
       />
 
       {/* Main Area: Chat or Secret Vault Dashboard */}
@@ -242,11 +280,15 @@ export const App: React.FC = () => {
             <MessageFeed
               messages={messages}
               userName={user.name || 'Você'}
+              userAvatarUrl={user.avatar_url}
               charlieStatus={charlieStatus}
               isStreaming={isStreaming}
               onSelectPrompt={handleSelectStarterPrompt}
               onRetryAssistant={(failedMsg) => retryAssistantMessage(failedMsg.id)}
               onResendUser={(userMsg) => resendUserMessage(userMsg)}
+              onEditUser={(userMsg, newContent) => editUserMessage(userMsg.id, newContent)}
+              onRegenerateAssistant={(assistantMsg) => regenerateAssistantMessage(assistantMsg.id)}
+              onFeedback={(msg, rating) => submitMessageFeedback(msg.id, rating)}
             />
 
             {/* Prompt Dock (Mobile-friendly Input) */}

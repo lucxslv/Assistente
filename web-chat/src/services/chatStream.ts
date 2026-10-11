@@ -6,9 +6,10 @@ import {
   WebSocketChatTransport,
   SendMessageOptions,
   ImageAttachmentPayload,
+  DocumentAttachmentPayload,
 } from './transport';
 
-export type { SendMessageOptions, ImageAttachmentPayload, ChatTransport };
+export type { SendMessageOptions, ImageAttachmentPayload, DocumentAttachmentPayload, ChatTransport };
 
 class ChatStreamService {
   private sseTransport: SSEChatTransport = new SSEChatTransport();
@@ -28,6 +29,7 @@ class ChatStreamService {
     try {
       return await this.wsTransport.send(options);
     } catch (err) {
+      if (options.signal?.aborted) return;
       console.warn('[ChatStreamService] Falha no transporte WebSocket, acionando fallback SSE:', err);
       return this.streamSSE(options);
     }
@@ -37,19 +39,36 @@ class ChatStreamService {
    * Fallback Síncrono REST (POST /chat)
    */
   public async sendRest(options: SendMessageOptions): Promise<void> {
-    const { message, threadId, skipTts = true, history, images, onDone, onError } = options;
+    const {
+      message,
+      threadId,
+      requestId,
+      skipTts = true,
+      skipUserMessageSave = false,
+      history,
+      images,
+      attachments,
+      onDone,
+      onError,
+      signal,
+    } = options;
+    if (signal?.aborted) return;
     try {
       const baseUrl = api.getBaseUrl();
       const headers = api.getHeaders();
       const response = await fetch(`${baseUrl}/chat`, {
         method: 'POST',
         headers,
+        signal,
         body: JSON.stringify({
           message,
           thread_id: threadId,
+          request_id: requestId,
           skip_tts: skipTts,
+          skip_user_message_save: skipUserMessageSave,
           history,
           images: images && images.length > 0 ? images : undefined,
+          attachments: attachments && attachments.length > 0 ? attachments : undefined,
         }),
       });
 
@@ -60,6 +79,7 @@ class ChatStreamService {
       const data = await response.json();
       onDone(data.reply || '');
     } catch (err: unknown) {
+      if ((err as Error)?.name === 'AbortError' || signal?.aborted) return;
       onError((err as Error)?.message || 'Erro no fallback síncrono.');
     }
   }
@@ -75,16 +95,14 @@ class ChatStreamService {
       if (mode === 'ws') {
         await this.streamWS(options);
       } else {
-        // SSE é o padrão recomendado e resiliente para HTTP
         await this.streamSSE(options);
       }
     } catch (err) {
-      console.warn(`[ChatStreamService] Erro no modo ${mode}, tentando fallback:`, err);
-      try {
-        await this.streamSSE(options);
-      } catch {
-        await this.sendRest(options);
+      if (options.signal?.aborted || (err as Error)?.name === 'AbortError') {
+        return;
       }
+      console.warn(`[ChatStreamService] Erro no modo ${mode}:`, err);
+      options.onError((err as Error)?.message || 'Erro de comunicação durante o streaming.');
     }
   }
 
