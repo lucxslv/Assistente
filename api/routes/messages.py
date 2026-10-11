@@ -24,11 +24,12 @@ class EditMessagePayload(BaseModel):
     thread_id: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1, max_length=32000)
     truncate_subsequent: bool = True
+    truncate_after: Optional[bool] = None
 
 
 class FeedbackMessagePayload(BaseModel):
     thread_id: str = Field(..., min_length=1)
-    rating: int = Field(..., description="+1 para positivo, -1 para negativo")
+    rating: int | str = Field(..., description="+1/'up' para positivo, -1/'down' para negativo")
     comment: Optional[str] = Field(None, max_length=1000)
 
 
@@ -212,6 +213,7 @@ async def edit_message(
 ):
     """Edita uma mensagem existente e trunca mensagens posteriores da mesma conversa para reenvio limpo."""
     pool = await get_or_init_db_pool()
+    trunc = payload.truncate_after if payload.truncate_after is not None else payload.truncate_subsequent
     try:
         updated = await edit_and_truncate_message_record(
             pool=pool,
@@ -219,7 +221,7 @@ async def edit_message(
             message_id=message_id,
             user_id=str(user["id"]),
             new_content=payload.content,
-            truncate_subsequent=payload.truncate_subsequent,
+            truncate_subsequent=trunc,
         )
     except PermissionError as pe:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
@@ -229,7 +231,7 @@ async def edit_message(
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mensagem não encontrada.")
 
-    return {"status": "ok", "message": updated}
+    return {**updated, "status": "ok", "message": updated}
 
 
 @router.delete("/{message_id}")
@@ -262,8 +264,13 @@ async def submit_message_feedback(
     user: dict = Depends(get_current_user),
 ):
     """Registra avaliação 👍 (+1) ou 👎 (-1) em uma resposta do assistente."""
-    if payload.rating not in (1, -1):
-        raise HTTPException(status_code=400, detail="O campo 'rating' deve ser 1 (positivo) ou -1 (negativo).")
+    raw_rating = payload.rating
+    if raw_rating in (1, "1", "up", "positive"):
+        norm_rating = 1
+    elif raw_rating in (-1, "-1", "down", "negative"):
+        norm_rating = -1
+    else:
+        raise HTTPException(status_code=400, detail="O campo 'rating' deve ser 1/'up' (positivo) ou -1/'down' (negativo).")
 
     pool = await get_or_init_db_pool()
     entry = await save_message_feedback_record(
@@ -271,7 +278,7 @@ async def submit_message_feedback(
         message_id=message_id,
         session_id=payload.thread_id,
         user_id=str(user["id"]),
-        rating=payload.rating,
+        rating=norm_rating,
         comment=payload.comment,
     )
-    return {"status": "ok", "feedback": entry}
+    return {**entry, "status": "ok", "feedback": entry}

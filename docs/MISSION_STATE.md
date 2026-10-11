@@ -2,8 +2,8 @@
 
 **Branch de Trabalho Isolada:** `feat/charlie-dev`
 **Worktree Isolada:** `C:\Users\lucas\OneDrive\Documentos\assistente\.worktrees\charlie-dev`
-**Última Atualização:** 2026-10-11T13:07:05-03:00
-**Milestone Atual:** Milestone 6 (Concluído) ➔ Iniciando Milestone 7 (QA Integrado, Testes End-to-End, Segurança, Concorrência e Regressão)
+**Última Atualização:** 2026-10-11T13:24:00-03:00
+**Milestone Atual:** Milestone 8 (Concluído — Todos os 8 Milestones Validados e Integrados)
 
 ---
 
@@ -17,9 +17,9 @@
 | **Milestone 3** | Web Chat — Redesign, Anexos, Edição/Regeneração, Feedback 👍/👎, Busca/Pin/Archive e Perfil | ✅ Concluído | `73bb509` (`tsc && vite build` — `✓ built in 1.57s`, 0 erros TS) |
 | **Milestone 4** | Ferramentas, Contratos de Resultado, Cards Dinâmicos e Roteamento de Modelos (`LLMRouter`) | ✅ Concluído | `069554d` (`tests/test_milestone4_tools_router.py` — `7 passed, 0 warnings`) |
 | **Milestone 5** | Aplicativo Desktop Tauri — Recuperação Funcional, Configurações, Pareamento e Redesign | ✅ Concluído | `b1c38c8` (`tsc && vite build` — `✓ built in 1.87s`, 0 erros TS) |
-| **Milestone 6** | Painel Administrativo, Observabilidade (p50/p95, Custos Reais vs Estimados), Qualidade e Controles | ✅ Concluído | `tests/test_milestone6_admin_observability.py` (`2 passed`) + `web-chat build` (`✓ built in 1.42s`) |
-| **Milestone 7** | QA Integrado, Testes End-to-End, Segurança, Concorrência e Regressão | 🔄 Em andamento | — |
-| **Milestone 8** | Documentação Técnica Atualizada e Relatório Final Obrigatório | ⏳ Pendente | — |
+| **Milestone 6** | Painel Administrativo, Observabilidade (p50/p95, Custos Reais vs Estimados), Qualidade e Controles | ✅ Concluído | `c497fb9` (`tests/test_milestone6_admin_observability.py` — `2 passed`) |
+| **Milestone 7** | QA Integrado, Testes End-to-End, Segurança, Concorrência e Regressão | ✅ Concluído | `pytest tests/ -v` (`212 passed in 175.83s`) + builds `web-chat` e `desktop` |
+| **Milestone 8** | Documentação Técnica Atualizada e Relatório Final Obrigatório | ✅ Concluído | `docs/architecture/MODULOS.md` + `docs/MISSION_STATE.md` + Relatório Final Seção 18 |
 
 ---
 

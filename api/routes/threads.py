@@ -20,13 +20,15 @@ _thread_owners: Dict[str, str] = {}  # thread_id -> owner user_id
 
 
 class ThreadCreate(BaseModel):
-    name: Optional[str] = "Novo Chat"
+    name: Optional[str] = None
+    title: Optional[str] = None
     idempotency_key: Optional[str] = None
     reuse_empty: Optional[bool] = True
 
 
 class ThreadUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=200)
+    title: Optional[str] = Field(default=None, max_length=200)
     is_pinned: Optional[bool] = None
     is_archived: Optional[bool] = None
 
@@ -34,22 +36,54 @@ class ThreadUpdate(BaseModel):
 @router.get("")
 async def list_threads(
     q: Optional[str] = Query(default=None, description="Busca opcional por título ou conteúdo das mensagens"),
+    search: Optional[str] = Query(default=None, description="Alias para busca"),
     include_archived: bool = Query(default=True, description="Incluir conversas arquivadas"),
     user: dict = Depends(get_current_user),
 ):
     """Lista exclusivamente as conversas do usuário autenticado ordenadas por fixadas e mais recentes."""
     pool = await get_or_init_db_pool()
+    u_id_str = str(user["id"])
+    email = user.get("email")
+    search_term = (q or search or "").strip()
+
     if not pool:
-        return []
+        from api.services.chat_persistence import _in_memory_sessions, _in_memory_messages
+        mem_results = []
+        s_lower = search_term.lower()
+        for sid, sess in _in_memory_sessions.items():
+            if sess.get("user_id") not in (u_id_str, email):
+                continue
+            is_arch = bool(sess.get("is_archived", False))
+            if not include_archived and is_arch:
+                continue
+            title_val = sess.get("title") or sess.get("name") or "Sem título"
+            if s_lower:
+                matched = s_lower in title_val.lower()
+                if not matched:
+                    for m in _in_memory_messages.get(sid, []):
+                        if s_lower in str(m.get("content") or "").lower():
+                            matched = True
+                            break
+                if not matched:
+                    continue
+            mem_results.append({
+                "id": sid,
+                "name": title_val,
+                "createdAt": sess.get("created_at"),
+                "updatedAt": sess.get("updated_at"),
+                "is_pinned": bool(sess.get("is_pinned", False)),
+                "pinnedAt": sess.get("pinned_at"),
+                "is_archived": is_arch,
+                "archivedAt": sess.get("archived_at"),
+            })
+        mem_results.sort(key=lambda x: (bool(x["is_pinned"]), x.get("updatedAt") or ""), reverse=True)
+        return mem_results
 
     u_uuid = None
     try:
-        u_uuid = uuid.UUID(str(user["id"]))
+        u_uuid = uuid.UUID(u_id_str)
     except (ValueError, TypeError):
         pass
-    email = user.get("email")
-    u_id_str = str(user["id"])
-    search_term = (q or "").strip()
 
     async with pool.acquire() as conn:
         try:
@@ -158,7 +192,7 @@ async def create_thread(data: ThreadCreate, user: dict = Depends(get_current_use
     """Cria uma nova conversa vinculada obrigatoriamente à conta do usuário autenticado com proteção de idempotência."""
     u_id_str = str(user["id"])
     email = user.get("email")
-    title = (data.name or "Novo Chat").strip() or "Novo Chat"
+    title = (data.name or data.title or "Novo Chat").strip() or "Novo Chat"
 
     lock = _user_create_locks.get(u_id_str)
     if lock is None:
@@ -240,25 +274,24 @@ async def create_thread(data: ThreadCreate, user: dict = Depends(get_current_use
                         pass
 
         thread_id = str(uuid.uuid4())
-        if pool:
-            from api.services.chat_persistence import ensure_session_record
-            await ensure_session_record(
-                pool=pool,
-                session_id=thread_id,
-                user_id=u_id_str,
-                user_email=email,
-                prompt=title,
-            )
-            if idem_key:
-                try:
-                    async with pool.acquire() as conn:
-                        await conn.execute(
-                            "UPDATE public.chat_sessions SET idempotency_key = $1 WHERE id = $2",
-                            idem_key,
-                            uuid.UUID(thread_id),
-                        )
-                except Exception:
-                    pass
+        from api.services.chat_persistence import ensure_session_record
+        await ensure_session_record(
+            pool=pool,
+            session_id=thread_id,
+            user_id=u_id_str,
+            user_email=email,
+            prompt=title,
+        )
+        if pool and idem_key:
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE public.chat_sessions SET idempotency_key = $1 WHERE id = $2",
+                        idem_key,
+                        uuid.UUID(thread_id),
+                    )
+            except Exception:
+                pass
 
         resp = {
             "id": thread_id,
@@ -286,6 +319,14 @@ async def delete_thread(thread_id: str, user: dict = Depends(get_current_user)):
 
     pool = await get_or_init_db_pool()
     if not pool:
+        from api.services.chat_persistence import _in_memory_sessions
+        mem_sess = _in_memory_sessions.get(thread_id)
+        if mem_sess and mem_sess.get("user_id") and mem_sess["user_id"] != u_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não tem permissão para excluir esta conversa.",
+            )
+        _in_memory_sessions.pop(thread_id, None)
         _thread_owners.pop(thread_id, None)
         return {"status": "ok"}
 
@@ -349,6 +390,8 @@ async def delete_thread(thread_id: str, user: dict = Depends(get_current_user)):
 @router.put("/{thread_id}")
 async def update_thread(thread_id: str, data: ThreadUpdate, user: dict = Depends(get_current_user)):
     """Atualiza o título, fixação (pin) ou arquivamento (archive) de uma conversa garantindo titularidade."""
+    if data.name is None and data.title is not None:
+        data.name = data.title
     u_id_str = str(user["id"])
     mem_owner = _thread_owners.get(thread_id)
     if mem_owner and mem_owner != u_id_str:
@@ -359,11 +402,27 @@ async def update_thread(thread_id: str, data: ThreadUpdate, user: dict = Depends
 
     pool = await get_or_init_db_pool()
     if not pool:
+        from api.services.chat_persistence import _in_memory_sessions
+        mem_sess = _in_memory_sessions.get(thread_id)
+        if mem_sess:
+            if mem_sess.get("user_id") and mem_sess["user_id"] != u_id_str:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Você não tem permissão para editar esta conversa.",
+                )
+            if data.name is not None:
+                mem_sess["title"] = data.name
+                mem_sess["name"] = data.name
+            if data.is_pinned is not None:
+                mem_sess["is_pinned"] = bool(data.is_pinned)
+            if data.is_archived is not None:
+                mem_sess["is_archived"] = bool(data.is_archived)
         return {
             "id": thread_id,
-            "name": data.name,
-            "is_pinned": data.is_pinned,
-            "is_archived": data.is_archived,
+            "name": data.name or (mem_sess.get("title") if mem_sess else None),
+            "title": data.name or (mem_sess.get("title") if mem_sess else None),
+            "is_pinned": data.is_pinned if data.is_pinned is not None else (bool(mem_sess.get("is_pinned", False)) if mem_sess else False),
+            "is_archived": data.is_archived if data.is_archived is not None else (bool(mem_sess.get("is_archived", False)) if mem_sess else False),
         }
 
     try:

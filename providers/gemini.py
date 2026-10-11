@@ -28,7 +28,12 @@ class GeminiProvider(BaseLLMProvider):
         }
         target_model = alias_map.get(raw_model, raw_model or "gemini-2.5-flash")
         models_to_try = [target_model]
-        for fallback in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
+        for fallback in (
+            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+        ):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
         return models_to_try
