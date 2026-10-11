@@ -82,8 +82,14 @@ async def ensure_chat_persistence_schema(pool: asyncpg.Pool) -> None:
             await conn.execute("""
                 ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS user_id TEXT;
                 ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+                ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMPTZ;
+                ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+                ALTER TABLE public.chat_sessions ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
                 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON public.chat_sessions(user_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at ON public.chat_sessions(updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_pinned ON public.chat_sessions(user_id, is_pinned DESC, updated_at DESC);
             """)
 
             # 2. Garante colunas de chat_messages
@@ -91,12 +97,39 @@ async def ensure_chat_persistence_schema(pool: asyncpg.Pool) -> None:
                 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS user_id TEXT;
                 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS model TEXT;
                 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS tokens INT;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS request_id TEXT;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS parent_message_id UUID;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN NOT NULL DEFAULT FALSE;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS error_detail TEXT;
+                ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id ON public.chat_messages(user_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON public.chat_messages(session_id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON public.chat_messages(created_at ASC);
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_request_id ON public.chat_messages(request_id);
             """)
 
-            # 3. Garante colunas e índices de UserMemory e UserPreference
+            # 3. Garante tabela message_feedback para avaliações 👍/👎
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS public.message_feedback (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    message_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    rating SMALLINT NOT NULL CHECK (rating IN (-1, 1)),
+                    comment TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE (message_id, user_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_message_feedback_session ON public.message_feedback(session_id);
+                CREATE INDEX IF NOT EXISTS idx_message_feedback_rating ON public.message_feedback(rating, created_at DESC);
+            """)
+
+            # 4. Garante colunas e índices de UserMemory e UserPreference
             await conn.execute("""
                 ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS fact TEXT;
                 CREATE INDEX IF NOT EXISTS idx_usermemory_user_id_created ON public."UserMemory"(user_id, created_at DESC);
@@ -178,9 +211,12 @@ async def ensure_session_record(
                         s_uuid, title, now, u_uuid, user_email
                     )
                 else:
-                    t_uid = str(thread_row.get("userId") or "")
-                    t_uident = thread_row.get("userIdentifier")
-                    if (t_uid and t_uid != str(user_id)) and (t_uident and t_uident != user_email and t_uident != str(user_id)):
+                    t_uid = str(thread_row.get("userId") or "").strip()
+                    t_uident = str(thread_row.get("userIdentifier") or "").strip()
+                    uid_mismatch = bool(t_uid and t_uid != str(user_id) and (not u_uuid or t_uid != str(u_uuid)))
+                    uident_mismatch = bool(t_uident and t_uident != (user_email or "") and t_uident != str(user_id))
+                    # Se qualquer identificador de proprietário estiver preenchido e pertencer a outro usuário, bloqueia!
+                    if (t_uid and uid_mismatch and (not t_uident or uident_mismatch)) or (not t_uid and t_uident and uident_mismatch):
                         logger.warning(
                             f"[chat_persistence] Violação de titularidade em Thread: req={user_id}, owner={t_uid}/{t_uident}"
                         )

@@ -184,6 +184,19 @@ async def chat_post(
     user: dict = Depends(get_current_user),
 ):
     """Processa uma mensagem de texto de forma síncrona com persistência via BackgroundTasks."""
+    from api.security.rate_limiter import rate_limiter, check_user_quota_and_status, get_global_operational_limits
+
+    uid = str(user["id"])
+    client_ip = _extract_ip(request)
+    await check_user_quota_and_status(uid, user.get("email"))
+    limits = get_global_operational_limits()
+    await rate_limiter.enforce(
+        f"chat_post:{uid}:{client_ip}",
+        limit=int(limits.get("chat_rate_limit_per_min", 20)),
+        window_seconds=60,
+        detail="Você enviou muitas mensagens em pouco tempo. Aguarde alguns instantes antes de tentar novamente.",
+    )
+
     pipeline = get_pipeline()
     thread_id = await _prepare_session_and_store_user_message(
         req.message,
@@ -193,27 +206,27 @@ async def chat_post(
         background_tasks=background_tasks,
     )
 
-    thread_history = await _load_thread_history(thread_id, user_id=str(user["id"]))
+    thread_history = await _load_thread_history(thread_id, user_id=uid)
     if not thread_history and req.history:
         thread_history = req.history
 
-    state.set_status(CharlieStatus.THINKING)
+    state.set_status(CharlieStatus.THINKING, details={"active_thread_id": thread_id}, user_id=uid)
     try:
         reply = await pipeline.run_pipeline(
             req.message,
             skip_tts=req.skip_tts,
             thread_id=thread_id,
-            user_id=str(user["id"]),
+            user_id=uid,
             user_name=user.get("name"),
             history=thread_history,
             images=req.images,
         )
     except Exception as e:
-        logger.exception("Erro no pipeline")
-        state.set_status(CharlieStatus.ERROR)
-        reply = f"Desculpe, ocorreu um erro ao processar sua mensagem: {e}"
+        logger.exception("Erro no pipeline: %s", e)
+        state.set_status(CharlieStatus.ERROR, user_id=uid)
+        reply = "Desculpe, ocorreu um erro temporário ao processar sua mensagem. Tente novamente em instantes."
     finally:
-        state.set_status(CharlieStatus.IDLE)
+        state.set_status(CharlieStatus.IDLE, user_id=uid)
 
     model_used = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
     from api.services.audit_service import estimate_tokens
@@ -226,7 +239,7 @@ async def chat_post(
         await _store_assistant_message(
             thread_id=thread_id,
             reply=reply,
-            user_id=str(user["id"]),
+            user_id=uid,
             model=model_used,
             tokens=tokens_count,
             background_tasks=background_tasks,
@@ -237,11 +250,11 @@ async def chat_post(
         from api.services.audit_service import record_audit_log
         background_tasks.add_task(
             record_audit_log,
-            user_id=str(user["id"]),
+            user_id=uid,
             user_email=user.get("email") or "usuario@teste.com",
             user_prompt=req.message,
             model_response=reply,
-            ip_address=_extract_ip(request),
+            ip_address=client_ip,
             session_id=thread_id,
             model_name=model_used,
         )
@@ -264,6 +277,19 @@ async def chat_stream_sse(
     user: dict = Depends(get_current_user),
 ):
     """Endpoint de streaming em tempo real via Server-Sent Events (SSE) com persistência em BackgroundTasks."""
+    from api.security.rate_limiter import rate_limiter, check_user_quota_and_status, get_global_operational_limits
+
+    uid = str(user["id"])
+    client_ip = _extract_ip(request)
+    await check_user_quota_and_status(uid, user.get("email"))
+    limits = get_global_operational_limits()
+    await rate_limiter.enforce(
+        f"chat_stream:{uid}:{client_ip}",
+        limit=int(limits.get("chat_rate_limit_per_min", 20)),
+        window_seconds=60,
+        detail="Você enviou muitas mensagens em pouco tempo. Aguarde alguns instantes antes de tentar novamente.",
+    )
+
     pipeline = get_pipeline()
     thread_id = await _prepare_session_and_store_user_message(
         req.message,
@@ -272,22 +298,21 @@ async def chat_stream_sse(
         user=user,
         background_tasks=background_tasks,
     )
-    client_ip = _extract_ip(request)
 
-    thread_history = await _load_thread_history(thread_id, user_id=str(user["id"]))
+    thread_history = await _load_thread_history(thread_id, user_id=uid)
     if not thread_history and req.history:
         thread_history = req.history
 
     async def event_generator():
         final_reply = ""
         final_model = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
-        state.set_status(CharlieStatus.THINKING)
+        state.set_status(CharlieStatus.THINKING, details={"active_thread_id": thread_id}, user_id=uid)
 
         try:
             async for ev in pipeline.run_pipeline_stream(
                 req.message,
                 thread_id=thread_id,
-                user_id=str(user["id"]),
+                user_id=uid,
                 user_name=user.get("name"),
                 tool_results=req.tool_results,
                 history=thread_history,
@@ -306,11 +331,14 @@ async def chat_stream_sse(
 
                 yield ev.to_sse()
         except Exception as e:
-            logger.exception("Erro durante streaming SSE")
-            state.set_status(CharlieStatus.ERROR)
-            yield StreamEvent(type="error", data={"error": str(e)}).to_sse()
+            logger.exception("Erro durante streaming SSE: %s", e)
+            state.set_status(CharlieStatus.ERROR, user_id=uid)
+            yield StreamEvent(
+                type="error",
+                data={"error": "Ocorreu um erro temporário ao gerar a resposta. Tente novamente."},
+            ).to_sse()
         finally:
-            state.set_status(CharlieStatus.IDLE)
+            state.set_status(CharlieStatus.IDLE, user_id=uid)
             if final_reply and final_reply.strip():
                 # Suprime gravação no banco de mensagens transitórias de transporte de dispositivo
                 if final_reply.strip() in (
@@ -325,7 +353,7 @@ async def chat_stream_sse(
                 await _store_assistant_message(
                     thread_id=thread_id,
                     reply=final_reply,
-                    user_id=str(user["id"]),
+                    user_id=uid,
                     model=final_model,
                     tokens=tokens_count,
                     background_tasks=background_tasks,
@@ -334,7 +362,7 @@ async def chat_stream_sse(
                     from api.services.audit_service import record_audit_log
                     asyncio.create_task(
                         record_audit_log(
-                            user_id=str(user["id"]),
+                            user_id=uid,
                             user_email=user.get("email") or "usuario@teste.com",
                             user_prompt=req.message,
                             model_response=final_reply,
@@ -387,15 +415,21 @@ async def chat_ws(websocket: WebSocket):
     if is_desktop_broker_client:
         device_broker.register_device_connection(websocket, user_id=str(ws_user["id"]))
 
-    # Envia estado inicial do Charlie
-    await websocket.send_json({"type": "state", "data": state.to_dict()})
+    # Envia estado inicial isolado por usuário (ou sanitizado se ainda não autenticado)
+    ws_uid = str(ws_user["id"]) if ws_user else None
+    await websocket.send_json({
+        "type": "state",
+        "data": state.to_dict(user_id=ws_uid, include_sensitive=(ws_user is not None)),
+    })
 
     loop = asyncio.get_running_loop()
 
-    def on_state_change(data):
+    def on_state_change(_data):
+        curr_uid = str(ws_user["id"]) if ws_user else None
+        isolated_state = state.to_dict(user_id=curr_uid, include_sensitive=(ws_user is not None))
         asyncio.run_coroutine_threadsafe(
-            websocket.send_json({"type": "state", "data": data}),
-            loop
+            websocket.send_json({"type": "state", "data": isolated_state}),
+            loop,
         )
 
     state.subscribe(on_state_change)
@@ -426,37 +460,52 @@ async def chat_ws(websocket: WebSocket):
                         is_desktop_broker_client = True
                     await websocket.send_json({"type": "auth_status", "authenticated": ws_user is not None})
             elif msg_type == "device_tool_result":
-                if is_desktop_broker_client:
+                if is_desktop_broker_client and ws_user:
                     call_id = data.get("call_id")
                     res = data.get("result")
-                    device_broker.resolve_tool_result(call_id, res)
+                    device_broker.resolve_tool_result(call_id, res, user_id=str(ws_user["id"]))
             elif msg_type == "chat":
                 if not ws_user:
                     await websocket.send_json({"type": "error", "data": {"error": "Autenticação obrigatória para enviar mensagens."}})
                     continue
+                uid = str(ws_user["id"])
+                try:
+                    from api.security.rate_limiter import rate_limiter, check_user_quota_and_status, get_global_operational_limits
+                    await check_user_quota_and_status(uid, ws_user.get("email"))
+                    limits = get_global_operational_limits()
+                    await rate_limiter.enforce(
+                        f"chat_ws:{uid}",
+                        limit=int(limits.get("chat_rate_limit_per_min", 20)),
+                        window_seconds=60,
+                        detail="Muitas mensagens enviadas em sequência. Aguarde alguns instantes.",
+                    )
+                except HTTPException as rl_err:
+                    await websocket.send_json({"type": "error", "data": {"error": rl_err.detail}})
+                    continue
+
                 text = data.get("message", "")
                 thread_id_in = data.get("thread_id") or data.get("session_id")
                 try:
                     thread_id = await _prepare_session_and_store_user_message(text, thread_id=thread_id_in, user=ws_user)
                 except HTTPException as he:
-                    logger.warning(f"[chat_ws] Bloqueio de acesso à sessão {thread_id_in} por {ws_user.get('id')}: {he.detail}")
+                    logger.warning(f"[chat_ws] Bloqueio de acesso à sessão {thread_id_in} por {uid}: {he.detail}")
                     await websocket.send_json({"type": "error", "data": {"error": he.detail}})
                     continue
                 presence_manager.register_or_heartbeat(client_id=client_id, active_thread_id=thread_id)
 
-                thread_history = await _load_thread_history(thread_id, user_id=str(ws_user["id"]))
+                thread_history = await _load_thread_history(thread_id, user_id=uid)
                 if not thread_history and data.get("history"):
                     thread_history = data.get("history")
 
                 final_reply = ""
                 final_model = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
-                state.set_status(CharlieStatus.THINKING)
+                state.set_status(CharlieStatus.THINKING, details={"active_thread_id": thread_id}, user_id=uid)
 
                 try:
                     async for ev in pipeline.run_pipeline_stream(
                         text,
                         thread_id=thread_id,
-                        user_id=str(ws_user["id"]),
+                        user_id=uid,
                         user_name=ws_user.get("name"),
                         history=thread_history,
                         images=data.get("images"),
@@ -476,17 +525,20 @@ async def chat_ws(websocket: WebSocket):
                         # Envia cada evento de stream para o cliente conectado
                         await websocket.send_json(ev.to_dict())
                 except Exception as e:
-                    logger.exception("Erro no streaming WS")
-                    state.set_status(CharlieStatus.ERROR)
-                    await websocket.send_json({"type": "error", "data": {"error": str(e)}})
+                    logger.exception("Erro no streaming WS: %s", e)
+                    state.set_status(CharlieStatus.ERROR, user_id=uid)
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": {"error": "Ocorreu um erro temporário ao gerar a resposta."},
+                    })
                 finally:
-                    state.set_status(CharlieStatus.IDLE)
+                    state.set_status(CharlieStatus.IDLE, user_id=uid)
                     if final_reply and final_reply.strip():
                         from api.services.audit_service import estimate_tokens
                         await _store_assistant_message(
                             thread_id=thread_id,
                             reply=final_reply,
-                            user_id=str(ws_user["id"]),
+                            user_id=uid,
                             model=final_model,
                             tokens=estimate_tokens(final_reply),
                         )

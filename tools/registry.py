@@ -137,7 +137,7 @@ class ToolRegistry:
         state_mgr = None
         try:
             from api.state import state
-            state.set_tool_start(name, arguments)
+            state.set_tool_start(name, arguments, user_id=user_id)
             state_mgr = state
         except Exception:
             pass
@@ -153,7 +153,7 @@ class ToolRegistry:
             return f"Erro ao executar '{name}': {exc}"
         finally:
             if state_mgr:
-                state_mgr.set_tool_end()
+                state_mgr.set_tool_end(user_id=user_id)
 
     def _register_defaults(self) -> None:
         self.register(
