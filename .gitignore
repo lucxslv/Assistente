@@ -47,3 +47,10 @@ node_modules/
 mobile/android/
 mobile/ios/
 mobile/dist/
+
+# Git Worktrees
+.worktrees
+.worktrees/
+worktrees
+worktrees/
+
