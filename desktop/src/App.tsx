@@ -6,7 +6,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { MobilePairModal } from "./components/MobilePairModal";
 import { AuthGatekeeper } from "./components/AuthGatekeeper";
-import { Message, Settings, Thread, ToolCallInfo } from "./types";
+import { Message, MessageAttachment, Settings, Thread, ToolCallInfo } from "./types";
 import { listen } from "@tauri-apps/api/event";
 import {
   checkHealth,
@@ -19,7 +19,7 @@ import {
   fetchThreads,
   fetchThreadSteps,
   sendChatMessageStream,
-  sendChatMessage,
+  cancelChatStream,
   SystemStatus,
   fetchLocalHardwareMetrics,
   humanizeErrorMessage,
@@ -27,7 +27,7 @@ import {
   UserProfile,
   fetchCurrentUser,
   getStoredUser,
-  clearAuthSession,
+  logoutUser,
 } from "./services/api";
 import { executeDeviceTool } from "./services/deviceExecutor";
 import { AgentEnvironment } from "./components/agent/AgentEnvironment";
@@ -57,6 +57,8 @@ export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [localMetrics, setLocalMetrics] = useState<LocalSystemMetrics | undefined>();
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeStreamRequestIdRef = useRef<string | null>(null);
 
   const handleOpenSettings = useCallback((tab: TabType = "account") => {
     setSettingsTab(tab);
@@ -275,7 +277,7 @@ export function App() {
 
   const handleLogout = () => {
     hasInitializedRef.current = false;
-    clearAuthSession();
+    logoutUser().catch(() => {});
     setCurrentUser(null);
     setIsSettingsOpen(false);
     setIsCommandPaletteOpen(false);
@@ -435,27 +437,47 @@ export function App() {
     }
   };
 
-  const handleSendMessage = async (text: string, skipTts: boolean) => {
-    if (!text.trim() || isLoading) return;
+  const handleStopGeneration = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    await cancelChatStream(activeStreamRequestIdRef.current, activeThreadId);
+    setIsLoading(false);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.streaming
+          ? {
+              ...m,
+              content: m.content || "Geração interrompida pelo usuário.",
+              streaming: false,
+              status: "cancelled",
+            }
+          : m
+      )
+    );
+  }, [activeThreadId]);
 
-    // Ativação Conversacional do Agent Runtime quando a conversa envolve análise, código ou ação
+  const handleSendMessage = async (
+    text: string,
+    skipTts: boolean,
+    extra?: {
+      images?: Array<{ mime_type: string; data: string }>;
+      attachments?: MessageAttachment[];
+    }
+  ) => {
+    if ((!text.trim() && (!extra?.attachments || extra.attachments.length === 0)) || isLoading) return;
+
+    // Ativação do Agent Runtime somente quando explicitamente invocado pelo prefixo /agent ou agente:
     const lower = text.trim().toLowerCase();
-    const isAgenticTurn =
-      lower.startsWith("/agent ") ||
-      lower.startsWith("agente: ") ||
-      lower.includes("analis") ||
-      lower.includes("refator") ||
-      lower.includes("arquitetura") ||
-      lower.includes("autentica") ||
-      lower.includes("hardware") ||
-      lower.includes("implementa") ||
-      lower.includes("crie a pasta") ||
-      lower.includes("crie o arquivo");
+    const isAgenticTurn = lower.startsWith("/agent ") || lower.startsWith("agente: ");
 
     if (isAgenticTurn) {
       const cleanGoal = text.replace(/^(\/agent|agente:)\s*/i, "").trim();
       agentRuntimeStore.ensureConversationalSession(cleanGoal, "Charlie");
     }
+
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    activeStreamRequestIdRef.current = requestId;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     // Adiciona otimisticamente a mensagem do usuário na tela
     const tempUserMsg: Message = {
@@ -463,6 +485,8 @@ export function App() {
       name: "Usuário",
       type: "user_message",
       content: text,
+      attachments: extra?.attachments,
+      request_id: requestId,
       createdAt: new Date().toISOString(),
     };
 
@@ -474,6 +498,8 @@ export function App() {
       content: "",
       createdAt: new Date().toISOString(),
       streaming: true,
+      status: "in_progress",
+      request_id: requestId,
       tools: [],
     };
 
@@ -498,7 +524,7 @@ export function App() {
               )
             );
           } else if (ev.type === "tool_start") {
-            agentRuntimeStore.addLog("TOOL", `Invocando ${ev.data.name}`, ev.data.args);
+            agentRuntimeStore.addLog("TOOL", `Invocando ${ev.data.friendly_name || ev.data.name}`, ev.data.args);
             if (ev.data.args?.path) {
               const p = String(ev.data.args.path);
               const fName = p.split(/[/\\]/).pop() || p;
@@ -516,36 +542,14 @@ export function App() {
                 });
               }
             }
-            // Executa ferramentas locais nativamente no Windows
-            if (
-              ev.data.scope === "device" ||
-              [
-                "manage_application",
-                "set_system_volume",
-                "system_power_action",
-                "press_key",
-                "type_text",
-                "take_screenshot",
-                "create_folder",
-                "write_file",
-                "list_directory",
-                "read_file",
-                "replace_in_file",
-                "execute_command",
-                "run_command",
-                "exec_command",
-              ].includes(ev.data.name)
-            ) {
-              executeDeviceTool(ev.data.name, ev.data.args || {}).catch((err) =>
-                console.warn("Erro ao executar ferramenta local:", err)
-              );
-            }
 
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantMsgId) return m;
                 const newTool: ToolCallInfo = {
+                  call_id: ev.data.call_id,
                   name: ev.data.name,
+                  friendly_name: ev.data.friendly_name,
                   args: ev.data.args,
                   status: "executing",
                 };
@@ -556,9 +560,19 @@ export function App() {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== assistantMsgId) return m;
+                const isErr = ev.data.ok === false || ev.data.status === "error";
                 const updatedTools = (m.tools || []).map((t) =>
-                  t.name === ev.data.name && t.status === "executing"
-                    ? { ...t, result: ev.data.result, status: "completed" as const }
+                  (ev.data.call_id && t.call_id === ev.data.call_id) ||
+                  (t.name === ev.data.name && t.status === "executing")
+                    ? {
+                        ...t,
+                        friendly_name: ev.data.friendly_name || t.friendly_name,
+                        result: ev.data.result,
+                        summary: ev.data.summary,
+                        duration_ms: ev.data.duration_ms,
+                        error_category: ev.data.error_category,
+                        status: (isErr ? "error" : "completed") as "error" | "completed",
+                      }
                     : t
                 );
                 return { ...m, tools: updatedTools };
@@ -586,6 +600,7 @@ export function App() {
                       ...m,
                       content: ev.data.reply || m.content,
                       streaming: false,
+                      status: "completed",
                       widget: ev.data.widget || m.widget,
                       thought:
                         ev.data.thought ||
@@ -635,7 +650,14 @@ export function App() {
             );
           }
         },
-        skipTts
+        skipTts,
+        undefined,
+        {
+          signal: abortController.signal,
+          requestId,
+          attachments: extra?.attachments as any,
+          images: extra?.images,
+        }
       );
     } catch (err: any) {
       if (err?.name === "AbortError") {
@@ -747,6 +769,7 @@ export function App() {
               messages={messages}
               isLoading={isLoading}
               onSendMessage={handleSendMessage}
+              onStopGeneration={handleStopGeneration}
               onRegenerate={handleRegenerate}
               currentThreadName={activeThread?.name}
               userName={currentUser?.name || "Lucas"}
@@ -785,6 +808,10 @@ export function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         user={currentUser}
+        onUserUpdated={(updatedUser) => {
+          setCurrentUser(updatedUser);
+          showToast("Perfil atualizado com sucesso!");
+        }}
         onLogout={handleLogout}
         onOpenMobilePair={handleOpenMobilePair}
         initialTab={settingsTab}

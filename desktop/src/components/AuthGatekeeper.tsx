@@ -14,8 +14,16 @@ import {
   X,
   ShieldCheck,
   Sparkles,
+  KeyRound,
 } from "lucide-react";
-import { loginUser, registerUser, loginAsGuest, UserProfile } from "../services/api";
+import {
+  loginUser,
+  registerUser,
+  loginAsGuest,
+  requestPasswordReset,
+  confirmPasswordReset,
+  UserProfile,
+} from "../services/api";
 import { invoke } from "@tauri-apps/api/core";
 
 interface AuthGatekeeperProps {
@@ -23,11 +31,12 @@ interface AuthGatekeeperProps {
 }
 
 export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +72,54 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
     setSuccessMsg(null);
 
     const cleanEmail = email.trim();
-    if (!cleanEmail || !cleanEmail.includes("@")) {
+    if (mode !== "reset" && (!cleanEmail || !cleanEmail.includes("@"))) {
       setError("Por favor, informe um endereço de e-mail válido.");
+      return;
+    }
+
+    if (mode === "forgot") {
+      setIsLoading(true);
+      try {
+        const res = await requestPasswordReset(cleanEmail);
+        if (res.reset_token) {
+          setResetToken(res.reset_token);
+        }
+        setSuccessMsg(res.message || "Se o e-mail estiver cadastrado, enviamos as instruções de redefinição.");
+        setMode("reset");
+      } catch (err: any) {
+        setError(err?.message || "Não foi possível processar a recuperação de senha.");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (mode === "reset") {
+      if (!resetToken.trim()) {
+        setError("Informe o código de redefinição.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("A nova senha deve conter no mínimo 6 caracteres.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("As senhas não coincidem.");
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const res = await confirmPasswordReset(resetToken.trim(), password);
+        setSuccessMsg(res.message || "Senha redefinida com sucesso! Faça login com sua nova senha.");
+        setPassword("");
+        setConfirmPassword("");
+        setResetToken("");
+        setMode("login");
+      } catch (err: any) {
+        setError(err?.message || "Código inválido ou expirado.");
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -114,7 +169,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
     setIsLoading(true);
     try {
       const res = await loginAsGuest();
-      setSuccessMsg("Acessando como Lucas...");
+      setSuccessMsg("Acessando modo convidado...");
       setTimeout(() => {
         onSuccess(res.user);
       }, 500);
@@ -124,7 +179,6 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
       setIsLoading(false);
     }
   };
-
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0E0F12] text-[#F2F3F5] font-sans select-none overflow-hidden relative">
@@ -191,43 +245,49 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
             <p className="text-xs text-[var(--text-secondary)] mt-1">
               {mode === "login"
                 ? "Entre com sua conta para acessar seu assistente"
-                : "Crie sua conta para começar a usar o Charlie"}
+                : mode === "register"
+                ? "Crie sua conta para começar a usar o Charlie"
+                : mode === "forgot"
+                ? "Recupere o acesso à sua conta"
+                : "Defina uma nova senha para sua conta"}
             </p>
           </div>
 
           {/* Abas Alternadoras (Entrar / Criar Conta) */}
-          <div className="grid grid-cols-2 p-1 bg-[var(--surface-elevated)] rounded-xl border border-[var(--border)] mb-5 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("login");
-                setError(null);
-                setSuccessMsg(null);
-              }}
-              className={`py-2 rounded-lg transition-all cursor-pointer ${
-                mode === "login"
-                  ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/25"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Entrar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("register");
-                setError(null);
-                setSuccessMsg(null);
-              }}
-              className={`py-2 rounded-lg transition-all cursor-pointer ${
-                mode === "register"
-                  ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/25"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Criar Conta
-            </button>
-          </div>
+          {(mode === "login" || mode === "register") && (
+            <div className="grid grid-cols-2 p-1 bg-[var(--surface-elevated)] rounded-xl border border-[var(--border)] mb-5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setError(null);
+                  setSuccessMsg(null);
+                }}
+                className={`py-2 rounded-lg transition-all cursor-pointer ${
+                  mode === "login"
+                    ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/25"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Entrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("register");
+                  setError(null);
+                  setSuccessMsg(null);
+                }}
+                className={`py-2 rounded-lg transition-all cursor-pointer ${
+                  mode === "register"
+                    ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/25"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Criar Conta
+              </button>
+            </div>
+          )}
 
           {/* Alertas de Erro / Sucesso */}
           {error && (
@@ -265,48 +325,86 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
               </div>
             )}
 
-            <div>
-              <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
-                E-mail:
-              </label>
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
-                <Mail className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
-                <input
-                  type="email"
-                  required
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] text-xs"
-                />
+            {mode !== "reset" && (
+              <div>
+                <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
+                  E-mail:
+                </label>
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                  <Mail className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] text-xs"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            <div>
-              <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
-                Senha:
-              </label>
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
-                <Lock className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="Mínimo de 6 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {mode === "reset" && (
+              <div>
+                <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
+                  Código de Redefinição:
+                </label>
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                  <KeyRound className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Cole o código de redefinição"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                    className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] text-xs font-mono"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            {mode === "register" && (
+            {mode !== "forgot" && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-medium text-[var(--text-secondary)]">
+                    {mode === "reset" ? "Nova Senha:" : "Senha:"}
+                  </label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("forgot");
+                        setError(null);
+                        setSuccessMsg(null);
+                      }}
+                      className="text-[11px] text-[var(--accent)] hover:underline cursor-pointer"
+                    >
+                      Esqueceu a senha?
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                  <Lock className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="Mínimo de 6 caracteres"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(mode === "register" || mode === "reset") && (
               <div>
                 <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
                   Confirme a Senha:
@@ -333,36 +431,64 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Autenticando...</span>
+                  <span>Processando...</span>
                 </>
               ) : mode === "login" ? (
                 <>
                   <span>Entrar no Charlie</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
-              ) : (
+              ) : mode === "register" ? (
                 <>
                   <span>Criar Conta e Começar</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              ) : mode === "forgot" ? (
+                <>
+                  <span>Gerar Código de Recuperação</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              ) : (
+                <>
+                  <span>Redefinir Senha</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
 
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-[var(--border)]"></div>
-              <span className="flex-shrink mx-3 text-[10px] text-[var(--text-muted)] font-medium uppercase tracking-wider">ou</span>
-              <div className="flex-grow border-t border-[var(--border)]"></div>
-            </div>
+            {(mode === "forgot" || mode === "reset") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setError(null);
+                  setSuccessMsg(null);
+                }}
+                className="w-full py-2 text-center text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer"
+              >
+                Voltar para o login
+              </button>
+            )}
 
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={handleGuestLogin}
-              className="w-full py-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-[var(--text-primary)] hover:text-white font-medium transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
-              <span>Continuar como Lucas (Acesso Direto)</span>
-            </button>
+            {(mode === "login" || mode === "register") && (
+              <>
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-[var(--border)]"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-[var(--text-muted)] font-medium uppercase tracking-wider">ou</span>
+                  <div className="flex-grow border-t border-[var(--border)]"></div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={handleGuestLogin}
+                  className="w-full py-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-[var(--text-primary)] hover:text-white font-medium transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
+                  <span>Continuar como Convidado</span>
+                </button>
+              </>
+            )}
           </form>
 
           {/* Garantia de Privacidade */}

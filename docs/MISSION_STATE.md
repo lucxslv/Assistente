@@ -2,8 +2,8 @@
 
 **Branch de Trabalho Isolada:** `feat/charlie-dev`
 **Worktree Isolada:** `C:\Users\lucas\OneDrive\Documentos\assistente\.worktrees\charlie-dev`
-**Última Atualização:** 2026-10-11T07:21:15-03:00
-**Milestone Atual:** Milestone 4 (Concluído) ➔ Iniciando Milestone 5 (Aplicativo Desktop Tauri — Recuperação Funcional, Configurações, Pareamento e Redesign)
+**Última Atualização:** 2026-10-11T07:34:30-03:00
+**Milestone Atual:** Milestone 5 (Concluído) ➔ Iniciando Milestone 6 (Painel Administrativo, Observabilidade, Qualidade e Controles)
 
 ---
 
@@ -15,9 +15,9 @@
 | **Milestone 1** | Segurança Crítica, Autenticação Própria, Rate Limiting, IDOR e Isolamento | ✅ Concluído | `4ddc76c` (`tests/test_milestone1_security_auth.py` — `10 passed`) |
 | **Milestone 2** | Confiabilidade do Chat, Streaming, Cancelamento Ponta a Ponta e Recuperação | ✅ Concluído | `f61e61e` (`tests/test_milestone2_chat_reliability.py` — `5 passed`, `204 passed` total) |
 | **Milestone 3** | Web Chat — Redesign, Anexos, Edição/Regeneração, Feedback 👍/👎, Busca/Pin/Archive e Perfil | ✅ Concluído | `73bb509` (`tsc && vite build` — `✓ built in 1.57s`, 0 erros TS) |
-| **Milestone 4** | Ferramentas, Contratos de Resultado, Cards Dinâmicos e Roteamento de Modelos (`LLMRouter`) | ✅ Concluído | `tests/test_milestone4_tools_router.py` (`7 passed, 0 warnings`) |
-| **Milestone 5** | Aplicativo Desktop Tauri — Recuperação Funcional, Configurações, Pareamento e Redesign | 🔄 Em andamento | — |
-| **Milestone 6** | Painel Administrativo, Observabilidade (p50/p95, Custos Reais vs Estimados), Qualidade e Controles | ⏳ Pendente | — |
+| **Milestone 4** | Ferramentas, Contratos de Resultado, Cards Dinâmicos e Roteamento de Modelos (`LLMRouter`) | ✅ Concluído | `069554d` (`tests/test_milestone4_tools_router.py` — `7 passed, 0 warnings`) |
+| **Milestone 5** | Aplicativo Desktop Tauri — Recuperação Funcional, Configurações, Pareamento e Redesign | ✅ Concluído | `tsc && vite build` (`✓ built in 1.87s`, 0 erros TS) |
+| **Milestone 6** | Painel Administrativo, Observabilidade (p50/p95, Custos Reais vs Estimados), Qualidade e Controles | 🔄 Em andamento | — |
 | **Milestone 7** | QA Integrado, Testes End-to-End, Segurança, Concorrência e Regressão | ⏳ Pendente | — |
 | **Milestone 8** | Documentação Técnica Atualizada e Relatório Final Obrigatório | ⏳ Pendente | — |
 
