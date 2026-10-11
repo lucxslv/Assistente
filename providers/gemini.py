@@ -158,11 +158,18 @@ class GeminiProvider(BaseLLMProvider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model_override: Optional[str] = None,
+        cancel_event: Optional[Any] = None,
     ):
         import asyncio
         import threading
         import uuid
         from providers.base import StreamChunk
+
+        def _is_cancelled() -> bool:
+            return bool(cancel_event and getattr(cancel_event, "is_set", lambda: False)())
+
+        if _is_cancelled():
+            return
 
         raw_model = model_override or config.gemini_model
         target_model = "gemini-3.8-flash" if raw_model in ("gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash") else (
@@ -180,13 +187,19 @@ class GeminiProvider(BaseLLMProvider):
             return
 
         loop = asyncio.get_running_loop()
+        self.last_usage_metadata = None
 
         # 1. Tenta streaming via google-genai moderno
         for current_model_name in models_to_try:
+            if _is_cancelled():
+                return
             q: asyncio.Queue = asyncio.Queue()
 
             def worker_modern(m_name=current_model_name):
                 try:
+                    if _is_cancelled():
+                        loop.call_soon_threadsafe(q.put_nowait, ("cancelled", None))
+                        return
                     try:
                         from google import genai
                         from google.genai import types
@@ -225,8 +238,20 @@ class GeminiProvider(BaseLLMProvider):
                     )
 
                     for c in stream_resp:
+                        if _is_cancelled():
+                            loop.call_soon_threadsafe(q.put_nowait, ("cancelled", None))
+                            return
                         chunk_tool_calls: list[ToolCall] = []
                         chunk_text = ""
+
+                        # Captura metadados reais de uso da API se disponíveis
+                        usage = getattr(c, "usage_metadata", None)
+                        if usage:
+                            self.last_usage_metadata = {
+                                "input_tokens": getattr(usage, "prompt_token_count", None) or getattr(usage, "input_tokens", None),
+                                "output_tokens": getattr(usage, "candidates_token_count", None) or getattr(usage, "output_tokens", None),
+                                "cached_tokens": getattr(usage, "cached_content_token_count", 0) or 0,
+                            }
 
                         if c.candidates and c.candidates[0].content and c.candidates[0].content.parts:
                             for part in c.candidates[0].content.parts:
@@ -257,8 +282,17 @@ class GeminiProvider(BaseLLMProvider):
             error_val = None
 
             while True:
-                kind, val = await q.get()
+                if _is_cancelled():
+                    return
+                try:
+                    kind, val = await asyncio.wait_for(q.get(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    continue
+                if kind == "cancelled":
+                    return
                 if kind == "chunk":
+                    if _is_cancelled():
+                        return
                     got_any_chunk = True
                     yield val
                 elif kind == "done":
@@ -279,10 +313,15 @@ class GeminiProvider(BaseLLMProvider):
         # 2. Se todos os modelos falharem no SDK moderno, tenta fallback legado
         logger.warning("Tentando streaming de emergência via SDK legado google.generativeai...")
         for current_model_name in models_to_try:
+            if _is_cancelled():
+                return
             q_leg: asyncio.Queue = asyncio.Queue()
 
             def worker_legacy(m_name=current_model_name):
                 try:
+                    if _is_cancelled():
+                        loop.call_soon_threadsafe(q_leg.put_nowait, ("cancelled", None))
+                        return
                     import google.generativeai as legacy_genai
                     legacy_genai.configure(api_key=config.gemini_api_key)
 
@@ -305,6 +344,9 @@ class GeminiProvider(BaseLLMProvider):
                     )
                     stream_resp = mod.generate_content(history, stream=True)
                     for c in stream_resp:
+                        if _is_cancelled():
+                            loop.call_soon_threadsafe(q_leg.put_nowait, ("cancelled", None))
+                            return
                         chunk_tool_calls: list[ToolCall] = []
                         chunk_text = ""
                         for part in c.parts:
@@ -331,8 +373,17 @@ class GeminiProvider(BaseLLMProvider):
             got_any_chunk = False
             failed = False
             while True:
-                kind, val = await q_leg.get()
+                if _is_cancelled():
+                    return
+                try:
+                    kind, val = await asyncio.wait_for(q_leg.get(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    continue
+                if kind == "cancelled":
+                    return
                 if kind == "chunk":
+                    if _is_cancelled():
+                        return
                     got_any_chunk = True
                     yield val
                 elif kind == "done":

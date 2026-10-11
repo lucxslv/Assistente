@@ -364,5 +364,27 @@
       "filesystem"
     ],
     "createdAt": "2026-10-11T08:57:27.885692+00:00"
+  },
+  {
+    "id": "les_314e9b95",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-11T09:30:22.500032+00:00"
+  },
+  {
+    "id": "les_ada54a27",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-11T10:00:06.992020+00:00"
   }
 ]

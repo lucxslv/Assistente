@@ -447,16 +447,42 @@ export async function sendChatMessage(
   return res.json();
 }
 
+export async function cancelChatStream(
+  requestId?: string | null,
+  threadId?: string | null
+): Promise<void> {
+  try {
+    await apiFetch("/chat/cancel", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        request_id: requestId || undefined,
+        thread_id: threadId || undefined,
+      }),
+    });
+  } catch (err) {
+    console.warn("[Charlie API] Aviso ao solicitar cancelamento de stream:", err);
+  }
+}
+
+export interface StreamChatOptions {
+  signal?: AbortSignal;
+  requestId?: string;
+  attachments?: Array<Record<string, any>>;
+  skipUserMessageSave?: boolean;
+}
+
 /**
  * Envia mensagem via SSE (Server-Sent Events) recebendo tokens e status em tempo real,
- * com fallback inteligente para REST caso o streaming sofra qualquer interrupção de rede.
+ * sem reenviar automaticamente via REST quando cancelado ou interrompido (evitando duplicação).
  */
 export async function sendChatMessageStream(
   message: string,
   threadId: string | null,
   onEvent: (event: StreamEvent) => void,
   skipTts: boolean = true,
-  toolResults?: Array<{ call_id: string; name: string; result: string }>
+  toolResults?: Array<{ call_id: string; name: string; result: string }>,
+  options?: StreamChatOptions
 ): Promise<void> {
   const base = getApiBase();
   const payload: any = {
@@ -464,51 +490,29 @@ export async function sendChatMessageStream(
     thread_id: threadId,
     skip_tts: skipTts,
   };
+  if (options?.requestId) {
+    payload.request_id = options.requestId;
+  }
+  if (options?.attachments && options.attachments.length > 0) {
+    payload.attachments = options.attachments;
+  }
+  if (options?.skipUserMessageSave) {
+    payload.skip_user_message_save = true;
+  }
   if (toolResults && toolResults.length > 0) {
     payload.tool_results = toolResults;
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${base}/chat/stream`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch(`${base}/chat/stream`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+    signal: options?.signal,
+  });
 
-    // Se 401 com token expirado, limpa token e retenta com guest_token
-    if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
-      console.warn("[Charlie API] Sessão expirada (401). Retentando streaming com guest_token...");
-      clearInvalidToken();
-      res = await fetch(`${base}/chat/stream`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-    }
-  } catch (fetchErr) {
-    console.warn("[Charlie API] Falha na requisição de streaming. Ativando fallback imediato para REST /chat...", fetchErr);
-    const restRes = await sendChatMessage(message, threadId, skipTts);
-    onEvent({
-      type: "done",
-      data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
-    });
-    return;
-  }
-
-  // Se a resposta de streaming não foi OK (ou não tem body para stream)
   if (!res.ok || !res.body) {
-    console.warn(`[Charlie API] Streaming HTTP ${res.status}. Ativando fallback transparente para REST...`);
-    try {
-      const restRes = await sendChatMessage(message, threadId, skipTts);
-      onEvent({
-        type: "done",
-        data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
-      });
-      return;
-    } catch (restErr: any) {
-      throw new Error(`Falha no envio da mensagem (${res.status}): ${restErr?.message || res.statusText}`);
-    }
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Falha no envio da mensagem (${res.status}): ${errText || res.statusText}`);
   }
 
   const reader = res.body.getReader();
@@ -517,7 +521,6 @@ export async function sendChatMessageStream(
 
   let clientToolCalls: Array<{ call_id: string; name: string; args: any }> = [];
   let returnedThreadId: string | null = threadId;
-  let receivedAnyToken = false;
 
   try {
     while (true) {
@@ -544,9 +547,6 @@ export async function sendChatMessageStream(
         if (eventDataStr) {
           try {
             const parsed = JSON.parse(eventDataStr);
-            if (eventType === "token" && parsed.token) {
-              receivedAnyToken = true;
-            }
             onEvent({ type: eventType, data: parsed });
 
             if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
@@ -570,9 +570,6 @@ export async function sendChatMessageStream(
       if (eventDataStr) {
         try {
           const parsed = JSON.parse(eventDataStr);
-          if (eventType === "token" && parsed.token) {
-            receivedAnyToken = true;
-          }
           onEvent({ type: eventType, data: parsed });
           if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
             clientToolCalls = parsed.tools || [];
@@ -583,27 +580,19 @@ export async function sendChatMessageStream(
         }
       }
     }
-  } catch (streamReadErr) {
-    console.warn("[Charlie API] Conexão SSE interrompida durante leitura:", streamReadErr);
-    if (!receivedAnyToken) {
-      try {
-        const restRes = await sendChatMessage(message, threadId, skipTts);
-        onEvent({
-          type: "done",
-          data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
-        });
-        return;
-      } catch (e) {
-        throw streamReadErr;
-      }
+  } catch (streamReadErr: any) {
+    if (streamReadErr?.name === "AbortError" || options?.signal?.aborted) {
+      return;
     }
+    throw streamReadErr;
   }
 
   // Se o backend solicitou execução física de ferramentas no computador local (Windows)
-  if (clientToolCalls.length > 0) {
+  if (clientToolCalls.length > 0 && !options?.signal?.aborted) {
     const results: Array<{ call_id: string; name: string; result: string }> = [];
 
     for (const call of clientToolCalls) {
+      if (options?.signal?.aborted) break;
       onEvent({
         type: "status",
         data: { status: "executing", text: `Executando no Windows: ${call.name}...` },
@@ -633,8 +622,9 @@ export async function sendChatMessageStream(
       }
     }
 
-    // Continua recursivamente enviando os dados reais coletados de volta para a IA finalizar a resposta
-    return await sendChatMessageStream("", returnedThreadId, onEvent, skipTts, results);
+    if (!options?.signal?.aborted) {
+      return await sendChatMessageStream("", returnedThreadId, onEvent, skipTts, results, options);
+    }
   }
 }
 

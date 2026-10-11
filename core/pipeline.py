@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import platform
+from typing import Any, Optional
 
 from config import config
 from brain.context.manager import ContextManager
@@ -90,11 +91,18 @@ class AssistantPipeline:
         tool_results: list[dict] | None = None,
         history: list[dict] | None = None,
         images: list[dict] | None = None,
+        cancel_event: Any = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
+        import inspect
         import os
         import uuid
         from tools.registry import ToolScope
+
+        def _is_cancelled() -> bool:
+            return bool(cancel_event and getattr(cancel_event, "is_set", lambda: False)())
+
+        self.last_error_detail = None
 
         is_cloud = bool(
             os.getenv("VERCEL")
@@ -334,7 +342,26 @@ class AssistantPipeline:
         final_reply = ""
         emitted_any_token = False
 
+        def _invoke_chat_stream(model_name: str):
+            stream_kwargs = {
+                "system_prompt": system_prompt,
+                "messages": req_memory.get_messages(),
+                "tools": active_tools,
+                "model_override": model_name,
+            }
+            try:
+                sig = inspect.signature(self.llm.chat_stream)
+                if "cancel_event" in sig.parameters or any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                ):
+                    stream_kwargs["cancel_event"] = cancel_event
+            except Exception:
+                pass
+            return self.llm.chat_stream(**stream_kwargs)
+
         while iterations < MAX_ITERATIONS:
+            if _is_cancelled():
+                break
             iterations += 1
             iteration_reply = ""
             tool_calls = []
@@ -342,12 +369,9 @@ class AssistantPipeline:
             # Streaming dos chunks e detecção de tool calls com suporte a fallback
             stream_parser = StreamingMessageParser()
             try:
-                async for chunk in self.llm.chat_stream(
-                    system_prompt=system_prompt,
-                    messages=req_memory.get_messages(),
-                    tools=active_tools,
-                    model_override=route_decision.model_name,
-                ):
+                async for chunk in _invoke_chat_stream(route_decision.model_name):
+                    if _is_cancelled():
+                        break
                     if chunk.tool_calls:
                         tool_calls.extend(chunk.tool_calls)
                     if chunk.text:
@@ -367,7 +391,10 @@ class AssistantPipeline:
                             emitted_any_token = True
                             yield StreamEvent(type="token", data={"token": clean_token})
             except Exception as e:
+                if _is_cancelled():
+                    break
                 logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
+                self.last_error_detail = str(e)
                 fallback_model = config.gemini_model
                 if fallback_model == route_decision.model_name:
                     fallback_model = "gemini-flash-lite-latest" if route_decision.model_name != "gemini-flash-lite-latest" else "gemini-3.5-flash-lite"
@@ -378,7 +405,7 @@ class AssistantPipeline:
                         yield StreamEvent(
                             type="reset_and_fallback",
                             data={
-                                "reason": f"Fallback ativado após erro no modelo {route_decision.model_name}: {e}",
+                                "reason": f"Alternando automaticamente para o modelo de contingência ({fallback_model}).",
                                 "fallback_model": fallback_model,
                             },
                         )
@@ -389,12 +416,9 @@ class AssistantPipeline:
                     stream_parser = StreamingMessageParser()
 
                     try:
-                        async for chunk in self.llm.chat_stream(
-                            system_prompt=system_prompt,
-                            messages=req_memory.get_messages(),
-                            tools=active_tools,
-                            model_override=fallback_model,
-                        ):
+                        async for chunk in _invoke_chat_stream(fallback_model):
+                            if _is_cancelled():
+                                break
                             if chunk.tool_calls:
                                 tool_calls.extend(chunk.tool_calls)
                             if chunk.text:
@@ -415,14 +439,26 @@ class AssistantPipeline:
                                     yield StreamEvent(type="token", data={"token": clean_token})
                     except Exception as fb_err:
                         logger.error(f"[pipeline] Falha também no modelo de fallback {fallback_model}: {fb_err}")
-                        yield StreamEvent(type="error", data={"error": f"Erro nos modelos de linguagem: {fb_err}"})
+                        self.last_error_detail = f"{e} | fallback: {fb_err}"
+                        yield StreamEvent(
+                            type="error",
+                            data={"error": "Ocorreu uma instabilidade temporária na comunicação com os modelos de IA. Tente novamente em instantes."},
+                        )
                         final_reply = "Desculpe, ocorreu uma instabilidade temporária na comunicação com os modelos de IA. Por favor, tente novamente em instantes."
                         break
                 else:
                     logger.error(f"[pipeline] Rota {route_decision.model_name} falhou sem modelo alternativo: {e}")
-                    yield StreamEvent(type="error", data={"error": str(e)})
+                    yield StreamEvent(
+                        type="error",
+                        data={"error": "Desculpe, ocorreu um erro ao gerar a resposta. Por favor, tente novamente."},
+                    )
                     final_reply = "Desculpe, ocorreu um erro ao gerar a resposta. Por favor, tente novamente."
                     break
+
+            if _is_cancelled():
+                remaining_clean, _ = stream_parser.flush()
+                final_reply = remaining_clean or iteration_reply or final_reply
+                break
 
             if not tool_calls:
                 remaining_clean, meta = stream_parser.flush()
@@ -440,6 +476,8 @@ class AssistantPipeline:
             # Notifica início das ferramentas
             client_tools_to_exec = []
             for call in tool_calls:
+                if _is_cancelled():
+                    break
                 scope_enum = self.tools.get_scope(call.name)
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
                 yield StreamEvent(
@@ -458,6 +496,10 @@ class AssistantPipeline:
                         "args": call.arguments,
                     })
 
+            if _is_cancelled():
+                final_reply = iteration_reply or final_reply
+                break
+
             # Se estiver na nuvem e houver ferramentas de dispositivo, despacha para execução física no Windows via Desktop
             if client_tools_to_exec:
                 yield StreamEvent(
@@ -474,6 +516,8 @@ class AssistantPipeline:
 
             # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
             for call in tool_calls:
+                if _is_cancelled():
+                    break
                 scope_enum = self.tools.get_scope(call.name)
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
                 res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
@@ -504,6 +548,10 @@ class AssistantPipeline:
                     except Exception as w_err:
                         logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
 
+            if _is_cancelled():
+                final_reply = iteration_reply or final_reply
+                break
+
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 
             if iterations == MAX_ITERATIONS:
@@ -512,6 +560,21 @@ class AssistantPipeline:
 
         from core.message_parser import parse_assistant_message_content
         final_reply, _ = parse_assistant_message_content(final_reply)
+
+        if _is_cancelled():
+            if final_reply and final_reply.strip():
+                req_memory.add_assistant(final_reply)
+                self.memory = req_memory
+            yield StreamEvent(
+                type="cancelled",
+                data={
+                    "reply": final_reply,
+                    "thread_id": thread_id,
+                    "model": self.last_model_used,
+                    "status": "cancelled",
+                },
+            )
+            return
 
         if not final_reply or final_reply.startswith("Chamando ferramenta:"):
             final_reply = "Ação concluída com sucesso."
