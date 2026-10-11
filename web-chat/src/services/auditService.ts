@@ -6,6 +6,7 @@ import {
   AuditFilterParams,
   AuditUserSummary,
   UserConversationsResponse,
+  OperationalLimits,
 } from '../types/audit';
 
 export class AuditService {
@@ -34,6 +35,47 @@ export class AuditService {
    */
   public static async getUsers(): Promise<AuditUserSummary[]> {
     return api.get<AuditUserSummary[]>('/admin/audit/users');
+  }
+
+  /**
+   * Suspende ou reativa um usuário no sistema.
+   */
+  public static async toggleUserSuspension(
+    userId: string,
+    suspended: boolean,
+    reason?: string,
+    email?: string
+  ): Promise<{ ok: boolean; user_id: string; is_suspended: boolean; suspended_reason?: string }> {
+    const encoded = encodeURIComponent(userId.trim());
+    return api.post(`/admin/audit/users/${encoded}/suspend`, {
+      suspended,
+      reason: reason || 'Conta suspensa pelo administrador.',
+      email,
+    });
+  }
+
+  /**
+   * Atualiza as cotas operacionais e financeiras de um usuário específico.
+   */
+  public static async updateUserQuota(
+    userId: string,
+    quotas: {
+      daily_token_limit: number;
+      daily_request_limit: number;
+      monthly_cost_limit_usd: number;
+    }
+  ): Promise<{ ok: boolean; user_id: string; quotas: typeof quotas }> {
+    const encoded = encodeURIComponent(userId.trim());
+    return api.post(`/admin/audit/users/${encoded}/quotas`, quotas);
+  }
+
+  /**
+   * Atualiza os limites operacionais globais padrão.
+   */
+  public static async updateOperationalLimits(
+    limits: Partial<OperationalLimits>
+  ): Promise<{ ok: boolean; limits: OperationalLimits }> {
+    return api.put('/admin/audit/limits', limits);
   }
 
   /**
