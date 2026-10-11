@@ -233,9 +233,16 @@ class PermissionGate:
         self._pending.clear()
         self._events.clear()
 
-    def get_pending_requests(self) -> List[Dict[str, Any]]:
-        """Retorna lista de permissões aguardando resposta."""
-        return [r.to_dict() for r in self._pending.values() if not r.resolved]
+    def get_pending_requests(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retorna lista de permissões aguardando resposta (filtrada por user_id quando informado)."""
+        results = []
+        for r in self._pending.values():
+            if r.resolved:
+                continue
+            if user_id and r.user_id and r.user_id not in ("default", str(user_id)):
+                continue
+            results.append(r.to_dict())
+        return results
 
     def get_request(self, permission_id: str) -> Optional[PermissionRequest]:
         return self._pending.get(permission_id)

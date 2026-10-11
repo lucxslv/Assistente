@@ -51,6 +51,7 @@ class AgentPersistence:
                 """
                 CREATE TABLE IF NOT EXISTS agent_sessions (
                     id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL DEFAULT 'default',
                     goal TEXT NOT NULL,
                     project TEXT NOT NULL DEFAULT 'Charlie',
                     status TEXT NOT NULL,
@@ -66,6 +67,10 @@ class AgentPersistence:
                 )
                 """
             )
+            try:
+                cursor.execute("ALTER TABLE agent_sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'")
+            except Exception:
+                pass
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_sessions_started_at ON agent_sessions (started_at DESC)"
             )
@@ -75,13 +80,18 @@ class AgentPersistence:
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_sessions_project ON agent_sessions (project)"
             )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON agent_sessions (user_id)"
+            )
             conn.commit()
 
-    def save_session(self, session_data: Dict[str, Any]) -> None:
+    def save_session(self, session_data: Dict[str, Any], user_id: Optional[str] = None) -> None:
         session_id = session_data.get("id")
         if not session_id:
             return
 
+        uid = str(user_id or session_data.get("user_id") or "default")
+        session_data["user_id"] = uid
         goal = session_data.get("goal", "")
         project = session_data.get("project", "Charlie")
         status = session_data.get("status", "running")
@@ -102,14 +112,21 @@ class AgentPersistence:
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            # Verifica titularidade se sessão já existir
+            cursor.execute("SELECT user_id FROM agent_sessions WHERE id = ?", (session_id,))
+            existing = cursor.fetchone()
+            if existing and existing["user_id"] not in ("default", uid) and uid != "default":
+                raise PermissionError("Esta sessão pertence a outro usuário.")
+
             cursor.execute(
                 """
                 INSERT INTO agent_sessions (
-                    id, goal, project, status, progress, summary,
+                    id, user_id, goal, project, status, progress, summary,
                     tasks_count, completed_count, failed_count,
                     started_at, updated_at, completed_at, payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
+                    user_id=COALESCE(NULLIF(excluded.user_id, 'default'), agent_sessions.user_id),
                     status=excluded.status,
                     progress=excluded.progress,
                     summary=excluded.summary,
@@ -122,6 +139,7 @@ class AgentPersistence:
                 """,
                 (
                     session_id,
+                    uid,
                     goal,
                     project,
                     status,
@@ -138,12 +156,18 @@ class AgentPersistence:
             )
             conn.commit()
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM agent_sessions WHERE id = ?", (session_id,)
-            )
+            if user_id and user_id not in ("default", "local-loopback"):
+                cursor.execute(
+                    "SELECT * FROM agent_sessions WHERE id = ? AND (user_id = ? OR user_id = 'default')",
+                    (session_id, str(user_id)),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM agent_sessions WHERE id = ?", (session_id,)
+                )
             row = cursor.fetchone()
             if row:
                 result = dict(row)
@@ -160,14 +184,32 @@ class AgentPersistence:
             return None
 
     def list_sessions(
-        self, limit: int = 50, offset: int = 0, status: Optional[str] = None
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        status: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            if status:
+            filter_user = user_id and user_id not in ("default", "local-loopback")
+            if status and filter_user:
                 cursor.execute(
                     """
-                    SELECT id, goal, project, status, progress, summary,
+                    SELECT id, user_id, goal, project, status, progress, summary,
+                           tasks_count, completed_count, failed_count,
+                           started_at, updated_at, completed_at
+                    FROM agent_sessions
+                    WHERE status = ? AND (user_id = ? OR user_id = 'default')
+                    ORDER BY started_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (status, str(user_id), limit, offset),
+                )
+            elif status:
+                cursor.execute(
+                    """
+                    SELECT id, user_id, goal, project, status, progress, summary,
                            tasks_count, completed_count, failed_count,
                            started_at, updated_at, completed_at
                     FROM agent_sessions
@@ -177,10 +219,23 @@ class AgentPersistence:
                     """,
                     (status, limit, offset),
                 )
+            elif filter_user:
+                cursor.execute(
+                    """
+                    SELECT id, user_id, goal, project, status, progress, summary,
+                           tasks_count, completed_count, failed_count,
+                           started_at, updated_at, completed_at
+                    FROM agent_sessions
+                    WHERE (user_id = ? OR user_id = 'default')
+                    ORDER BY started_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (str(user_id), limit, offset),
+                )
             else:
                 cursor.execute(
                     """
-                    SELECT id, goal, project, status, progress, summary,
+                    SELECT id, user_id, goal, project, status, progress, summary,
                            tasks_count, completed_count, failed_count,
                            started_at, updated_at, completed_at
                     FROM agent_sessions
@@ -192,27 +247,48 @@ class AgentPersistence:
             rows = cursor.fetchall()
             return [dict(r) for r in rows]
 
-    def delete_session(self, session_id: str) -> bool:
+    def delete_session(self, session_id: str, user_id: Optional[str] = None) -> bool:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM agent_sessions WHERE id = ?", (session_id,))
+            if user_id and user_id not in ("default", "local-loopback"):
+                cursor.execute(
+                    "DELETE FROM agent_sessions WHERE id = ? AND (user_id = ? OR user_id = 'default')",
+                    (session_id, str(user_id)),
+                )
+            else:
+                cursor.execute("DELETE FROM agent_sessions WHERE id = ?", (session_id,))
             conn.commit()
             return cursor.rowcount > 0
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT
-                    COUNT(*) as total_sessions,
-                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_sessions,
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_sessions,
-                    SUM(tasks_count) as total_tasks,
-                    SUM(completed_count) as total_completed_tasks
-                FROM agent_sessions
-                """
-            )
+            if user_id and user_id not in ("default", "local-loopback"):
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_sessions,
+                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_sessions,
+                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_sessions,
+                        SUM(tasks_count) as total_tasks,
+                        SUM(completed_count) as total_completed_tasks
+                    FROM agent_sessions
+                    WHERE (user_id = ? OR user_id = 'default')
+                    """,
+                    (str(user_id),),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_sessions,
+                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_sessions,
+                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_sessions,
+                        SUM(tasks_count) as total_tasks,
+                        SUM(completed_count) as total_completed_tasks
+                    FROM agent_sessions
+                    """
+                )
             row = cursor.fetchone()
             total = row["total_sessions"] or 0
             completed = row["completed_sessions"] or 0

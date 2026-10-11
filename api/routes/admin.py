@@ -86,7 +86,7 @@ async def fetch_audit_metrics(
         logger.error(f"Erro ao buscar métricas de auditoria: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao consolidar métricas: {str(e)}",
+            detail="Falha interna ao consolidar métricas de auditoria.",
         )
 
 
@@ -102,7 +102,7 @@ async def fetch_audit_users(
         logger.error(f"Erro ao buscar lista de usuários para auditoria: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao consultar amigos/usuários: {str(e)}",
+            detail="Falha interna ao consultar diretório de usuários.",
         )
 
 
@@ -119,7 +119,7 @@ async def fetch_user_conversations(
         logger.error(f"Erro ao buscar conversas do usuário {user_email}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao recuperar conversas: {str(e)}",
+            detail="Falha interna ao recuperar conversas do usuário.",
         )
 
 
@@ -148,7 +148,7 @@ async def fetch_audit_logs(
         logger.error(f"Erro ao buscar logs de auditoria: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Falha ao consultar logs: {str(e)}",
+            detail="Falha interna ao consultar logs de auditoria.",
         )
 
 
