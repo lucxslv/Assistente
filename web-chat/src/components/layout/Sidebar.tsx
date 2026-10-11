@@ -7,14 +7,15 @@ import {
   Trash2,
   X,
   User as UserIcon,
-  ChevronRight,
   LogOut,
-  Check,
   Shield,
+  Pin,
+  Archive,
+  Settings,
 } from 'lucide-react';
 import { Thread, ConnectionStatus } from '../../types/chat';
 import { User } from '../../types/auth';
-import { groupThreadsByPeriod, formatTimeOrDate } from '../../utils/formatters';
+import { groupThreadsByPeriod } from '../../utils/formatters';
 import { hapticFeedback } from '../../utils/haptics';
 import { RenameThreadModal } from './RenameThreadModal';
 
@@ -29,6 +30,9 @@ interface SidebarProps {
   onNewThread: () => void;
   onRenameThread: (threadId: string, newName: string) => void;
   onDeleteThread: (threadId: string) => void;
+  onTogglePinThread?: (threadId: string) => void;
+  onToggleArchiveThread?: (threadId: string) => void;
+  onOpenProfile?: () => void;
   onLogout: () => void;
   onOpenAudit?: () => void;
   isAdmin?: boolean;
@@ -45,11 +49,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewThread,
   onRenameThread,
   onDeleteThread,
+  onTogglePinThread,
+  onToggleArchiveThread,
+  onOpenProfile,
   onLogout,
   onOpenAudit,
   isAdmin = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [threadToRename, setThreadToRename] = useState<Thread | null>(null);
   const [threadToDelete, setThreadToDelete] = useState<string | null>(null);
 
@@ -62,7 +70,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName.toLowerCase();
-      const isInput = activeTag === 'input' || activeTag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable;
+      const isInput =
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        (document.activeElement as HTMLElement)?.isContentEditable;
 
       if ((e.key === 'n' || e.key === 'N') && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
@@ -74,21 +85,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onNewThread]);
 
-  // Filtered threads based on search query
+  const archivedCount = useMemo(
+    () => threads.filter((t) => Boolean(t.isArchived)).length,
+    [threads]
+  );
+
+  // Filtered threads based on search query and archive mode
   const filteredThreads = useMemo(() => {
-    if (!searchQuery.trim()) return threads;
+    const base = threads.filter((t) =>
+      showArchived ? Boolean(t.isArchived) : !t.isArchived
+    );
+    if (!searchQuery.trim()) return base;
     const q = searchQuery.toLowerCase();
-    return threads.filter(
+    return base.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
         (t.preview && t.preview.toLowerCase().includes(q))
     );
-  }, [threads, searchQuery]);
+  }, [threads, searchQuery, showArchived]);
+
+  const pinnedThreads = useMemo(
+    () => (showArchived ? [] : filteredThreads.filter((t) => Boolean(t.isPinned))),
+    [filteredThreads, showArchived]
+  );
+
+  const regularThreads = useMemo(
+    () => (showArchived ? filteredThreads : filteredThreads.filter((t) => !t.isPinned)),
+    [filteredThreads, showArchived]
+  );
 
   // Grouped threads by period
   const groupedThreads = useMemo(() => {
-    return groupThreadsByPeriod(filteredThreads);
-  }, [filteredThreads]);
+    return groupThreadsByPeriod(regularThreads);
+  }, [regularThreads]);
 
   // Drawer drag handlers for mobile swipe-to-close (< 768px)
   const handleDrawerTouchStart = (e: React.TouchEvent) => {
@@ -217,6 +246,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={() => {
               hapticFeedback.select();
+              setShowArchived(false);
               onNewThread();
               if (window.innerWidth < 768) onClose();
             }}
@@ -234,33 +264,111 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Search Bar */}
-        <div className="px-3 pb-2">
-          <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 absolute left-3 text-[#6B7280] pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar conversas..."
-              className="w-full bg-[#12141A] border border-white/[0.06] rounded-lg pl-8 pr-7 py-1.5 text-xs text-[#E5E7EB] placeholder-[#6B7280] focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 p-0.5 text-[#6B7280] hover:text-[#F3F4F6] cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+        {/* Search Bar + Archive Toggle */}
+        <div className="px-3 pb-2 space-y-1.5">
+          <div className="relative flex items-center gap-1.5">
+            <div className="relative flex-1 flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-3 text-[#6B7280] pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar conversas..."
+                className="w-full bg-[#12141A] border border-white/[0.06] rounded-lg pl-8 pr-7 py-1.5 text-xs text-[#E5E7EB] placeholder-[#6B7280] focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 p-0.5 text-[#6B7280] hover:text-[#F3F4F6] cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowArchived((prev) => !prev)}
+              className={`px-2 py-1.5 rounded-lg border text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
+                showArchived
+                  ? 'bg-primary/15 border-primary/40 text-primary font-medium'
+                  : 'bg-[#12141A] border-white/[0.06] text-[#9CA3AF] hover:text-[#F3F4F6]'
+              }`}
+              title={showArchived ? 'Voltar para conversas ativas' : `Ver conversas arquivadas (${archivedCount})`}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              {archivedCount > 0 && <span className="font-mono text-[10px]">{archivedCount}</span>}
+            </button>
           </div>
         </div>
 
         {/* Conversation History Grouped by Period with Swipe Actions */}
         <div className="flex-1 overflow-y-auto px-2 py-1 space-y-4">
-          {Object.keys(groupedThreads).length === 0 ? (
+          {showArchived && (
+            <div className="px-3 py-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-amber-400/90 font-mono bg-amber-500/5 rounded-lg border border-amber-500/15 mx-1">
+              <span>Conversas Arquivadas</span>
+              <button
+                type="button"
+                onClick={() => setShowArchived(false)}
+                className="text-[10px] text-[#9CA3AF] hover:text-white underline cursor-pointer"
+              >
+                Voltar
+              </button>
+            </div>
+          )}
+
+          {/* Pinned Section */}
+          {pinnedThreads.length > 0 && (
+            <div className="space-y-1">
+              <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary font-mono">
+                <Pin className="w-3 h-3" />
+                <span>Fixadas</span>
+              </div>
+              {pinnedThreads.map((thread) => (
+                <SidebarThreadItem
+                  key={thread.id}
+                  thread={thread}
+                  isActive={activeThreadId === thread.id}
+                  isDeleting={threadToDelete === thread.id}
+                  onSelect={() => {
+                    hapticFeedback.select();
+                    onSelectThread(thread.id);
+                    if (window.innerWidth < 768) onClose();
+                  }}
+                  onStartRename={(e) => handleStartRename(e, thread)}
+                  onTogglePin={
+                    onTogglePinThread
+                      ? (e) => {
+                          e.stopPropagation();
+                          onTogglePinThread(thread.id);
+                        }
+                      : undefined
+                  }
+                  onToggleArchive={
+                    onToggleArchiveThread
+                      ? (e) => {
+                          e.stopPropagation();
+                          onToggleArchiveThread(thread.id);
+                        }
+                      : undefined
+                  }
+                  onStartDelete={(e) => {
+                    e.stopPropagation();
+                    setThreadToDelete(thread.id);
+                  }}
+                  onConfirmDelete={(e) => handleConfirmDelete(e, thread.id)}
+                  onCancelDelete={() => setThreadToDelete(null)}
+                />
+              ))}
+            </div>
+          )}
+
+          {Object.keys(groupedThreads).length === 0 && pinnedThreads.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-[#6B7280]">
-              {searchQuery ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa ainda.'}
+              {searchQuery
+                ? 'Nenhuma conversa encontrada.'
+                : showArchived
+                ? 'Nenhuma conversa arquivada.'
+                : 'Nenhuma conversa ainda.'}
             </div>
           ) : (
             Object.entries(groupedThreads).map(([period, threadList]) => (
@@ -284,6 +392,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         if (window.innerWidth < 768) onClose();
                       }}
                       onStartRename={(e) => handleStartRename(e, thread)}
+                      onTogglePin={
+                        onTogglePinThread
+                          ? (e) => {
+                              e.stopPropagation();
+                              onTogglePinThread(thread.id);
+                            }
+                          : undefined
+                      }
+                      onToggleArchive={
+                        onToggleArchiveThread
+                          ? (e) => {
+                              e.stopPropagation();
+                              onToggleArchiveThread(thread.id);
+                            }
+                          : undefined
+                      }
                       onStartDelete={(e) => {
                         e.stopPropagation();
                         setThreadToDelete(thread.id);
@@ -320,21 +444,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {/* Footer: Logged User & Logout Action */}
+        {/* Footer: Logged User & Profile / Logout Actions */}
         <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] border-t border-white/[0.06] bg-[#0A0B0E]/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 p-1 rounded-lg">
-            <div className="w-8 h-8 rounded-full bg-[#181B22] border border-white/[0.08] flex items-center justify-center text-primary text-xs font-semibold uppercase flex-shrink-0">
-              {user?.name ? user.name.slice(0, 2) : <UserIcon className="w-3.5 h-3.5 text-[#9CA3AF]" />}
+          <button
+            type="button"
+            onClick={() => {
+              hapticFeedback.light();
+              onOpenProfile?.();
+            }}
+            className="flex items-center gap-2.5 min-w-0 flex-1 mr-2 p-1.5 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors text-left cursor-pointer group"
+            title="Editar perfil da conta"
+          >
+            <div className="w-8 h-8 rounded-full bg-[#181B22] border border-white/[0.08] flex items-center justify-center text-primary text-xs font-semibold uppercase flex-shrink-0 overflow-hidden">
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+              ) : user?.name ? (
+                user.name.slice(0, 2)
+              ) : (
+                <UserIcon className="w-3.5 h-3.5 text-[#9CA3AF]" />
+              )}
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-medium text-[#F3F4F6] truncate">
-                {user?.name || 'Usuário Autenticado'}
-              </span>
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-[#F3F4F6] truncate">
+                  {user?.name || 'Usuário Autenticado'}
+                </span>
+                <Settings className="w-3 h-3 text-[#6B7280] group-hover:text-[#D1D5DB] transition-colors flex-shrink-0" />
+              </div>
               <span className="text-[10px] text-[#6B7280] truncate">
-                {user?.email || '● Conectado'}
+                {user?.username ? `@${user.username}` : user?.email || '● Conectado'}
               </span>
             </div>
-          </div>
+          </button>
 
           <button
             onClick={onLogout}
@@ -370,6 +511,8 @@ interface SidebarThreadItemProps {
   isDeleting: boolean;
   onSelect: () => void;
   onStartRename: (e: React.MouseEvent) => void;
+  onTogglePin?: (e: React.MouseEvent) => void;
+  onToggleArchive?: (e: React.MouseEvent) => void;
   onStartDelete: (e: React.MouseEvent) => void;
   onConfirmDelete: (e: React.MouseEvent) => void;
   onCancelDelete: () => void;
@@ -381,6 +524,8 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
   isDeleting,
   onSelect,
   onStartRename,
+  onTogglePin,
+  onToggleArchive,
   onStartDelete,
   onConfirmDelete,
   onCancelDelete,
@@ -399,7 +544,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
     // Long press timer (450ms)
     longPressTimerRef.current = setTimeout(() => {
       hapticFeedback.select();
-      setSwipeOffset(-84);
+      setSwipeOffset(-120);
     }, 450);
   };
 
@@ -419,9 +564,9 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
     if (Math.abs(diffX) > Math.abs(diffY)) {
       isSwiping.current = true;
       if (diffX < 0) {
-        setSwipeOffset(Math.max(-88, diffX));
+        setSwipeOffset(Math.max(-124, diffX));
       } else if (swipeOffset < 0) {
-        setSwipeOffset(Math.min(0, -88 + diffX));
+        setSwipeOffset(Math.min(0, -124 + diffX));
       }
     }
   };
@@ -434,7 +579,7 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
 
     if (isSwiping.current) {
       if (swipeOffset < -38) {
-        setSwipeOffset(-84);
+        setSwipeOffset(-120);
         hapticFeedback.light();
       } else {
         setSwipeOffset(0);
@@ -459,6 +604,20 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
     <div className="relative overflow-hidden rounded-lg">
       {/* Background Action Buttons revealed on swipe (< 768px) */}
       <div className="absolute inset-y-0 right-0 flex items-center pr-1 gap-1 z-0">
+        {onTogglePin && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSwipeOffset(0);
+              onTogglePin(e);
+            }}
+            className="min-h-[36px] min-w-[36px] rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 flex items-center justify-center transition-colors cursor-pointer"
+            title={thread.isPinned ? 'Desafixar conversa' : 'Fixar conversa'}
+          >
+            <Pin className="w-3.5 h-3.5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -505,11 +664,15 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
       >
         {/* Thread Icon & Title */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-1">
-          <MessageSquare
-            className={`w-3.5 h-3.5 flex-shrink-0 ${
-              isActive ? 'text-primary' : 'text-[#6B7280]'
-            }`}
-          />
+          {thread.isPinned ? (
+            <Pin className="w-3.5 h-3.5 flex-shrink-0 text-primary" />
+          ) : (
+            <MessageSquare
+              className={`w-3.5 h-3.5 flex-shrink-0 ${
+                isActive ? 'text-primary' : 'text-[#6B7280]'
+              }`}
+            />
+          )}
           {isDeleting ? (
             <div className="flex items-center gap-2 text-red-400 text-[11px]" onClick={(e) => e.stopPropagation()}>
               <span>Excluir?</span>
@@ -536,9 +699,33 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
           )}
         </div>
 
-        {/* Hover Actions: Rename & Delete (Desktop) */}
+        {/* Hover Actions: Pin, Archive, Rename & Delete (Desktop) */}
         {!isDeleting && (
           <div className="hidden sm:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {onTogglePin && (
+              <button
+                type="button"
+                onClick={onTogglePin}
+                className={`p-1 rounded hover:bg-white/[0.06] transition-colors cursor-pointer ${
+                  thread.isPinned ? 'text-primary' : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                }`}
+                title={thread.isPinned ? 'Desafixar conversa' : 'Fixar conversa'}
+              >
+                <Pin className="w-3 h-3" />
+              </button>
+            )}
+            {onToggleArchive && (
+              <button
+                type="button"
+                onClick={onToggleArchive}
+                className={`p-1 rounded hover:bg-white/[0.06] transition-colors cursor-pointer ${
+                  thread.isArchived ? 'text-amber-400' : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                }`}
+                title={thread.isArchived ? 'Desarquivar conversa' : 'Arquivar conversa'}
+              >
+                <Archive className="w-3 h-3" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onStartRename}
@@ -561,4 +748,3 @@ const SidebarThreadItem: React.FC<SidebarThreadItemProps> = ({
     </div>
   );
 };
-

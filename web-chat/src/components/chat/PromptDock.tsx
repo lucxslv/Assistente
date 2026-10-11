@@ -52,6 +52,14 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     adjustHeight();
   }, [value, adjustHeight]);
 
+  useEffect(() => {
+    const handleFocusShortcut = () => {
+      textareaRef.current?.focus();
+    };
+    window.addEventListener('charlie:focus-prompt', handleFocusShortcut);
+    return () => window.removeEventListener('charlie:focus-prompt', handleFocusShortcut);
+  }, []);
+
   const handleProcessFiles = useCallback(
     async (files: FileList | File[]) => {
       setValidationError(null);
@@ -67,6 +75,8 @@ export const PromptDock: React.FC<PromptDockProps> = ({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const isImg = file.type.startsWith('image/');
+        const lowerName = file.name.toLowerCase();
+        const isBinaryPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
 
         // Validação estrita de tamanho
         if (isImg && file.size > MAX_IMAGE_SIZE_BYTES) {
@@ -86,26 +96,29 @@ export const PromptDock: React.FC<PromptDockProps> = ({
           id: attachmentId,
           name: file.name,
           size: file.size,
-          type: file.type,
+          type: file.type || 'application/octet-stream',
           isImage: isImg,
         };
 
         if (isImg) {
-          // Ler DataURL
           const dataUrl = await new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve((e.target?.result as string) || '');
             reader.readAsDataURL(file);
           });
           attachment.dataUrl = dataUrl;
-
-          // Salva no cache IndexedDB em segundo plano
           mediaDb.saveMedia(attachmentId, dataUrl, file.type);
-        } else {
-          // Arquivos de texto ou código
+        } else if (!isBinaryPdf) {
+          // Arquivos de texto, markdown, JSON, CSV ou código-fonte
           try {
-            const text = await file.text();
-            attachment.textPreview = text.slice(0, 15000);
+            const rawText = await file.text();
+            // Remove caracteres nulos/binários de controle para evitar poluição
+            const sanitized = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').slice(0, 15000);
+            if (sanitized.trim()) {
+              attachment.textPreview = sanitized;
+              attachment.extractedText = sanitized;
+              attachment.has_extracted_text = true;
+            }
           } catch {
             // Binário não textual
           }

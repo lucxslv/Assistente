@@ -65,6 +65,8 @@ export function formatFileSize(bytes: number): string {
   return `${mb.toFixed(1)} MB`;
 }
 
+export const formatBytes = formatFileSize;
+
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();

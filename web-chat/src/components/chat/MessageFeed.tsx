@@ -9,20 +9,28 @@ import { hapticFeedback } from '../../utils/haptics';
 interface MessageFeedProps {
   messages: Message[];
   userName?: string;
+  userAvatarUrl?: string;
   charlieStatus: CharlieAIStatus;
   isStreaming: boolean;
   onSelectPrompt: (prompt: string) => void;
   onRetryAssistant?: (msg: Message) => void;
+  onRegenerateAssistant?: (msg: Message) => void;
+  onEditUser?: (msg: Message, newContent: string) => void;
+  onFeedback?: (msg: Message, rating: 1 | -1) => void;
   onResendUser?: (msg: Message) => void;
 }
 
 export const MessageFeed: React.FC<MessageFeedProps> = ({
   messages,
   userName,
+  userAvatarUrl,
   charlieStatus,
   isStreaming,
   onSelectPrompt,
   onRetryAssistant,
+  onRegenerateAssistant,
+  onEditUser,
+  onFeedback,
   onResendUser,
 }) => {
   const { containerRef, isScrolledUp, unreadCount, scrollToBottom, onNewContent } =
@@ -62,7 +70,7 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
     <div className="relative flex-1 min-h-0 overflow-hidden flex flex-col">
       <div
         ref={containerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 py-3 sm:py-4 space-y-2 select-text"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-3 sm:py-4 space-y-2 select-text"
       >
         {messages.length === 0 ? (
           <div className="min-h-full flex flex-col items-center justify-center max-w-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 text-center animate-fade-in">
@@ -75,7 +83,7 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
               Charlie Web
             </h2>
             <p className="text-xs sm:text-sm text-[#9CA3AF] max-w-sm mb-6 sm:mb-8 leading-relaxed">
-              Ambiente de teste e conversação para raciocínio, redação, análise de contexto e desenvolvimento em tempo real.
+              Ambiente de inteligência pessoal e conversação para raciocínio, redação, análise de documentos e desenvolvimento em tempo real.
             </p>
 
             {/* Quick Starters Grid */}
@@ -114,12 +122,15 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
                 key={msg.id}
                 message={msg}
                 userName={userName}
+                userAvatarUrl={userAvatarUrl}
                 onRetryAssistant={onRetryAssistant}
+                onRegenerateAssistant={onRegenerateAssistant}
+                onEditUser={onEditUser}
+                onFeedback={onFeedback}
                 onResendUser={onResendUser}
               />
             ))}
 
-            {/* Thinking / Working Indicator when status is thinking and no pending assistant message yet */}
             {charlieStatus === 'thinking' && messages[messages.length - 1]?.role === 'user' && (
               <div className="w-full max-w-4xl mx-auto px-4 py-2 flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-[#13151D] border border-white/[0.08] flex items-center justify-center text-primary shadow-glow-sm animate-pulse">
