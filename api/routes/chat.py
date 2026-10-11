@@ -456,6 +456,14 @@ async def chat_post(
             ip_address=client_ip,
             session_id=thread_id,
             model_name=model_used,
+            latency_ms=latency_ms,
+            route_mode=getattr(pipeline, "last_route_mode", "FAST"),
+            provider_name=getattr(pipeline, "last_provider_used", "gemini"),
+            fallback_used=bool(getattr(pipeline, "last_fallback_used", False)),
+            fallback_reason=getattr(pipeline, "last_fallback_reason", None),
+            status=msg_status,
+            error_category=(err_detail[:80] if err_detail else None),
+            usage_metadata=getattr(pipeline, "last_usage_metadata", None),
         )
     except Exception as audit_err:
         logger.warning(f"Aviso ao registrar audit log: {audit_err}")
@@ -663,18 +671,28 @@ async def chat_stream_sse(
                 error_detail=error_detail,
             )
 
-            if final_reply and final_reply.strip():
+            if (final_reply and final_reply.strip()) or final_status in ("failed", "cancelled", "interrupted"):
                 try:
+                    stream_latency_ms = int((time.perf_counter() - t_start) * 1000)
                     from api.services.audit_service import record_audit_log
                     asyncio.create_task(
                         record_audit_log(
                             user_id=uid,
                             user_email=user.get("email") or "usuario@teste.com",
                             user_prompt=clean_msg or req.message,
-                            model_response=final_reply,
+                            model_response=final_reply or f"[{final_status}]",
                             ip_address=client_ip,
                             session_id=thread_id,
                             model_name=final_model,
+                            latency_ms=stream_latency_ms,
+                            ttft_ms=ttft_ms or stream_latency_ms,
+                            route_mode=getattr(pipeline, "last_route_mode", "FAST"),
+                            provider_name=getattr(pipeline, "last_provider_used", "gemini"),
+                            fallback_used=bool(getattr(pipeline, "last_fallback_used", False)),
+                            fallback_reason=getattr(pipeline, "last_fallback_reason", None),
+                            status=final_status,
+                            error_category=(error_detail[:80] if error_detail else None),
+                            usage_metadata=getattr(pipeline, "last_usage_metadata", None),
                         )
                     )
                 except Exception as audit_err:
