@@ -3,7 +3,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { MessageFeed } from './components/chat/MessageFeed';
 import { PromptDock } from './components/chat/PromptDock';
-import { AuthGatekeeper } from './components/auth/AuthGatekeeper';
+import { Component as SignInFlo } from './components/ui/sign-in-flo';
 import { AuditDashboard } from './components/admin/AuditDashboard';
 import { useChat } from './hooks/useChat';
 import { useAuth } from './hooks/useAuth';
@@ -145,10 +145,10 @@ export const App: React.FC = () => {
     }
   };
 
-  // Se o usuário não estiver autenticado, exige login obrigatório (Auth Gatekeeper)
+  // Se o usuário não estiver autenticado, exige login obrigatório (Sign-in Flow)
   if (!isAuthenticated || !user) {
     return (
-      <AuthGatekeeper
+      <SignInFlo
         onLogin={login}
         onRegister={register}
         isLoading={isAuthLoading}

@@ -18,6 +18,11 @@ export default {
         border: "rgba(255, 255, 255, 0.06)",
         "border-hover": "rgba(255, 255, 255, 0.12)",
         "border-focus": "rgba(139, 124, 255, 0.4)",
+        /* Tokens semânticos shadcn/ui (usados por componentes em src/components/ui) */
+        foreground: "#F3F4F6",
+        card: "#13151A",
+        "muted-foreground": "#9CA3AF",
+        "primary-foreground": "#FFFFFF",
         primary: {
           DEFAULT: "#8B7CFF",
           hover: "#9D90FF",
@@ -25,6 +30,7 @@ export default {
           border: "rgba(139, 124, 255, 0.25)",
         },
         accent: {
+          DEFAULT: "#181B22",
           cyan: "#38BDF8",
           emerald: "#10B981",
           amber: "#F59E0B",
