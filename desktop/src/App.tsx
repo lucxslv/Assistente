@@ -601,6 +601,23 @@ export function App() {
             }
             loadThreads();
             loadStatus();
+          } else if (ev.type === "cancelled") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      content: ev.data?.reply || m.content || "Geração interrompida pelo usuário.",
+                      streaming: false,
+                      status: "cancelled",
+                    }
+                  : m
+              )
+            );
+            if (ev.data?.thread_id && (!activeThreadId || activeThreadId !== ev.data.thread_id)) {
+              setActiveThreadId(ev.data.thread_id);
+            }
+            loadThreads();
           } else if (ev.type === "error") {
             setMessages((prev) =>
               prev.map((m) =>
@@ -611,6 +628,7 @@ export function App() {
                         ? `${m.content}\n\n*(${humanizeErrorMessage(ev.data.error)})*`
                         : humanizeErrorMessage(ev.data.error),
                       streaming: false,
+                      status: "failed",
                     }
                   : m
               )
@@ -619,33 +637,29 @@ export function App() {
         },
         skipTts
       );
-    } catch (err) {
-      console.warn("Falha no streaming, tentando envio via REST...", err);
-      try {
-        const restResult = await sendChatMessage(text, activeThreadId, skipTts);
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
               ? {
                   ...m,
-                  content: restResult.reply,
+                  content: m.content || "Geração interrompida pelo usuário.",
                   streaming: false,
+                  status: "cancelled",
                 }
               : m
           )
         );
-        if (!activeThreadId || activeThreadId !== restResult.thread_id) {
-          setActiveThreadId(restResult.thread_id);
-        }
-        loadThreads();
-      } catch (finalErr) {
+      } else {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
               ? {
                   ...m,
-                  content: m.content || humanizeErrorMessage(finalErr),
+                  content: m.content || humanizeErrorMessage(err),
                   streaming: false,
+                  status: "failed",
                 }
               : m
           )

@@ -33,21 +33,129 @@ def get_pipeline() -> AssistantPipeline:
     return _pipeline
 
 
+import re
+import threading
+import time
+from typing import Any, Dict, List
+
+# Registro de streams ativos para cancelamento imediato ponta a ponta
+_active_streams: Dict[str, Dict[str, Any]] = {}  # request_id -> {user_id, thread_id, request_id, cancel_event, assistant_msg_id, started_at}
+
+
+def get_active_request_ids_for_thread(thread_id: str) -> set[str]:
+    """Retorna os request_ids dos streams atualmente em execução para uma conversa."""
+    return {
+        req_id
+        for req_id, info in list(_active_streams.items())
+        if info.get("thread_id") == str(thread_id) and not info["cancel_event"].is_set()
+    }
+
+
 class ChatRequest(BaseModel):
     message: str = ""
     thread_id: Optional[str] = None
     session_id: Optional[str] = None
+    request_id: Optional[str] = None
     skip_tts: bool = True
+    skip_user_message_save: bool = False
     tool_results: Optional[list[dict]] = None
     history: Optional[list[dict]] = None
     images: Optional[list[dict]] = None
+    attachments: Optional[list[dict]] = None
+
+
+class CancelChatRequest(BaseModel):
+    request_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+def _split_message_and_embedded_attachments(
+    raw_message: str,
+    explicit_attachments: Optional[list[dict]] = None,
+) -> tuple[str, list[dict], str]:
+    """Separa o texto visível da mensagem do usuário de anexos embutidos ou explícitos.
+
+    Retorna:
+      - clean_visible_message: texto limpo para exibição e persistência em chat_messages.content
+      - metadata_attachments: lista de metadados dos anexos para chat_messages.attachments (sem despejar conteúdo gigante no balão)
+      - llm_full_prompt: prompt enriquecido com o texto extraído dos anexos exclusivamente para o modelo de IA
+    """
+    msg = raw_message or ""
+    extracted_blocks: List[Dict[str, Any]] = []
+
+    # Defesa em profundidade: se um cliente legado concatenou '--- Conteúdo do Arquivo (nome) ---' no prompt, extrai e separa!
+    delimited_pattern = re.compile(
+        r"---\s*Conteúdo do Arquivo\s*\(([^)]+)\)\s*---\r?\n([\s\S]*?)\r?\n---\s*Fim de\s+[^\r\n-]+---"
+    )
+    if delimited_pattern.search(msg):
+        for m in delimited_pattern.finditer(msg):
+            fname = m.group(1).strip()
+            fcontent = m.group(2).strip()
+            extracted_blocks.append({
+                "name": fname,
+                "type": "text/plain",
+                "size": len(fcontent.encode("utf-8")),
+                "extracted_text": fcontent[:15000],
+            })
+        clean_msg = delimited_pattern.sub("", msg).strip()
+    else:
+        pattern = re.compile(r"\n*---\s*Conteúdo do Arquivo\s*\(([^)]+)\)\s*---\n([\s\S]*?)(?=\n*---\s*Conteúdo do Arquivo\s*\(|$)")
+        matches = list(pattern.finditer(msg))
+        if matches:
+            clean_msg = msg[: matches[0].start()].strip()
+            for m in matches:
+                fname = m.group(1).strip()
+                fcontent = m.group(2).strip()
+                extracted_blocks.append({
+                    "name": fname,
+                    "type": "text/plain",
+                    "size": len(fcontent.encode("utf-8")),
+                    "extracted_text": fcontent[:15000],
+                })
+        else:
+            clean_msg = msg.strip()
+
+    all_attachments: List[Dict[str, Any]] = []
+    llm_attachment_sections: List[str] = []
+
+    for att in (explicit_attachments or []) + extracted_blocks:
+        if not isinstance(att, dict):
+            continue
+        name = str(att.get("name") or "arquivo").strip()
+        mime = str(att.get("type") or att.get("mime_type") or "application/octet-stream").strip()
+        size = int(att.get("size") or 0)
+        ext_text = str(att.get("extracted_text") or att.get("textPreview") or att.get("content") or "").strip()
+
+        # Metadados salvos em chat_messages.attachments (inclui preview curto seguro para inspeção, nunca no balão principal)
+        all_attachments.append({
+            "id": att.get("id") or f"att_{uuid.uuid4().hex[:8]}",
+            "name": name,
+            "type": mime,
+            "size": size,
+            "has_extracted_text": bool(ext_text),
+            "preview_snippet": ext_text[:300] if ext_text else None,
+            "extracted_text": ext_text[:300] if ext_text else None,
+        })
+        if ext_text:
+            llm_attachment_sections.append(f"--- Conteúdo do Arquivo ({name}) ---\n{ext_text[:15000]}")
+
+    if not clean_msg and all_attachments:
+        names_str = ", ".join(a["name"] for a in all_attachments)
+        clean_msg = f"Arquivo anexado: {names_str}"
+
+    llm_prompt = clean_msg
+    if llm_attachment_sections:
+        llm_prompt = f"{clean_msg}\n\n" + "\n\n".join(llm_attachment_sections)
+
+    return clean_msg, all_attachments, llm_prompt
 
 
 async def _load_thread_history(thread_id: str, limit: int = 30, user_id: Optional[str] = None) -> list[dict]:
     """Carrega o histórico real de mensagens da conversa (chat_messages com validação de titularidade)."""
-    pool = await get_or_init_db_pool()
-    if not pool or not thread_id:
+    if not thread_id:
         return []
+    pool = await get_or_init_db_pool()
     from api.services.chat_persistence import load_chat_history
     return await load_chat_history(pool, thread_id, limit=limit, user_id=user_id)
 
@@ -61,12 +169,9 @@ def _dispatch_save_message(
     model: Optional[str] = None,
     tokens: Optional[int] = None,
     background_tasks: Optional[BackgroundTasks] = None,
+    **extra_kwargs,
 ):
-    """Despacha a persistência da mensagem de forma unificada e atômica.
-
-    Se background_tasks estiver presente no request HTTP, utiliza EXCLUSIVAMENTE background_tasks.add_task.
-    asyncio.create_task é usado única e exclusivamente como fallback quando background_tasks for nulo.
-    """
+    """Despacha a persistência da mensagem de forma unificada e atômica."""
     from api.services.chat_persistence import save_chat_message_record
 
     kwargs = {
@@ -77,6 +182,7 @@ def _dispatch_save_message(
         "content": content,
         "model": model,
         "tokens": tokens,
+        **extra_kwargs,
     }
 
     if background_tasks is not None:
@@ -91,8 +197,11 @@ async def _prepare_session_and_store_user_message(
     session_id: Optional[str] = None,
     user: Optional[dict] = None,
     background_tasks: Optional[BackgroundTasks] = None,
+    request_id: Optional[str] = None,
+    attachments: Optional[list[dict]] = None,
+    skip_user_message_save: bool = False,
 ) -> str:
-    """Garante a existência da sessão em chat_sessions e persiste a mensagem do usuário (role: user) com validação de titularidade."""
+    """Garante a existência da sessão em chat_sessions e persiste IMEDIATAMENTE a mensagem do usuário antes do stream."""
     if not user or not user.get("id"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -110,28 +219,31 @@ async def _prepare_session_and_store_user_message(
     u_id_str = str(user["id"])
     u_email = user.get("email")
 
-    if pool:
-        from api.services.chat_persistence import ensure_session_record
-        try:
-            # Garante a existência imediata da sessão para integridade e FK
-            await ensure_session_record(pool, session_id=sid, user_id=u_id_str, user_email=u_email, prompt=message)
-        except PermissionError as pe:
-            logger.warning(f"[chat] Tentativa de invasão ou acesso indevido à sessão {sid} por {u_id_str}: {pe}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Acesso negado: esta conversa pertence a outro usuário.",
-            )
+    clean_msg, meta_attachments, _ = _split_message_and_embedded_attachments(message, attachments)
 
-        # Persistência atômica sem duplicação de gravação
-        if message and message.strip():
-            _dispatch_save_message(
-                pool=pool,
-                session_id=sid,
-                user_id=u_id_str,
-                role="user",
-                content=message,
-                background_tasks=background_tasks,
-            )
+    from api.services.chat_persistence import ensure_session_record, save_chat_message_record
+    try:
+        # Garante a existência imediata da sessão (tanto no PostgreSQL quanto no store em memória) com validação de posse
+        await ensure_session_record(pool, session_id=sid, user_id=u_id_str, user_email=u_email, prompt=clean_msg or message)
+    except PermissionError as pe:
+        logger.warning(f"[chat] Tentativa de invasão ou acesso indevido à sessão {sid} por {u_id_str}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: esta conversa pertence a outro usuário.",
+        )
+
+    # Persistência SÍNCRONA antes do início do StreamingResponse para nunca perder a mensagem se a conexão cair
+    if not skip_user_message_save and ((clean_msg and clean_msg.strip()) or meta_attachments):
+        await save_chat_message_record(
+            pool=pool,
+            session_id=sid,
+            user_id=u_id_str,
+            role="user",
+            content=clean_msg,
+            status="completed",
+            request_id=request_id,
+            attachments=meta_attachments,
+        )
 
     return sid
 
@@ -143,18 +255,37 @@ async def _store_assistant_message(
     model: Optional[str] = None,
     tokens: Optional[int] = None,
     background_tasks: Optional[BackgroundTasks] = None,
+    status: str = "completed",
+    request_id: Optional[str] = None,
+    message_id: Optional[str] = None,
+    error_detail: Optional[str] = None,
 ):
-    """Persiste a resposta final do Charlie (role: assistant) em chat_messages com modelo e tokens."""
-    if not reply or not reply.strip():
-        return
+    """Persiste ou atualiza a resposta final do Charlie (role: assistant) em chat_messages com estado, modelo e tokens."""
     pool = await get_or_init_db_pool()
-    if not pool:
-        return
-
     u_id_str = str(user_id) if user_id else "default"
-    m_name = model or "gemini-3.1-flash-lite"
+    m_name = model or "gemini-2.5-flash"
 
-    _dispatch_save_message(
+    from api.services.chat_persistence import update_chat_message_state, save_chat_message_record
+    if message_id or request_id:
+        updated_id = await update_chat_message_state(
+            pool=pool,
+            session_id=thread_id,
+            message_id=message_id,
+            request_id=request_id,
+            role="assistant",
+            content=reply,
+            status=status,
+            model=m_name,
+            tokens=tokens,
+            error_detail=error_detail,
+        )
+        if updated_id:
+            return updated_id
+
+    if not reply or not reply.strip():
+        return None
+
+    return await save_chat_message_record(
         pool=pool,
         session_id=thread_id,
         user_id=u_id_str,
@@ -162,7 +293,10 @@ async def _store_assistant_message(
         content=reply,
         model=m_name,
         tokens=tokens,
-        background_tasks=background_tasks,
+        status=status,
+        request_id=request_id,
+        error_detail=error_detail,
+        message_id=message_id,
     )
 
 
@@ -176,6 +310,56 @@ def _extract_ip(req: Request) -> str:
 
 # ================= Endpoints =================
 
+@router.post("/cancel")
+async def cancel_chat_stream(
+    data: CancelChatRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Cancela imediatamente a geração em andamento (por request_id ou thread_id) garantindo titularidade do usuário."""
+    uid = str(user["id"])
+    target_req_id = (data.request_id or "").strip()
+    target_thread_id = (data.thread_id or data.session_id or "").strip()
+
+    cancelled_ids: list[str] = []
+    foreign_found = False
+
+    for req_id, info in list(_active_streams.items()):
+        matches_req = bool(target_req_id and req_id == target_req_id)
+        matches_thread = bool(target_thread_id and info.get("thread_id") == target_thread_id)
+        if matches_req or matches_thread or (not target_req_id and not target_thread_id and info.get("user_id") == uid):
+            if info.get("user_id") != uid:
+                foreign_found = True
+                continue
+            info["cancel_event"].set()
+            cancelled_ids.append(req_id)
+
+    if foreign_found and not cancelled_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem permissão para cancelar a geração de outro usuário.",
+        )
+
+    # Atualiza imediatamente qualquer mensagem in_progress correspondente caso o gerador já tenha encerrado
+    if target_thread_id:
+        pool = await get_or_init_db_pool()
+        from api.services.chat_persistence import update_chat_message_state
+        await update_chat_message_state(
+            pool=pool,
+            session_id=target_thread_id,
+            request_id=target_req_id or None,
+            role="assistant",
+            status="cancelled",
+        )
+
+    state.set_status(CharlieStatus.IDLE, user_id=uid)
+    return {
+        "ok": True,
+        "status": "cancelled",
+        "cancelled_count": len(cancelled_ids),
+        "cancelled_request_ids": cancelled_ids,
+    }
+
+
 @router.post("")
 async def chat_post(
     req: ChatRequest,
@@ -183,7 +367,7 @@ async def chat_post(
     background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
 ):
-    """Processa uma mensagem de texto de forma síncrona com persistência via BackgroundTasks."""
+    """Processa uma mensagem de texto de forma síncrona com idempotência por request_id."""
     from api.security.rate_limiter import rate_limiter, check_user_quota_and_status, get_global_operational_limits
 
     uid = str(user["id"])
@@ -197,6 +381,9 @@ async def chat_post(
         detail="Você enviou muitas mensagens em pouco tempo. Aguarde alguns instantes antes de tentar novamente.",
     )
 
+    req_id = (req.request_id or "").strip() or f"req_{uuid.uuid4().hex[:12]}"
+    clean_msg, _, llm_prompt = _split_message_and_embedded_attachments(req.message, req.attachments)
+
     pipeline = get_pipeline()
     thread_id = await _prepare_session_and_store_user_message(
         req.message,
@@ -204,16 +391,22 @@ async def chat_post(
         session_id=req.session_id,
         user=user,
         background_tasks=background_tasks,
+        request_id=req_id,
+        attachments=req.attachments,
+        skip_user_message_save=req.skip_user_message_save,
     )
 
     thread_history = await _load_thread_history(thread_id, user_id=uid)
     if not thread_history and req.history:
         thread_history = req.history
 
+    t_start = time.perf_counter()
     state.set_status(CharlieStatus.THINKING, details={"active_thread_id": thread_id}, user_id=uid)
+    msg_status = "completed"
+    err_detail = None
     try:
         reply = await pipeline.run_pipeline(
-            req.message,
+            llm_prompt or clean_msg,
             skip_tts=req.skip_tts,
             thread_id=thread_id,
             user_id=uid,
@@ -224,11 +417,14 @@ async def chat_post(
     except Exception as e:
         logger.exception("Erro no pipeline: %s", e)
         state.set_status(CharlieStatus.ERROR, user_id=uid)
+        msg_status = "failed"
+        err_detail = str(e)
         reply = "Desculpe, ocorreu um erro temporário ao processar sua mensagem. Tente novamente em instantes."
     finally:
         state.set_status(CharlieStatus.IDLE, user_id=uid)
 
-    model_used = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
+    latency_ms = int((time.perf_counter() - t_start) * 1000)
+    model_used = getattr(pipeline, "last_model_used", "gemini-2.5-flash")
     from api.services.audit_service import estimate_tokens
     tokens_count = estimate_tokens(reply)
 
@@ -243,6 +439,9 @@ async def chat_post(
             model=model_used,
             tokens=tokens_count,
             background_tasks=background_tasks,
+            status=msg_status,
+            request_id=req_id,
+            error_detail=err_detail,
         )
 
     # Gravação assíncrona de telemetria e custo em USD
@@ -252,7 +451,7 @@ async def chat_post(
             record_audit_log,
             user_id=uid,
             user_email=user.get("email") or "usuario@teste.com",
-            user_prompt=req.message,
+            user_prompt=clean_msg or req.message,
             model_response=reply,
             ip_address=client_ip,
             session_id=thread_id,
@@ -265,7 +464,9 @@ async def chat_post(
         "reply": reply,
         "thread_id": thread_id,
         "session_id": thread_id,
-        "status": "success",
+        "request_id": req_id,
+        "latency_ms": latency_ms,
+        "status": "success" if msg_status == "completed" else msg_status,
     }
 
 
@@ -276,7 +477,7 @@ async def chat_stream_sse(
     background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
 ):
-    """Endpoint de streaming em tempo real via Server-Sent Events (SSE) com persistência em BackgroundTasks."""
+    """Endpoint de streaming em tempo real via Server-Sent Events (SSE) com suporte a cancelamento ponta a ponta e estados de mensagem."""
     from api.security.rate_limiter import rate_limiter, check_user_quota_and_status, get_global_operational_limits
 
     uid = str(user["id"])
@@ -290,6 +491,9 @@ async def chat_stream_sse(
         detail="Você enviou muitas mensagens em pouco tempo. Aguarde alguns instantes antes de tentar novamente.",
     )
 
+    req_id = (req.request_id or "").strip() or f"req_{uuid.uuid4().hex[:12]}"
+    clean_msg, _, llm_prompt = _split_message_and_embedded_attachments(req.message, req.attachments)
+
     pipeline = get_pipeline()
     thread_id = await _prepare_session_and_store_user_message(
         req.message,
@@ -297,74 +501,176 @@ async def chat_stream_sse(
         session_id=req.session_id,
         user=user,
         background_tasks=background_tasks,
+        request_id=req_id,
+        attachments=req.attachments,
+        skip_user_message_save=req.skip_user_message_save,
     )
 
     thread_history = await _load_thread_history(thread_id, user_id=uid)
     if not thread_history and req.history:
         thread_history = req.history
 
+    # Cria placeholder 'in_progress' da mensagem do assistente antes de iniciar o stream
+    pool = await get_or_init_db_pool()
+    from api.services.chat_persistence import save_chat_message_record
+    assistant_msg_id = await save_chat_message_record(
+        pool=pool,
+        session_id=thread_id,
+        user_id=uid,
+        role="assistant",
+        content="",
+        status="in_progress",
+        request_id=req_id,
+    )
+
+    cancel_event = threading.Event()
+    _active_streams[req_id] = {
+        "user_id": uid,
+        "thread_id": thread_id,
+        "request_id": req_id,
+        "cancel_event": cancel_event,
+        "assistant_msg_id": assistant_msg_id,
+        "started_at": time.time(),
+    }
+
     async def event_generator():
         final_reply = ""
-        final_model = getattr(pipeline, "last_model_used", "gemini-3.1-flash-lite")
+        final_model = getattr(pipeline, "last_model_used", "gemini-2.5-flash")
+        completed_normally = False
+        was_cancelled = False
+        had_error = False
+        error_detail: Optional[str] = None
+        t_start = time.perf_counter()
+        ttft_ms: Optional[int] = None
+
         state.set_status(CharlieStatus.THINKING, details={"active_thread_id": thread_id}, user_id=uid)
 
+        # Emite metadados iniciais do stream (request_id, thread_id, assistant_message_id)
+        yield StreamEvent(
+            type="stream_start",
+            data={
+                "request_id": req_id,
+                "thread_id": thread_id,
+                "assistant_message_id": assistant_msg_id,
+            },
+        ).to_sse()
+
         try:
+            import inspect
+            stream_kwargs: Dict[str, Any] = {
+                "thread_id": thread_id,
+                "user_id": uid,
+                "user_name": user.get("name"),
+                "tool_results": req.tool_results,
+                "history": thread_history,
+                "images": req.images,
+            }
+            try:
+                sig = inspect.signature(pipeline.run_pipeline_stream)
+                if "cancel_event" in sig.parameters or any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                ):
+                    stream_kwargs["cancel_event"] = cancel_event
+            except Exception:
+                pass
+
             async for ev in pipeline.run_pipeline_stream(
-                req.message,
-                thread_id=thread_id,
-                user_id=uid,
-                user_name=user.get("name"),
-                tool_results=req.tool_results,
-                history=thread_history,
-                images=req.images,
+                llm_prompt or clean_msg,
+                **stream_kwargs,
             ):
+                if cancel_event.is_set():
+                    was_cancelled = True
+                    break
+
+                try:
+                    if await request.is_disconnected():
+                        cancel_event.set()
+                        break
+                except Exception:
+                    pass
+
                 if ev.type == "token":
+                    if ttft_ms is None:
+                        ttft_ms = int((time.perf_counter() - t_start) * 1000)
                     final_reply += ev.data.get("token", "")
                 elif ev.type == "reset_and_fallback":
                     final_reply = ""
                     if ev.data.get("fallback_model"):
                         final_model = ev.data.get("fallback_model")
+                elif ev.type == "cancelled":
+                    was_cancelled = True
+                    final_reply = ev.data.get("reply", final_reply)
+                    yield ev.to_sse()
+                    break
+                elif ev.type == "error":
+                    had_error = True
+                    error_detail = getattr(pipeline, "last_error_detail", None) or ev.data.get("error")
                 elif ev.type == "done":
+                    completed_normally = True
                     final_reply = ev.data.get("reply", final_reply)
                     if ev.data.get("model"):
                         final_model = ev.data.get("model")
+                    ev.data["request_id"] = req_id
+                    ev.data["assistant_message_id"] = assistant_msg_id
+                    ev.data["status"] = "completed"
 
                 yield ev.to_sse()
+        except (asyncio.CancelledError, GeneratorExit):
+            cancel_event.set()
+            was_cancelled = was_cancelled or cancel_event.is_set()
         except Exception as e:
             logger.exception("Erro durante streaming SSE: %s", e)
+            had_error = True
+            error_detail = str(e)
             state.set_status(CharlieStatus.ERROR, user_id=uid)
             yield StreamEvent(
                 type="error",
                 data={"error": "Ocorreu um erro temporário ao gerar a resposta. Tente novamente."},
             ).to_sse()
         finally:
+            _active_streams.pop(req_id, None)
             state.set_status(CharlieStatus.IDLE, user_id=uid)
+
+            if was_cancelled or cancel_event.is_set():
+                final_status = "cancelled"
+            elif had_error and not completed_normally:
+                final_status = "failed"
+            elif completed_normally:
+                final_status = "completed"
+            else:
+                final_status = "interrupted"
+
+            # Suprime gravação no banco de mensagens transitórias de transporte de dispositivo
+            if (final_reply or "").strip() in (
+                "Comando de dispositivo enviado para execução no seu computador.",
+                "Comando de dispositivo despachado para o seu computador com sucesso.",
+            ):
+                return
+
+            from api.services.audit_service import estimate_tokens
+            tokens_count = estimate_tokens(final_reply) if final_reply else 0
+
+            await _store_assistant_message(
+                thread_id=thread_id,
+                reply=final_reply,
+                user_id=uid,
+                model=final_model,
+                tokens=tokens_count,
+                background_tasks=background_tasks,
+                status=final_status,
+                request_id=req_id,
+                message_id=assistant_msg_id,
+                error_detail=error_detail,
+            )
+
             if final_reply and final_reply.strip():
-                # Suprime gravação no banco de mensagens transitórias de transporte de dispositivo
-                if final_reply.strip() in (
-                    "Comando de dispositivo enviado para execução no seu computador.",
-                    "Comando de dispositivo despachado para o seu computador com sucesso.",
-                ):
-                    return
-
-                from api.services.audit_service import estimate_tokens
-                tokens_count = estimate_tokens(final_reply)
-
-                await _store_assistant_message(
-                    thread_id=thread_id,
-                    reply=final_reply,
-                    user_id=uid,
-                    model=final_model,
-                    tokens=tokens_count,
-                    background_tasks=background_tasks,
-                )
                 try:
                     from api.services.audit_service import record_audit_log
                     asyncio.create_task(
                         record_audit_log(
                             user_id=uid,
                             user_email=user.get("email") or "usuario@teste.com",
-                            user_prompt=req.message,
+                            user_prompt=clean_msg or req.message,
                             model_response=final_reply,
                             ip_address=client_ip,
                             session_id=thread_id,
@@ -381,6 +687,8 @@ async def chat_stream_sse(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-Request-Id": req_id,
+            "X-Thread-Id": thread_id,
         },
         background=background_tasks,
     )

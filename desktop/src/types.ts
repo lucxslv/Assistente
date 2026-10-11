@@ -43,6 +43,16 @@ export interface WidgetPayload<T = Record<string, any>> {
   fallbackText: string;
 }
 
+export interface MessageAttachment {
+  id?: string;
+  name: string;
+  type: "image" | "document" | "code" | "file" | string;
+  mimeType?: string;
+  sizeBytes?: number;
+  previewUrl?: string;
+  extractedText?: string;
+}
+
 export interface Message {
   id: string;
   name: string;
@@ -50,6 +60,12 @@ export interface Message {
   content: string;
   createdAt?: string | null;
   streaming?: boolean;
+  status?: "in_progress" | "completed" | "cancelled" | "interrupted" | "failed" | "unknown";
+  request_id?: string | null;
+  is_edited?: boolean;
+  version?: number;
+  attachments?: MessageAttachment[];
+  feedback?: number | null;
   tools?: ToolCallInfo[];
   widget?: WidgetPayload;
   thought?: string;
@@ -64,6 +80,7 @@ export interface StreamEvent {
     | "tool_end"
     | "status"
     | "done"
+    | "cancelled"
     | "error"
     | "reset_and_fallback"
     | "client_tool_request"

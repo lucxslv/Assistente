@@ -2,8 +2,8 @@
 
 **Branch de Trabalho Isolada:** `feat/charlie-dev`
 **Worktree Isolada:** `C:\Users\lucas\OneDrive\Documentos\assistente\.worktrees\charlie-dev`
-**Última Atualização:** 2026-10-11T06:41:30-03:00
-**Milestone Atual:** Milestone 1 (Concluído) ➔ Iniciando Milestone 2 (Confiabilidade do Chat, Streaming, Cancelamento e Recuperação)
+**Última Atualização:** 2026-10-11T07:02:00-03:00
+**Milestone Atual:** Milestone 2 (Concluído) ➔ Iniciando Milestone 3 (Web Chat — Redesign, Anexos, Edição/Regeneração, Feedback 👍/👎, Busca/Pin/Archive e Perfil)
 
 ---
 
@@ -12,9 +12,9 @@
 | Milestone | Descrição | Status | Commit / Evidência |
 | :--- | :--- | :--- | :--- |
 | **Milestone 0** | Diagnóstico Obrigatório, Inventário Técnico, Baseline de Testes e Mapa de Riscos | ✅ Concluído | `aa3e145` (`189 passed` baseline) |
-| **Milestone 1** | Segurança Crítica, Autenticação Própria, Rate Limiting, IDOR e Isolamento | ✅ Concluído | `tests/test_milestone1_security_auth.py` (`10 passed` + `189 passed` regressão) |
-| **Milestone 2** | Confiabilidade do Chat, Streaming, Cancelamento Ponta a Ponta e Recuperação | 🔄 Em andamento | — |
-| **Milestone 3** | Web Chat — Redesign, Anexos, Edição/Regeneração, Feedback 👍/👎, Busca/Pin/Archive e Perfil | ⏳ Pendente | — |
+| **Milestone 1** | Segurança Crítica, Autenticação Própria, Rate Limiting, IDOR e Isolamento | ✅ Concluído | `4ddc76c` (`tests/test_milestone1_security_auth.py` — `10 passed`) |
+| **Milestone 2** | Confiabilidade do Chat, Streaming, Cancelamento Ponta a Ponta e Recuperação | ✅ Concluído | `tests/test_milestone2_chat_reliability.py` (`5 passed`, `204 passed` total) |
+| **Milestone 3** | Web Chat — Redesign, Anexos, Edição/Regeneração, Feedback 👍/👎, Busca/Pin/Archive e Perfil | 🔄 Em andamento | — |
 | **Milestone 4** | Ferramentas, Contratos de Resultado, Cards Dinâmicos e Roteamento de Modelos (`LLMRouter`) | ⏳ Pendente | — |
 | **Milestone 5** | Aplicativo Desktop Tauri — Recuperação Funcional, Configurações, Pareamento e Redesign | ⏳ Pendente | — |
 | **Milestone 6** | Painel Administrativo, Observabilidade (p50/p95, Custos Reais vs Estimados), Qualidade e Controles | ⏳ Pendente | — |
