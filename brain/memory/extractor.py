@@ -11,7 +11,6 @@ import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
-import google.generativeai as genai
 from brain.memory.working_memory import working_memory_store
 from brain.personality.user_model import user_model_manager
 from config import config
@@ -99,9 +98,7 @@ class MemoryExtractor:
     """Extrai informações e aprende com interações sem bloquear o usuário."""
 
     def __init__(self):
-        if config.gemini_api_key:
-            genai.configure(api_key=config.gemini_api_key)
-        self.model_name = getattr(config, "gemini_model", "gemini-3.1-flash-lite")
+        self.model_name = getattr(config, "gemini_model", "gemini-2.5-flash-lite")
 
     async def analyze_turn_async(
         self,
@@ -111,35 +108,51 @@ class MemoryExtractor:
         thread_id: Optional[str] = None,
     ) -> None:
         """Executa a análise em segundo plano de forma desacoplada."""
-        # Se for uma mensagem muito curta ou irrelevante (ex: "ok", "valeu"), pula extração pesada
         clean_text = user_text.strip().lower()
         if len(clean_text) < 6 or clean_text in ["ok", "beleza", "sim", "não", "valeu", "show", "obrigado", "tmj"]:
             return
 
+        if not getattr(config, "gemini_api_key", None):
+            return
+
         try:
+            try:
+                from google import genai
+                from google.genai import types
+            except (ImportError, AttributeError):
+                import importlib
+                genai = importlib.import_module("google.genai")
+                types = importlib.import_module("google.genai.types")
+
+            client = genai.Client(api_key=config.gemini_api_key)
             prompt = f"""TURNO DE CONVERSA:
 USUÁRIO: {user_text}
 CHARLIE: {assistant_reply[:500]}
 """
-            models_to_try = [self.model_name, "gemini-3.1-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+            models_to_try = [self.model_name, "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
             res = None
-            loop = asyncio.get_event_loop()
+
+            gen_cfg = types.GenerateContentConfig(
+                system_instruction=EXTRACTION_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                temperature=0.1,
+            )
 
             for m_name in models_to_try:
                 try:
-                    model = genai.GenerativeModel(
-                        model_name=m_name,
-                        generation_config={"response_mime_type": "application/json", "temperature": 0.1},
-                        system_instruction=EXTRACTION_SYSTEM_PROMPT,
+                    res = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=m_name,
+                        contents=prompt,
+                        config=gen_cfg,
                     )
-                    res = await loop.run_in_executor(None, lambda: model.generate_content(prompt))
-                    if res and res.text:
+                    if res and getattr(res, "text", None):
                         break
                 except Exception as m_err:
                     logger.debug(f"[MemoryExtractor] Fallback do modelo {m_name}: {m_err}")
                     continue
 
-            if not res or not res.text:
+            if not res or not getattr(res, "text", None):
                 return
 
             raw_json = res.text.strip()
