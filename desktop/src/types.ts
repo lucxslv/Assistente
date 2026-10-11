@@ -6,9 +6,14 @@ export interface Thread {
 }
 
 export interface ToolCallInfo {
+  call_id?: string;
   name: string;
+  friendly_name?: string;
   args?: Record<string, any>;
   result?: any;
+  summary?: string;
+  duration_ms?: number;
+  error_category?: string | null;
   status: "executing" | "completed" | "error";
 }
 
@@ -95,12 +100,18 @@ export interface Settings {
   groq_model: string;
   tts_provider?: string;
   tts_voice: string;
+  stt_provider?: string;
   elevenlabs_api_key?: string;
   elevenlabs_voice_id?: string;
   wake_word: string;
   wake_word_enabled: boolean;
+  wake_word_sensitivity?: number;
   home_assistant_url: string;
+  home_assistant_token?: string;
   home_assistant_configured: boolean;
+  knowledge_dirs?: string[];
+  auto_extract_memories?: boolean;
+  global_shortcut?: string;
 }
 
 // ================= Charlie Agentic Runtime Types =================
