@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   User,
   Mail,
@@ -181,17 +181,17 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0E0F12] text-[#F2F3F5] font-sans select-none overflow-hidden relative">
+    <div className="flex flex-col h-screen w-screen bg-black text-[#F2F3F5] font-sans select-none overflow-hidden relative">
       {/* Barra de Título Nativa com Controles de Janela */}
       <header
         data-tauri-drag-region
-        className="h-10 border-b border-[var(--border)] flex items-center justify-between px-4 bg-[#0E0F12] shrink-0 z-20"
+        className="h-10 border-b border-white/[0.06] flex items-center justify-between px-4 bg-black shrink-0 z-20"
       >
         <div data-tauri-drag-region className="flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-default">
           <img
-            src="/charlie-logo.svg"
+            src="/logo.png"
             alt="Charlie"
-            className="w-4 h-4 object-contain opacity-90 drop-shadow-[0_0_8px_rgba(139,124,255,0.4)]"
+            className="w-4 h-4 object-contain object-center"
           />
           <span className="font-semibold text-[var(--text-secondary)]">Charlie Desktop</span>
         </div>
@@ -225,18 +225,18 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
       </header>
 
       {/* Fundo com Brilho Suave */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[var(--accent)]/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[320px] bg-white/[0.02] blur-[80px] rounded-full pointer-events-none" />
 
       {/* Conteúdo Central do Gatekeeper */}
       <main className="flex-1 flex items-center justify-center p-6 z-10 overflow-y-auto">
-        <div className="w-full max-w-[420px] bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.8)] p-7 flex flex-col animate-scale-in">
+        <div className="w-full max-w-[420px] bg-[#0E0E10] border border-white/[0.07] rounded-[18px] shadow-[0_16px_64px_-12px_rgba(0,0,0,0.85)] p-7 flex flex-col animate-fade-in">
           {/* Logo Principal e Título */}
           <div className="text-center mb-6">
-            <div className="w-20 h-20 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center mx-auto mb-4 shadow-[0_0_35px_rgba(139,124,255,0.25)] p-3">
+            <div className="w-16 h-16 rounded-2xl bg-black border border-white/[0.08] flex items-center justify-center mx-auto mb-4 overflow-hidden p-2.5">
               <img
-                src="/charlie-logo.svg"
+                src="/logo.png"
                 alt="Charlie"
-                className="w-full h-full object-contain drop-shadow-[0_0_12px_rgba(139,124,255,0.6)]"
+                className="w-full h-full object-contain object-center"
               />
             </div>
             <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
@@ -255,7 +255,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
 
           {/* Abas Alternadoras (Entrar / Criar Conta) */}
           {(mode === "login" || mode === "register") && (
-            <div className="grid grid-cols-2 p-1 bg-[var(--surface-elevated)] rounded-xl border border-[var(--border)] mb-5 text-xs font-semibold">
+            <div className="grid grid-cols-2 p-1 bg-white/[0.04] rounded-[14px] border border-white/[0.06] mb-5 text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => {
@@ -265,8 +265,8 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                 }}
                 className={`py-2 rounded-lg transition-all cursor-pointer ${
                   mode === "login"
-                    ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/25"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    ? "bg-white text-black shadow-sm"
+                    : "text-white/50 hover:text-white"
                 }`}
               >
                 Entrar
@@ -280,8 +280,8 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                 }}
                 className={`py-2 rounded-lg transition-all cursor-pointer ${
                   mode === "register"
-                    ? "bg-[var(--accent)] text-white shadow-md shadow-[var(--accent)]/25"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    ? "bg-white text-black shadow-sm"
+                    : "text-white/50 hover:text-white"
                 }`}
               >
                 Criar Conta
@@ -311,7 +311,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                 <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
                   Como quer ser chamado:
                 </label>
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1E] border border-white/[0.06] rounded-[12px] focus-within:border-white/[0.14] focus-within:bg-[#222224] transition-colors">
                   <User className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                   <input
                     type="text"
@@ -330,7 +330,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                 <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
                   E-mail:
                 </label>
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1E] border border-white/[0.06] rounded-[12px] focus-within:border-white/[0.14] focus-within:bg-[#222224] transition-colors">
                   <Mail className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                   <input
                     type="email"
@@ -349,7 +349,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                 <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
                   Código de Redefinição:
                 </label>
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1E] border border-white/[0.06] rounded-[12px] focus-within:border-white/[0.14] focus-within:bg-[#222224] transition-colors">
                   <KeyRound className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                   <input
                     type="text"
@@ -383,7 +383,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1E] border border-white/[0.06] rounded-[12px] focus-within:border-white/[0.14] focus-within:bg-[#222224] transition-colors">
                   <Lock className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                   <input
                     type={showPassword ? "text" : "password"}
@@ -409,7 +409,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                 <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1">
                   Confirme a Senha:
                 </label>
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl focus-within:border-[var(--accent)] transition-colors">
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-[#1A1A1E] border border-white/[0.06] rounded-[12px] focus-within:border-white/[0.14] focus-within:bg-[#222224] transition-colors">
                   <Lock className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                   <input
                     type={showPassword ? "text" : "password"}
@@ -426,7 +426,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 mt-2 rounded-xl bg-[var(--accent)] text-white font-semibold hover:bg-[var(--accent-hover)] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[var(--accent)]/20 disabled:opacity-50"
+              className="w-full py-2.5 mt-2 rounded-[14px] bg-white text-black font-semibold hover:bg-white/90 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isLoading ? (
                 <>
@@ -482,7 +482,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({ onSuccess }) => 
                   type="button"
                   disabled={isLoading}
                   onClick={handleGuestLogin}
-                  className="w-full py-2.5 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-[var(--text-primary)] hover:text-white font-medium transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm text-xs hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                  className="w-full py-2.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.06] hover:border-white/[0.10] text-white hover:text-white font-medium transition-all flex items-center justify-center gap-2 cursor-pointer text-xs hover:bg-[#222224] disabled:opacity-50"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-[var(--accent)]" />
                   <span>Continuar como Convidado</span>

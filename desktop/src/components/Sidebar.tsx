@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+﻿import React, { useState, useMemo } from "react";
 import {
   Trash2,
   Edit2,
@@ -171,17 +171,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-[272px] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col p-4 select-none h-full shrink-0">
+    <aside className="w-[280px] lg:w-[300px] bg-[#121214] border-r border-white/[0.06] flex flex-col p-4 select-none h-full shrink-0">
       {/* 1. Header do Logo e Status */}
       <div className="px-1 py-1 mb-3 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <img
-              src="/charlie-logo.svg"
+              src="/logo.png"
               alt="Charlie"
               className="w-5 h-5 object-contain drop-shadow-[0_0_10px_rgba(139,124,255,0.4)]"
             />
-            <span className="text-[13px] font-mono font-bold tracking-wider text-zinc-100 uppercase">
+            <span className="text-[11px] font-semibold tracking-widest text-[#F3F4F6] uppercase">
               CHARLIE_OS
             </span>
           </div>
@@ -210,17 +210,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* 2. NAVEGAÇÃO PRINCIPAL EM ABAS: CHAT vs AGENTE */}
-      <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#12151C] border border-white/[0.08] mb-3">
+      <div className="grid grid-cols-2 gap-1 p-1 rounded-[14px] bg-white/[0.04] border border-white/[0.06] mb-3">
         <button
           type="button"
           onClick={() => onSelectView("chat")}
           className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-mono font-medium transition cursor-pointer ${
             activeView === "chat"
-              ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-              : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+              ? "bg-white text-black shadow-sm"
+              : "text-white/50 hover:text-white hover:bg-white/[0.06]"
           }`}
         >
-          <span>💬 Chat</span>
+          <span className="inline-flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Chat</span>
         </button>
 
         <button
@@ -228,11 +228,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => onSelectView("agent")}
           className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-mono font-medium transition cursor-pointer relative ${
             activeView === "agent"
-              ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-              : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+              ? "bg-white text-black shadow-sm"
+              : "text-white/50 hover:text-white hover:bg-white/[0.06]"
           }`}
         >
-          <span>⚡ Agente</span>
+          <span className="inline-flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Agente</span>
           {isAgentActive && (
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse ml-0.5" />
           )}
@@ -247,13 +247,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onNewThread}
-            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/60 transition-colors shadow-sm cursor-pointer w-full mb-2.5 group"
+            className="flex items-center justify-between px-3 py-2.5 rounded-[14px] text-xs font-semibold bg-[#1E1E20] hover:bg-[#222224] text-[#F3F4F6] border border-white/[0.06] hover:border-white/[0.10] transition-colors cursor-pointer w-full mb-2.5 group"
           >
             <span className="flex items-center gap-2">
-              <Plus className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-200" />
+              <Plus className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#E5E7EB]" />
               <span>Nova Conversa</span>
             </span>
-            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 group-hover:text-zinc-200">
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.06] text-[#9CA3AF] group-hover:text-[#E5E7EB]">
               N
             </kbd>
           </button>
@@ -261,7 +261,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Pesquisa e Paleta rápida */}
           <div className="flex flex-col gap-1 mb-2">
             {isSearching ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--surface-hover)] border border-[var(--border)]">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[#1A1A1E] border border-white/[0.06]">
                 <Search className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
                 <input
                   type="text"
@@ -292,10 +292,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => setIsSearching(true)}
-                className="flex items-center justify-between px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-transparent hover:bg-[var(--surface-hover)] transition-colors text-[12px] w-full text-left cursor-pointer"
+                className="flex items-center justify-between px-2.5 py-1.5 rounded-full text-[#9CA3AF] hover:text-white bg-transparent hover:bg-white/[0.04] transition-colors text-[12px] w-full text-left cursor-pointer"
               >
                 <span className="flex items-center gap-2">
-                  <span>⌕</span> Pesquisar
+                  <span className="w-3 h-3 flex items-center justify-center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span> Pesquisar
                 </span>
                 <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
                   Ctrl+F
@@ -307,11 +307,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onOpenCommandPalette}
-                className="flex items-center justify-between px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors text-[12px] w-full text-left cursor-pointer"
+                className="flex items-center justify-between px-2.5 py-1.5 rounded-full text-[#6B7280] hover:text-white hover:bg-white/[0.04] transition-colors text-[12px] w-full text-left cursor-pointer"
                 title="Paleta de Comandos Rápidos (Ctrl+K)"
               >
                 <span className="flex items-center gap-2">
-                  <span className="text-[11px]">⌘</span> Paleta rápida
+                  <span className="w-3 h-3 flex items-center justify-center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h4M8 6v4M14 12h4M16 10v4"/></svg></span> Paleta rápida
                 </span>
                 <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
                   Ctrl+K
@@ -343,10 +343,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <div
                           key={t.id}
                           onClick={() => !isEditing && onSelectThread(t.id)}
-                          className={`group relative flex items-center justify-between px-2.5 py-2 rounded-[var(--radius-sm)] text-[13px] cursor-pointer transition-colors border ${
+                          className={`group relative flex items-center justify-between px-2.5 py-2 rounded-[14px] text-[13px] cursor-pointer transition-colors border ${
                             isActive
-                              ? "bg-zinc-800/90 border-zinc-700/80 text-zinc-100 font-medium"
-                              : "border-transparent text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                              ? "bg-[#1E1E20] border-white/[0.08] text-[#F3F4F6] font-medium"
+                              : "border-transparent text-white/50 hover:bg-white/[0.04] hover:text-white"
                           }`}
                         >
                           {isEditing ? (
@@ -415,20 +415,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onNewAgentMission}
-            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700/60 transition-colors shadow-sm cursor-pointer w-full mb-3 group"
+            className="flex items-center justify-between px-3 py-2.5 rounded-[14px] text-xs font-semibold bg-[#1E1E20] hover:bg-[#222224] text-[#F3F4F6] border border-white/[0.06] hover:border-white/[0.10] transition-colors cursor-pointer w-full mb-3 group"
           >
             <span className="flex items-center gap-2">
-              <Plus className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-200" />
+              <Plus className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#E5E7EB]" />
               <span>Nova Missão</span>
             </span>
-            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 group-hover:text-zinc-200">
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.06] text-[#9CA3AF] group-hover:text-[#E5E7EB]">
               N
             </kbd>
           </button>
 
-          <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 px-1 pb-1.5 uppercase tracking-wider">
+          <div className="flex items-center justify-between text-[11px] font-mono text-[#9CA3AF] px-1 pb-1.5 uppercase tracking-wider">
             <span>Missões do Agente</span>
-            <span className="text-[10px] bg-white/[0.06] text-zinc-400 px-1.5 py-0.2 rounded-full font-mono">
+            <span className="text-[10px] bg-white/[0.06] text-[#9CA3AF] px-1.5 py-0.2 rounded-full font-mono">
               {agentHistory.length}
             </span>
           </div>
@@ -448,10 +448,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div
                     key={sess.id}
                     onClick={() => loadSession(sess)}
-                    className={`group p-2.5 rounded-lg border transition cursor-pointer text-left ${
+                    className={`group p-2.5 rounded-[14px] border transition cursor-pointer text-left ${
                       isActive
-                        ? "bg-zinc-800/90 border-zinc-700/80 shadow-sm"
-                        : "bg-[#12151C]/60 hover:bg-[#181C26] border-white/[0.04] hover:border-white/[0.08]"
+                        ? "bg-[#1E1E20] border-white/[0.08] shadow-sm"
+                        : "bg-white/[0.02] hover:bg-white/[0.04] border-white/[0.04] hover:border-white/[0.08]"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1.5 mb-1">
@@ -465,7 +465,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               : "bg-zinc-500"
                           }`}
                         />
-                        <span className="text-xs font-mono font-medium text-zinc-200 truncate">
+                        <span className="text-xs font-mono font-medium text-[#E5E7EB] truncate">
                           {sess.goal || "Missão sem objetivo"}
                         </span>
                       </div>
@@ -499,7 +499,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono mb-0.5">
             <span>CPU</span>
-            <span className="text-zinc-400">{cpuPercent}%</span>
+            <span className="text-[#9CA3AF]">{cpuPercent}%</span>
           </div>
           <div className="w-full h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
             <div
@@ -512,7 +512,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono mb-0.5">
             <span>RAM</span>
-            <span className="text-zinc-400">{ramUsedGb} / {ramTotalGb} GB</span>
+            <span className="text-[#9CA3AF]">{ramUsedGb} / {ramTotalGb} GB</span>
           </div>
           <div className="w-full h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
             <div
@@ -546,14 +546,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex items-center gap-2.5 w-full p-2 rounded-[var(--radius-md)] bg-[#12151C] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] transition-all text-left cursor-pointer group shadow-sm"
+            className="flex items-center gap-2.5 w-full p-2 rounded-[14px] bg-[#1E1E20] hover:bg-[#222224] border border-white/[0.06] hover:border-white/[0.08] transition-all text-left cursor-pointer group"
             title="Abrir Configurações e Perfil (Ctrl+,)"
           >
-            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-200 flex items-center justify-center text-[12px] font-bold shrink-0">
+            <div className="w-7 h-7 rounded-full bg-white/[0.06] border border-white/[0.06] text-[#E5E7EB] flex items-center justify-center text-[12px] font-bold shrink-0">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-semibold text-zinc-200 truncate group-hover:text-white transition-colors">
+              <div className="text-[12px] font-semibold text-[#E5E7EB] truncate group-hover:text-white transition-colors">
                 {user.name}
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 truncate">
@@ -561,7 +561,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="truncate">Conectado</span>
               </div>
             </div>
-            <div className="p-1 rounded text-zinc-500 group-hover:text-zinc-300 transition-colors">
+            <div className="p-1 rounded text-zinc-500 group-hover:text-[#9CA3AF] transition-colors">
               <MoreHorizontal className="w-4 h-4" />
             </div>
           </button>
@@ -569,11 +569,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onOpenAuth}
-            className="flex items-center justify-between w-full px-3 py-2 rounded-[var(--radius-md)] bg-zinc-900 border border-zinc-700/60 text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all text-[12px] font-medium cursor-pointer shadow-sm group"
+            className="flex items-center justify-between w-full px-3 py-2 rounded-[14px] bg-[#1E1E20] border border-white/[0.06] text-[#E5E7EB] hover:bg-[#222224] hover:text-white transition-all text-[12px] font-medium cursor-pointer group"
             title="Entrar na sua conta ou criar cadastro"
           >
             <span className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-300 group-hover:bg-zinc-700 flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-white/[0.06] border border-white/[0.06] text-white/50 flex items-center justify-center">
                 <User className="w-3.5 h-3.5" />
               </div>
               <span>Entrar / Criar Conta</span>

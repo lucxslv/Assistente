@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAgentRuntime } from "../services/agentRuntimeStore";
 import {
   Play,
@@ -114,7 +114,7 @@ export const AgentCommandCenter: React.FC<AgentCommandCenterProps> = ({ selected
       <header className="px-6 py-3 border-b border-white/[0.08] bg-[#12151C]/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-zinc-400 text-sm">
-            ⚙️
+            
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -295,7 +295,7 @@ export const AgentCommandCenter: React.FC<AgentCommandCenterProps> = ({ selected
                   className="w-full text-left p-3 rounded-lg bg-[#090A0F]/60 border border-white/[0.04] hover:border-white/[0.12] transition group cursor-pointer flex items-center justify-between"
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="text-sm">🔍</span>
+                    <span className="w-6 h-6 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
                     <div>
                       <div className="text-xs font-medium text-zinc-200 group-hover:text-white transition">
                         Charlie, analise completamente meu PC...

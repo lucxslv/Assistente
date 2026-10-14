@@ -245,18 +245,18 @@ export const PromptDock: React.FC<PromptDockProps> = ({
         {/* Attachment Previews */}
         <FilePreview attachments={attachments} onRemove={handleRemoveAttachment} />
 
-        {/* Input Area */}
-        <div className="flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2">
+        {/* Input Area — align-items flex-end for multiline, gap+padding harmonized, contrast AA */}
+        <div className="flex items-end gap-3 px-4 py-3">
           {/* File Upload Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
-            className="min-h-[44px] min-w-[44px] p-2.5 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl transition-colors disabled:opacity-40 cursor-pointer flex items-center justify-center flex-shrink-0"
+            className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-white/60 hover:text-white/90 active:bg-white/[0.08] transition-colors disabled:opacity-40 cursor-pointer"
             title="Anexar imagem ou arquivo (máx. 10MB)"
             aria-label="Anexar imagem ou arquivo"
           >
-            <Paperclip className="w-5 h-5 sm:w-4 sm:h-4" />
+            <Paperclip className="w-[18px] h-[18px] shrink-0" />
           </button>
           <input
             ref={fileInputRef}
@@ -281,15 +281,15 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             onFocus={handleFocus}
             disabled={disabled}
             placeholder={isStreaming ? 'Charlie está respondendo...' : 'Envie uma mensagem para o Charlie...'}
-            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-2.5 bg-transparent text-[#F3F4F6] placeholder-[#6B7280] text-base sm:text-sm resize-none focus:outline-none leading-relaxed font-sans"
+            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-[10px] bg-transparent text-[#F3F4F6] placeholder:text-white/50 text-[15px] sm:text-sm resize-none focus:outline-none leading-relaxed font-sans"
           />
 
-          {/* Action Button: Send Arrow [ → ] or Stop Square [ ■ ] */}
+          {/* Action Button: Send Arrow [ → ] or Stop Square [ ■ ] — breathing room on right */}
           {isStreaming ? (
             <button
               type="button"
               onClick={onStop}
-              className="min-h-[44px] min-w-[44px] rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 flex items-center justify-center transition-all duration-150 cursor-pointer flex-shrink-0 active:scale-95"
+              className="w-9 h-9 shrink-0 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 flex items-center justify-center transition-colors cursor-pointer"
               title="Interromper geração"
               aria-label="Interromper geração"
             >
@@ -300,15 +300,15 @@ export const PromptDock: React.FC<PromptDockProps> = ({
               type="button"
               onClick={handleSend}
               disabled={disabled || !canSend}
-              className={`min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-all duration-150 flex-shrink-0 ${
+              className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition-colors ${
                 canSend
-                  ? 'bg-primary text-white hover:bg-primary-hover active:scale-95 shadow-glow-sm cursor-pointer'
-                  : 'bg-white/[0.04] text-[#6B7280] cursor-not-allowed opacity-50'
+                  ? 'bg-primary text-white hover:bg-primary-hover cursor-pointer shadow-glow-sm'
+                  : 'bg-white/[0.06] text-white/30 cursor-not-allowed'
               }`}
               title="Enviar mensagem [Enter]"
               aria-label="Enviar mensagem"
             >
-              <ArrowRight className="w-5 h-5 sm:w-4 sm:h-4" />
+              <ArrowRight className="w-[18px] h-[18px] shrink-0" />
             </button>
           )}
         </div>

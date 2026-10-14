@@ -72,7 +72,13 @@ a {
 .overflow-y-auto,
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
+}
+/* Nested audit panes must chain scroll to parent */
+.audit-scroll {
+  overscroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 /* Custom technical sleek scrollbar */

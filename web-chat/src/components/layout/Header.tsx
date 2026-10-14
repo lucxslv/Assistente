@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import {
   Menu,
   MoreVertical,
@@ -111,8 +111,8 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Header: App Brand with Logo + Active Thread Title + Subtle Status Indicator */}
         <div className="flex md:hidden items-center gap-2 min-w-0 flex-1">
-          <div className="w-6 h-6 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-0.5 flex-shrink-0 shadow-sm">
-            <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
+          <div className="w-6 h-6 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-1 flex-shrink-0">
+            <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain object-center" />
           </div>
           <div className="flex flex-col min-w-0 flex-1">
             <div

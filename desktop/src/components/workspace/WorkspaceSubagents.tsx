@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { AgentSubagent } from "../../types";
 import {
   Cpu,
@@ -42,8 +42,8 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
       case "waiting":
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
-            <Clock className="w-3 h-3 text-zinc-400" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-[#9CA3AF] border border-white/[0.06]">
+            <Clock className="w-3 h-3 text-[#9CA3AF]" />
             Aguardando
           </span>
         );
@@ -51,7 +51,7 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto p-6 bg-[#090A0F] text-[#F2F3F5] space-y-6">
+    <div className="h-full w-full overflow-y-auto p-6 bg-[#161618] text-[#F2F3F5] space-y-6">
       {/* ================= Header da Seção ================= */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
         <div>
@@ -61,12 +61,12 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
               Equipe de Subagentes Especializados
             </h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-[#9CA3AF] mt-1">
             Visualização observável e em tempo real dos agentes atuando sob a orquestração do Charlie Runtime.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 bg-[#12151C] px-3 py-1.5 rounded-lg border border-white/[0.08]">
+        <div className="flex items-center gap-2 text-xs font-mono text-[#9CA3AF] bg-[#1E1E20] px-3 py-1.5 rounded-lg border border-white/[0.08]">
           <span>{subagents.length} Agentes no Workspace</span>
         </div>
       </div>
@@ -76,7 +76,7 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
         {subagents.map((agent) => (
           <div
             key={agent.id}
-            className="bg-[#12151C] border border-white/[0.08] rounded-xl p-5 space-y-4 hover:border-white/[0.16] transition shadow-sm"
+            className="bg-[#1E1E20] border border-white/[0.08] rounded-xl p-5 space-y-4 hover:border-white/[0.16] transition shadow-sm"
           >
             {/* Topo do Card */}
             <div className="flex items-center justify-between">
@@ -102,7 +102,7 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
               <span className="text-[10px] font-mono uppercase text-zinc-500 block">
                 Objetivo do Subagente
               </span>
-              <p className="text-xs text-zinc-300 leading-relaxed bg-[#090A0F]/60 p-2.5 rounded-lg border border-white/[0.04]">
+              <p className="text-xs text-zinc-300 leading-relaxed bg-[#161618]/60 p-2.5 rounded-lg border border-white/[0.04]">
                 {agent.goal}
               </p>
             </div>
@@ -113,7 +113,7 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
                 <span className="text-[10px] font-mono uppercase text-zinc-500 block">
                   Atividade Atual
                 </span>
-                <div className="text-xs text-zinc-200 font-mono bg-white/[0.02] p-2 rounded border border-white/[0.04] truncate">
+                <div className="text-xs text-[#F3F4F6] font-mono bg-white/[0.02] p-2 rounded border border-white/[0.04] truncate">
                   {agent.currentTask}
                 </div>
               </div>
@@ -132,7 +132,7 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
 
             {/* Ferramentas e Artefatos Utilizados */}
             <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/[0.06] text-xs">
-              <div className="flex items-center gap-1.5 text-zinc-400">
+              <div className="flex items-center gap-1.5 text-[#9CA3AF]">
                 <Wrench className="w-3.5 h-3.5 text-zinc-500" />
                 <span className="font-mono text-[11px]">
                   {agent.toolsUsed.length > 0 ? agent.toolsUsed.join(", ") : "Nenhuma ferramenta"}
@@ -140,7 +140,7 @@ export const WorkspaceSubagents: React.FC<WorkspaceSubagentsProps> = ({
               </div>
 
               {agent.artifacts && agent.artifacts.length > 0 && (
-                <div className="flex items-center gap-1.5 text-zinc-400">
+                <div className="flex items-center gap-1.5 text-[#9CA3AF]">
                   <FileCode className="w-3.5 h-3.5 text-zinc-500" />
                   <span className="font-mono text-[11px]">
                     {agent.artifacts.length} artefatos

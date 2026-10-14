@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -171,8 +171,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Top Header: Brand & Status & Close */}
         <div className="p-3.5 sm:p-4 pt-[max(0.875rem,env(safe-area-inset-top,0px))] border-b border-white/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden shadow-glow-sm p-1 flex-shrink-0">
-              <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain" />
+            <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-1.5 flex-shrink-0">
+              <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain object-center" />
             </div>
             <div>
               <div className="flex items-center gap-2">
