@@ -148,6 +148,14 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  bio?: string;
+  website?: string;
+  avatar_url?: string;
+  banner_url?: string;
+  role?: string;
 }
 
 export interface AuthResponse {
@@ -157,7 +165,7 @@ export interface AuthResponse {
 
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("charlie_auth_token") || "charlie_guest_token";
+  return localStorage.getItem("charlie_auth_token") || null;
 }
 
 export function clearInvalidToken(): void {
@@ -169,9 +177,9 @@ export function getStoredUser(): UserProfile | null {
   if (typeof window === "undefined") return null;
   try {
     const data = localStorage.getItem("charlie_user");
-    return data ? JSON.parse(data) : { id: "lucas-local", name: "Lucas", email: "lucas@charlie.local" };
+    return data ? JSON.parse(data) : null;
   } catch {
-    return { id: "lucas-local", name: "Lucas", email: "lucas@charlie.local" };
+    return null;
   }
 }
 
@@ -188,21 +196,22 @@ export function clearAuthSession(): void {
 }
 
 export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
-  const token = getStoredToken() || "charlie_guest_token";
+  const token = getStoredToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Client-Platform": "Windows",
     "X-Client-Type": "desktop",
     "X-Client-Name": "Charlie Desktop",
-    "Authorization": `Bearer ${token}`,
     ...extraHeaders,
   };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   return headers;
 }
 
 /**
- * Executa requisições HTTP com fallback transparente e imediato entre motor local (8005) e Vercel Cloud,
- * tratando automaticamente expiração de tokens (401) com failover para credencial de convidado.
+ * Executa requisições HTTP com fallback transparente entre motor local (8005) e Vercel Cloud.
  */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const currentBase = getApiBase();
@@ -210,17 +219,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   const url = `${currentBase}${fullPath}`;
 
   try {
-    const res = await fetch(url, options);
-
-    // Se retornou 401 e estava usando token customizado expirado, limpa e retenta com guest_token
-    if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
-      clearInvalidToken();
-      const headers = new Headers(options.headers || {});
-      headers.set("Authorization", "Bearer charlie_guest_token");
-      return await fetch(url, { ...options, headers });
-    }
-
-    return res;
+    return await fetch(url, options);
   } catch (err: any) {
     // Se falhou no motor local e a rota não for específica de voz do hardware, tenta a nuvem como fallback
     if (currentBase === LOCAL_API && !path.includes("/voice")) {
@@ -275,9 +274,10 @@ export async function loginAsGuest(): Promise<AuthResponse> {
   }
   const fallbackData: AuthResponse = {
     user: {
-      id: "lucas-local",
-      name: "Lucas",
-      email: "lucas@charlie.local",
+      id: "guest-local",
+      name: "Convidado",
+      email: "guest@charlie.local",
+      role: "guest",
     },
     token: "charlie_guest_token",
   };
@@ -285,6 +285,59 @@ export async function loginAsGuest(): Promise<AuthResponse> {
   return fallbackData;
 }
 
+export async function logoutUser(): Promise<void> {
+  try {
+    await apiFetch("/auth/logout", {
+      method: "POST",
+      headers: getAuthHeaders(),
+    });
+  } catch {
+    // ignora falha de rede no logout
+  } finally {
+    clearAuthSession();
+  }
+}
+
+export async function requestPasswordReset(email: string): Promise<{ status: string; message: string; reset_token?: string }> {
+  const res = await apiFetch("/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || "Não foi possível processar a recuperação de senha.");
+  }
+  return data;
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<{ status: string; message: string }> {
+  const res = await apiFetch("/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || "Código de redefinição inválido ou expirado.");
+  }
+  return data;
+}
+
+export async function updateUserProfile(payload: Partial<UserProfile>): Promise<UserProfile> {
+  const res = await apiFetch("/auth/profile", {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || "Falha ao atualizar perfil.");
+  }
+  const updatedUser: UserProfile = data.user || data;
+  localStorage.setItem("charlie_user", JSON.stringify(updatedUser));
+  return updatedUser;
+}
 
 export async function fetchCurrentUser(): Promise<UserProfile | null> {
   const token = getStoredToken();
@@ -296,16 +349,9 @@ export async function fetchCurrentUser(): Promise<UserProfile | null> {
       },
     });
     if (!res.ok) {
-      if (token !== "charlie_guest_token") {
-        clearInvalidToken();
-        const guestRes = await apiFetch("/auth/me", {
-          headers: { Authorization: "Bearer charlie_guest_token" },
-        });
-        if (guestRes.ok) {
-          const guestUser: UserProfile = await guestRes.json();
-          localStorage.setItem("charlie_user", JSON.stringify(guestUser));
-          return guestUser;
-        }
+      if (res.status === 401 || res.status === 403) {
+        clearAuthSession();
+        return null;
       }
       return getStoredUser();
     }
@@ -447,16 +493,43 @@ export async function sendChatMessage(
   return res.json();
 }
 
+export async function cancelChatStream(
+  requestId?: string | null,
+  threadId?: string | null
+): Promise<void> {
+  try {
+    await apiFetch("/chat/cancel", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        request_id: requestId || undefined,
+        thread_id: threadId || undefined,
+      }),
+    });
+  } catch (err) {
+    console.warn("[Charlie API] Aviso ao solicitar cancelamento de stream:", err);
+  }
+}
+
+export interface StreamChatOptions {
+  signal?: AbortSignal;
+  requestId?: string;
+  attachments?: Array<Record<string, any>>;
+  images?: Array<{ mime_type: string; data: string }>;
+  skipUserMessageSave?: boolean;
+}
+
 /**
  * Envia mensagem via SSE (Server-Sent Events) recebendo tokens e status em tempo real,
- * com fallback inteligente para REST caso o streaming sofra qualquer interrupção de rede.
+ * sem reenviar automaticamente via REST quando cancelado ou interrompido (evitando duplicação).
  */
 export async function sendChatMessageStream(
   message: string,
   threadId: string | null,
   onEvent: (event: StreamEvent) => void,
   skipTts: boolean = true,
-  toolResults?: Array<{ call_id: string; name: string; result: string }>
+  toolResults?: Array<{ call_id: string; name: string; result: string }>,
+  options?: StreamChatOptions
 ): Promise<void> {
   const base = getApiBase();
   const payload: any = {
@@ -464,51 +537,32 @@ export async function sendChatMessageStream(
     thread_id: threadId,
     skip_tts: skipTts,
   };
+  if (options?.requestId) {
+    payload.request_id = options.requestId;
+  }
+  if (options?.attachments && options.attachments.length > 0) {
+    payload.attachments = options.attachments;
+  }
+  if (options?.images && options.images.length > 0) {
+    payload.images = options.images;
+  }
+  if (options?.skipUserMessageSave) {
+    payload.skip_user_message_save = true;
+  }
   if (toolResults && toolResults.length > 0) {
     payload.tool_results = toolResults;
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${base}/chat/stream`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch(`${base}/chat/stream`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+    signal: options?.signal,
+  });
 
-    // Se 401 com token expirado, limpa token e retenta com guest_token
-    if (res.status === 401 && getStoredToken() !== "charlie_guest_token") {
-      console.warn("[Charlie API] Sessão expirada (401). Retentando streaming com guest_token...");
-      clearInvalidToken();
-      res = await fetch(`${base}/chat/stream`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-    }
-  } catch (fetchErr) {
-    console.warn("[Charlie API] Falha na requisição de streaming. Ativando fallback imediato para REST /chat...", fetchErr);
-    const restRes = await sendChatMessage(message, threadId, skipTts);
-    onEvent({
-      type: "done",
-      data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
-    });
-    return;
-  }
-
-  // Se a resposta de streaming não foi OK (ou não tem body para stream)
   if (!res.ok || !res.body) {
-    console.warn(`[Charlie API] Streaming HTTP ${res.status}. Ativando fallback transparente para REST...`);
-    try {
-      const restRes = await sendChatMessage(message, threadId, skipTts);
-      onEvent({
-        type: "done",
-        data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
-      });
-      return;
-    } catch (restErr: any) {
-      throw new Error(`Falha no envio da mensagem (${res.status}): ${restErr?.message || res.statusText}`);
-    }
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Falha no envio da mensagem (${res.status}): ${errText || res.statusText}`);
   }
 
   const reader = res.body.getReader();
@@ -517,7 +571,6 @@ export async function sendChatMessageStream(
 
   let clientToolCalls: Array<{ call_id: string; name: string; args: any }> = [];
   let returnedThreadId: string | null = threadId;
-  let receivedAnyToken = false;
 
   try {
     while (true) {
@@ -544,9 +597,6 @@ export async function sendChatMessageStream(
         if (eventDataStr) {
           try {
             const parsed = JSON.parse(eventDataStr);
-            if (eventType === "token" && parsed.token) {
-              receivedAnyToken = true;
-            }
             onEvent({ type: eventType, data: parsed });
 
             if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
@@ -570,9 +620,6 @@ export async function sendChatMessageStream(
       if (eventDataStr) {
         try {
           const parsed = JSON.parse(eventDataStr);
-          if (eventType === "token" && parsed.token) {
-            receivedAnyToken = true;
-          }
           onEvent({ type: eventType, data: parsed });
           if ((eventType as string) === "client_tool_request" || (eventType as string) === "client_tool_call") {
             clientToolCalls = parsed.tools || [];
@@ -583,27 +630,19 @@ export async function sendChatMessageStream(
         }
       }
     }
-  } catch (streamReadErr) {
-    console.warn("[Charlie API] Conexão SSE interrompida durante leitura:", streamReadErr);
-    if (!receivedAnyToken) {
-      try {
-        const restRes = await sendChatMessage(message, threadId, skipTts);
-        onEvent({
-          type: "done",
-          data: { reply: restRes.reply, thread_id: restRes.thread_id, model: "gemini-3.1-flash-lite" },
-        });
-        return;
-      } catch (e) {
-        throw streamReadErr;
-      }
+  } catch (streamReadErr: any) {
+    if (streamReadErr?.name === "AbortError" || options?.signal?.aborted) {
+      return;
     }
+    throw streamReadErr;
   }
 
   // Se o backend solicitou execução física de ferramentas no computador local (Windows)
-  if (clientToolCalls.length > 0) {
+  if (clientToolCalls.length > 0 && !options?.signal?.aborted) {
     const results: Array<{ call_id: string; name: string; result: string }> = [];
 
     for (const call of clientToolCalls) {
+      if (options?.signal?.aborted) break;
       onEvent({
         type: "status",
         data: { status: "executing", text: `Executando no Windows: ${call.name}...` },
@@ -617,7 +656,7 @@ export async function sendChatMessageStream(
         });
         onEvent({
           type: "tool_end",
-          data: { name: call.name, result: output },
+          data: { name: call.name, result: output, ok: true },
         });
       } catch (err: any) {
         const errStr = `Erro ao executar no dispositivo: ${err?.message || err}`;
@@ -628,13 +667,14 @@ export async function sendChatMessageStream(
         });
         onEvent({
           type: "tool_end",
-          data: { name: call.name, result: errStr },
+          data: { name: call.name, result: errStr, ok: false },
         });
       }
     }
 
-    // Continua recursivamente enviando os dados reais coletados de volta para a IA finalizar a resposta
-    return await sendChatMessageStream("", returnedThreadId, onEvent, skipTts, results);
+    if (!options?.signal?.aborted) {
+      return await sendChatMessageStream("", returnedThreadId, onEvent, skipTts, results, options);
+    }
   }
 }
 
@@ -693,7 +733,9 @@ export function connectSystemWebSocket(
 }
 
 export async function fetchSettings(): Promise<Settings> {
-  const res = await apiFetch("/settings");
+  const res = await apiFetch("/settings", {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Falha ao buscar configurações");
   return res.json();
 }
@@ -701,11 +743,47 @@ export async function fetchSettings(): Promise<Settings> {
 export async function updateSettings(data: Partial<Settings>): Promise<any> {
   const res = await apiFetch("/settings", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Falha ao atualizar configurações");
   return res.json();
+}
+
+export async function testHomeAssistantConnection(url: string, token?: string): Promise<{ status: string; connected: boolean; message: string }> {
+  const res = await apiFetch("/settings/test-ha", {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ url, token }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `Falha ao conectar ao Home Assistant (HTTP ${res.status}).`);
+  }
+  return data;
+}
+
+export async function fetchPairedDevices(): Promise<Array<{ device_id: string; device_name: string; platform: string; paired_at: number }>> {
+  try {
+    const res = await apiFetch("/pair/devices", {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.devices) ? data.devices : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function revokePairedDevice(deviceId: string): Promise<void> {
+  const res = await apiFetch(`/pair/devices/${encodeURIComponent(deviceId)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error("Falha ao desconectar dispositivo pareado.");
+  }
 }
 
 export async function fetchUserMemories(): Promise<{ facts: string[]; preferences: Record<string, string>; count: number }> {
@@ -739,7 +817,9 @@ export interface VoiceStatus {
 }
 
 export async function fetchVoiceStatus(): Promise<VoiceStatus> {
-  const res = await apiFetch("/voice/status");
+  const res = await apiFetch("/voice/status", {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Falha ao buscar status de voz");
   return res.json();
 }
@@ -747,7 +827,7 @@ export async function fetchVoiceStatus(): Promise<VoiceStatus> {
 export async function toggleVoiceService(enabled: boolean): Promise<{ status: string; running: boolean; state: string }> {
   const res = await apiFetch("/voice/toggle", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ enabled }),
   });
   if (!res.ok) throw new Error("Falha ao alterar serviço de voz");
@@ -757,7 +837,7 @@ export async function toggleVoiceService(enabled: boolean): Promise<{ status: st
 export async function testVoiceSynthesis(text?: string): Promise<{ status: string; message: string }> {
   const res = await apiFetch("/voice/test", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ text }),
   });
   if (!res.ok) throw new Error("Falha ao disparar áudio de teste");

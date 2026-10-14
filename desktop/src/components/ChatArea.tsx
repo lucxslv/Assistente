@@ -26,7 +26,7 @@ import {
   Sparkles,
   ArrowRight,
 } from "lucide-react";
-import { Message, ToolCallInfo, AgentArtifact } from "../types";
+import { Message, MessageAttachment, ToolCallInfo, AgentArtifact } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { WidgetRegistry } from "./widgets/WidgetRegistry";
@@ -34,7 +34,15 @@ import { WidgetRegistry } from "./widgets/WidgetRegistry";
 interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
-  onSendMessage: (text: string, skipTts: boolean) => void;
+  onSendMessage: (
+    text: string,
+    skipTts: boolean,
+    extra?: {
+      images?: Array<{ mime_type: string; data: string }>;
+      attachments?: MessageAttachment[];
+    }
+  ) => void;
+  onStopGeneration?: () => void;
   onRegenerate?: (messageId: string) => void;
   currentThreadName?: string;
   userName?: string;
@@ -97,6 +105,7 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
   const isError = tool.status === "error";
 
   const getFriendlyToolName = (name: string) => {
+    if (tool.friendly_name) return tool.friendly_name;
     switch (name) {
       case "manage_application":
         return `Comando: ${tool.args?.app_name || "Aplicativo"}`;
@@ -137,8 +146,13 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
           <span className="font-medium text-[var(--text-primary)] truncate">
             {getFriendlyToolName(tool.name)}
           </span>
+          {tool.duration_ms !== undefined && !isExecuting && (
+            <span className="text-[9.5px] font-mono text-[var(--text-muted)] shrink-0">
+              {tool.duration_ms}ms
+            </span>
+          )}
           <span
-            className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono font-medium ${
+            className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono font-medium shrink-0 ${
               isExecuting
                 ? "bg-[var(--accent-soft-bg)] text-[var(--accent)] border border-[var(--accent-soft-border)]"
                 : isError
@@ -160,6 +174,11 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
 
       {isExpanded && (
         <div className="p-3 border-t border-[var(--border)] bg-[#0A0B0E] text-[11px] font-mono space-y-2 select-text overflow-x-auto">
+          {tool.summary && (
+            <div className="text-[11px] text-[var(--text-secondary)] font-sans">
+              {tool.summary}
+            </div>
+          )}
           {tool.args && Object.keys(tool.args).length > 0 && (
             <div>
               <div className="text-[9.5px] uppercase font-bold text-[var(--text-muted)] mb-1">
@@ -194,10 +213,24 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
   );
 };
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export const ChatArea: React.FC<ChatAreaProps> = ({
   messages,
   isLoading,
   onSendMessage,
+  onStopGeneration,
   onRegenerate,
   currentThreadName,
   userName = "Lucas",
@@ -297,13 +330,36 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (isLoading) return;
 
     let finalMsg = rawText;
+    let extra: {
+      images?: Array<{ mime_type: string; data: string }>;
+      attachments?: MessageAttachment[];
+    } | undefined;
+
     if (attachedImage) {
-      const imgHeader = `[Imagem Anexada: ${attachedImage.name} (${attachedImage.sizeKb} KB)]\n`;
-      finalMsg = rawText ? `${imgHeader}${rawText}` : `${imgHeader}Analise esta imagem em detalhes.`;
+      try {
+        const b64 = await fileToBase64(attachedImage.file);
+        extra = {
+          images: [{ mime_type: attachedImage.file.type || "image/png", data: b64 }],
+          attachments: [
+            {
+              name: attachedImage.name,
+              type: "image",
+              mimeType: attachedImage.file.type || "image/png",
+              sizeBytes: attachedImage.file.size,
+              previewUrl: attachedImage.previewUrl,
+            },
+          ],
+        };
+      } catch {
+        // fallback caso leitura falhe
+      }
+      if (!finalMsg) {
+        finalMsg = "Analise esta imagem em detalhes.";
+      }
       setAttachedImage(null);
     }
 
-    onSendMessage(finalMsg, !voiceActive);
+    onSendMessage(finalMsg, !voiceActive, extra);
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -739,7 +795,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       }`}
                     >
                       {isUser ? (
-                        <div className="whitespace-pre-wrap select-text">{m.content}</div>
+                        <div className="space-y-2 select-text">
+                          {m.attachments && m.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {m.attachments.map((att, aIdx) => (
+                                <div
+                                  key={att.id || aIdx}
+                                  className="flex items-center gap-2.5 p-2 rounded-lg bg-[#0C0D12] border border-white/[0.08] max-w-[260px]"
+                                >
+                                  {att.previewUrl ? (
+                                    <img
+                                      src={att.previewUrl}
+                                      alt={att.name}
+                                      className="w-10 h-10 rounded object-cover border border-white/10 shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-300 text-xs font-mono shrink-0">
+                                      IMG
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-mono font-medium text-zinc-200 truncate">
+                                      {att.name}
+                                    </div>
+                                    <div className="text-[10px] text-zinc-400">
+                                      {att.sizeBytes ? `${Math.max(1, Math.round(att.sizeBytes / 1024))} KB` : "Anexo"}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="whitespace-pre-wrap">{m.content}</div>
+                        </div>
                       ) : (
                         <div className="space-y-2 select-text">
                           {/* Raciocínio Interno do Modelo (Thinking Block) */}
@@ -1181,15 +1269,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleSend()}
-                  disabled={(!input.trim() && !attachedImage) || isLoading}
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-zinc-100 hover:bg-white text-zinc-950 transition-colors disabled:opacity-30 disabled:hover:bg-zinc-100 shadow-sm cursor-pointer"
-                  title="Enviar mensagem"
-                >
-                  <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-                </button>
+                {isLoading && onStopGeneration ? (
+                  <button
+                    type="button"
+                    onClick={onStopGeneration}
+                    className="h-8 px-3 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-xs font-medium transition-colors shadow-sm cursor-pointer"
+                    title="Interromper geração da resposta"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                    <span>Parar</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSend()}
+                    disabled={(!input.trim() && !attachedImage) || isLoading}
+                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] bg-zinc-100 hover:bg-white text-zinc-950 transition-colors disabled:opacity-30 disabled:hover:bg-zinc-100 shadow-sm cursor-pointer"
+                    title="Enviar mensagem"
+                  >
+                    <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

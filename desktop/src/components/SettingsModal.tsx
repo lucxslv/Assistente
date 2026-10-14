@@ -17,7 +17,6 @@ import {
   Brain,
   FolderGit2,
   Trash2,
-  ShieldCheck,
   Plus,
   Sliders,
   Folder,
@@ -32,6 +31,8 @@ import {
 import { Settings } from "../types";
 import {
   updateSettings,
+  updateUserProfile,
+  testHomeAssistantConnection,
   UserProfile,
   fetchUserMemories,
   clearUserMemories,
@@ -46,6 +47,7 @@ interface SettingsModalProps {
   onClose: () => void;
   settings: Settings | null;
   user?: UserProfile | null;
+  onUserUpdated?: (user: UserProfile) => void;
   onLogout?: () => void;
   onOpenAuth?: () => void;
   onOpenMobilePair?: () => void;
@@ -59,16 +61,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   settings,
   user,
+  onUserUpdated,
   onLogout,
   onOpenAuth,
   onOpenMobilePair: _onOpenMobilePair,
   initialTab = "account",
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab === "server" ? "account" : initialTab);
+
+  // Campos de Perfil do Usuário
+  const [profileName, setProfileName] = useState(user?.name || "");
+  const [profileUsername, setProfileUsername] = useState(user?.username || "");
+  const [profileBio, setProfileBio] = useState(user?.bio || "");
+  const [profileWebsite, setProfileWebsite] = useState(user?.website || "");
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState(user?.avatar_url || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<{ text: string; error?: boolean } | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.name || "");
+      setProfileUsername(user.username || "");
+      setProfileBio(user.bio || "");
+      setProfileWebsite(user.website || "");
+      setProfileAvatarUrl(user.avatar_url || "");
+    }
+  }, [user]);
 
   useEffect(() => {
     if (isOpen && initialTab) {
-      setActiveTab(initialTab);
+      setActiveTab(initialTab === "server" ? "account" : initialTab);
     }
   }, [isOpen, initialTab]);
 
@@ -89,11 +111,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return saved ? parseInt(saved, 10) : 8000;
   });
   const [ragFolders, setRagFolders] = useState<string[]>(() => {
+    if (settings?.knowledge_dirs && settings.knowledge_dirs.length > 0) {
+      return settings.knowledge_dirs;
+    }
     const saved = localStorage.getItem("charlie_rag_folders");
     return saved ? JSON.parse(saved) : ["C:\\Projetos", "C:\\Documentos"];
   });
   const [newFolderPath, setNewFolderPath] = useState("");
   const [showAddFolder, setShowAddFolder] = useState(false);
+
+  useEffect(() => {
+    if (settings?.knowledge_dirs && settings.knowledge_dirs.length > 0) {
+      setRagFolders(settings.knowledge_dirs);
+    }
+  }, [settings?.knowledge_dirs]);
 
   // 4. Configuração de Voz e Áudio
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
@@ -148,6 +179,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [haStatus, setHaStatus] = useState<"none" | "success" | "error">(
     settings?.home_assistant_configured ? "success" : "none"
   );
+  const [haMessage, setHaMessage] = useState<string | null>(null);
 
   // Preferências do Sistema
   const [autostart, setAutostart] = useState<boolean>(() => {
@@ -247,28 +279,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     window.speechSynthesis.speak(utterance);
   };
 
-  // Testar conexão com Casa Inteligente
+  // Salvar perfil do usuário no backend (PATCH /api/auth/profile)
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    setProfileMessage(null);
+    try {
+      const updated = await updateUserProfile({
+        name: profileName.trim() || user.name,
+        username: profileUsername.trim(),
+        bio: profileBio.trim(),
+        website: profileWebsite.trim(),
+        avatar_url: profileAvatarUrl.trim(),
+      });
+      onUserUpdated?.(updated);
+      setProfileMessage({ text: "Perfil salvo no servidor com sucesso!" });
+      setTimeout(() => setProfileMessage(null), 3500);
+    } catch (err: any) {
+      setProfileMessage({
+        text: err?.message || "Falha ao atualizar perfil.",
+        error: true,
+      });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Testar conexão real com Casa Inteligente via backend (POST /api/settings/test-ha)
   const handleTestHomeAssistant = async () => {
     if (!homeAssistantUrl.trim()) return;
     setHaTesting(true);
     setHaStatus("none");
+    setHaMessage(null);
 
     try {
-      const cleanUrl = homeAssistantUrl.trim().replace(/\/+$/, "");
-      const res = await fetch(`${cleanUrl}/api/`, {
-        headers: homeAssistantToken ? { Authorization: `Bearer ${homeAssistantToken}` } : {},
-      });
-      if (res.ok || res.status === 401) {
+      const res = await testHomeAssistantConnection(
+        homeAssistantUrl.trim(),
+        homeAssistantToken.trim() || undefined
+      );
+      if (res.connected) {
         setHaStatus("success");
+        setHaMessage(res.message || "Conectado ao Home Assistant com sucesso!");
       } else {
         setHaStatus("error");
+        setHaMessage(res.message || "Falha ao conectar à central Home Assistant.");
       }
-    } catch {
-      if (homeAssistantUrl.includes("http://") || homeAssistantUrl.includes("https://")) {
-        setHaStatus("success");
-      } else {
-        setHaStatus("error");
-      }
+    } catch (err: any) {
+      setHaStatus("error");
+      setHaMessage(err?.message || "Não foi possível conectar ao Home Assistant.");
     } finally {
       setHaTesting(false);
     }
@@ -338,6 +396,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         elevenlabs_voice_id: elevenLabsVoiceId,
         wake_word_enabled: wakeWordEnabled,
         home_assistant_url: homeAssistantUrl,
+        home_assistant_token: homeAssistantToken || undefined,
+        knowledge_dirs: ragFolders,
       });
     } catch {
       // Salvo localmente
@@ -358,9 +418,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: "pt-BR-FabioNeural", name: "Fábio", desc: "Claro e Direto" },
   ];
 
+  // Servidor Oficial foi removido da lista de abas visíveis conforme especificação de UX,
+  // mantendo toda a conectividade interna e fallback intactos.
   const tabs: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: "account", label: "Conta & Perfil", icon: User },
-    { id: "server", label: "Servidor Oficial", icon: Globe },
     { id: "pairing", label: "Parear Celular (Mobile)", icon: Smartphone },
     { id: "brain", label: "Cérebro & Memória", icon: Brain },
     { id: "rag", label: "Base de Conhecimento", icon: FolderGit2 },
@@ -432,16 +493,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     Sua Conta no Charlie
                   </h3>
                   <p className="text-[11px] text-[var(--text-muted)]">
-                    Identificação de acesso, sessão autenticada e segurança local
+                    Identificação de acesso, edição de perfil e segurança da sessão
                   </p>
                 </div>
 
                 {user ? (
                   <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-4">
                     <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-full bg-[var(--accent-soft-bg)] border-2 border-[var(--accent)] text-[var(--accent)] flex items-center justify-center font-bold text-lg shadow-[0_0_15px_rgba(139,124,255,0.3)]">
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
+                      {profileAvatarUrl ? (
+                        <img
+                          src={profileAvatarUrl}
+                          alt={user.name}
+                          className="w-12 h-12 rounded-full object-cover border-2 border-[var(--accent)] shadow-[0_0_15px_rgba(139,124,255,0.3)]"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-[var(--accent-soft-bg)] border-2 border-[var(--accent)] text-[var(--accent)] flex items-center justify-center font-bold text-lg shadow-[0_0_15px_rgba(139,124,255,0.3)]">
+                          {user.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-[var(--text-primary)] truncate">
                           {user.name}
@@ -452,30 +521,127 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
                           <span className="text-[10px] font-medium text-[var(--text-secondary)]">
-                            Plano Pessoal • Sessão Ativa
+                            {user.role === "guest" ? "Modo Convidado" : "Conta Autenticada • Sessão Ativa"}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
-                        <ShieldCheck className="w-4 h-4 text-[var(--accent)]" />
-                        <span>Sessão persistida e isolada</span>
+                    {/* Formulário de Edição de Perfil Conectado ao Backend */}
+                    <div className="pt-3 border-t border-[var(--border)] space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10.5px] font-medium text-[var(--text-secondary)] block mb-1">
+                            Nome de Exibição
+                          </label>
+                          <input
+                            type="text"
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
+                            placeholder="Como o Charlie deve chamar você"
+                            className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10.5px] font-medium text-[var(--text-secondary)] block mb-1">
+                            Nome de Usuário (@username)
+                          </label>
+                          <input
+                            type="text"
+                            value={profileUsername}
+                            onChange={(e) => setProfileUsername(e.target.value)}
+                            placeholder="ex: lucas"
+                            className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
                       </div>
-                      {onLogout && (
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10.5px] font-medium text-[var(--text-secondary)] block mb-1">
+                            Website / Portfólio
+                          </label>
+                          <input
+                            type="text"
+                            value={profileWebsite}
+                            onChange={(e) => setProfileWebsite(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10.5px] font-medium text-[var(--text-secondary)] block mb-1">
+                            URL do Avatar
+                          </label>
+                          <input
+                            type="text"
+                            value={profileAvatarUrl}
+                            onChange={(e) => setProfileAvatarUrl(e.target.value)}
+                            placeholder="https://.../avatar.png"
+                            className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10.5px] font-medium text-[var(--text-secondary)] block mb-1">
+                          Biografia / Contexto Pessoal
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={profileBio}
+                          onChange={(e) => setProfileBio(e.target.value)}
+                          placeholder="Resumo profissional ou preferências de trabalho..."
+                          className="w-full px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] resize-none"
+                        />
+                      </div>
+
+                      {profileMessage && (
+                        <div
+                          className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                            profileMessage.error
+                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          }`}
+                        >
+                          {profileMessage.error ? (
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span>{profileMessage.text}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
                         <button
                           type="button"
-                          onClick={() => {
-                            onLogout();
-                            onClose();
-                          }}
-                          className="px-3 py-1.5 rounded-lg border border-rose-500/40 text-rose-400 hover:bg-rose-500/10 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                          onClick={handleSaveProfile}
+                          disabled={savingProfile}
+                          className="px-3.5 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                         >
-                          <LogOut className="w-3.5 h-3.5" />
-                          <span>Desconectar Sessão</span>
+                          {savingProfile ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Save className="w-3.5 h-3.5" />
+                          )}
+                          <span>Salvar Perfil</span>
                         </button>
-                      )}
+
+                        {onLogout && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onLogout();
+                              onClose();
+                            }}
+                            className="px-3 py-1.5 rounded-lg border border-rose-500/40 text-rose-400 hover:bg-rose-500/10 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                            <span>Desconectar Sessão</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -1327,25 +1493,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center justify-between pt-1 gap-3">
                     <button
                       type="button"
                       onClick={handleTestHomeAssistant}
                       disabled={haTesting || !homeAssistantUrl.trim()}
-                      className="px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-lg bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
                     >
                       {haTesting && <Loader2 className="w-3 h-3 animate-spin text-[var(--accent)]" />}
                       <span>Testar Conexão</span>
                     </button>
 
                     {haStatus === "success" && (
-                      <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Central conectada com sucesso!
+                      <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 truncate">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{haMessage || "Central conectada com sucesso!"}</span>
                       </span>
                     )}
                     {haStatus === "error" && (
-                      <span className="text-[11px] text-rose-400 font-medium flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" /> Falha ao conectar à central
+                      <span className="text-[11px] text-rose-400 font-medium flex items-center gap-1 truncate" title={haMessage || "Falha ao conectar à central"}>
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{haMessage || "Falha ao conectar à central"}</span>
                       </span>
                     )}
                   </div>
