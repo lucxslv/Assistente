@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+﻿import React, { useState, useMemo } from "react";
 import {
   AgentSession,
   PermissionRequest,
@@ -69,15 +69,15 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
   };
 
   return (
-    <div className="relative my-2.5 rounded-lg overflow-hidden border border-white/[0.08] bg-[#0A0B0E] text-left">
-      <div className="flex items-center justify-between px-3 py-1 bg-[#12151C] border-b border-white/[0.06] text-[10px] font-mono select-none">
-        <span className="font-semibold uppercase tracking-wider text-zinc-400">
+    <div className="relative my-2.5 rounded-[14px] overflow-hidden border border-white/[0.08] bg-[#0A0B0E] text-left">
+      <div className="flex items-center justify-between px-3 py-1 bg-[#1E1E20] border-b border-white/[0.06] text-[10px] font-mono select-none">
+        <span className="font-semibold uppercase tracking-wider text-[#9CA3AF]">
           {language || "código"}
         </span>
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
         >
           {copied ? (
             <>
@@ -245,11 +245,11 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
   };
 
   return (
-    <aside className="w-full h-full flex flex-col bg-[#090A0F] text-[#EDEDED] border-l border-white/[0.06] select-none overflow-hidden font-sans">
+    <aside className="w-full h-full flex flex-col bg-[#161618] text-[#EDEDED] border-l border-white/[0.06] select-none overflow-hidden font-sans">
       {/* =========================================================
           1. BARRA DE FERRAMENTAS SUPERIOR (Top Navigation Bar - 40px)
           ========================================================= */}
-      <div className="h-10 px-3 bg-[#12151C] border-b border-white/[0.06] flex items-center justify-between shrink-0 text-zinc-400">
+      <div className="h-10 px-3 bg-[#1E1E20] border-b border-white/[0.06] flex items-center justify-between shrink-0 text-[#9CA3AF]">
         {/* Lado Esquerdo: Modos de Contexto e Pill Tab */}
         <div className="flex items-center gap-1 min-w-0">
           {/* Botão Hub / Document List */}
@@ -263,7 +263,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             className={`p-1.5 rounded-md transition cursor-pointer ${
               activeTab === "hub" && !selectedArtifactId
                 ? "text-white bg-white/[0.10] shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <FolderTree className="w-4 h-4" strokeWidth={1.5} />
@@ -280,7 +280,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             className={`relative p-1.5 rounded-md transition cursor-pointer ${
               activeTab === "review"
                 ? "text-white bg-white/[0.10] shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <GitPullRequest className="w-4 h-4" strokeWidth={1.5} />
@@ -300,7 +300,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             className={`relative p-1.5 rounded-md transition cursor-pointer ${
               activeTab === "terminal"
                 ? "text-white bg-white/[0.10] shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <Terminal className="w-4 h-4" strokeWidth={1.5} />
@@ -318,7 +318,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                 type="button"
                 onClick={handleCloseArtifact}
                 title="Fechar documento"
-                className="text-zinc-400 hover:text-white p-0.5 rounded transition cursor-pointer"
+                className="text-[#9CA3AF] hover:text-white p-0.5 rounded transition cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -327,7 +327,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
         </div>
 
         {/* Lado Direito: Ações do Painel com z-index garantido */}
-        <div className="flex items-center gap-1 shrink-0 text-zinc-400 relative z-30">
+        <div className="flex items-center gap-1 shrink-0 text-[#9CA3AF] relative z-30">
           <button
             type="button"
             onClick={() => {
@@ -335,7 +335,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               setSelectedArtifactId(null);
             }}
             title="Novo Terminal / Ação"
-            className="p-1 rounded hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+            className="p-1 rounded hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
           >
             <Plus className="w-4 h-4" strokeWidth={1.5} />
           </button>
@@ -345,7 +345,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               type="button"
               onClick={onToggleWidth}
               title={isWide ? "Restaurar largura padrão" : "Expandir painel (Split View ampla)"}
-              className="p-1 rounded hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+              className="p-1 rounded hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
             >
               {isWide ? (
                 <Minimize2 className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -360,7 +360,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               type="button"
               onClick={onClose}
               title="Fechar painel lateral"
-              className="p-1 rounded hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+              className="p-1 rounded hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
             >
               <PanelRightClose className="w-4 h-4" strokeWidth={1.5} />
             </button>
@@ -381,11 +381,11 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   <div className="text-xs font-semibold text-amber-300">
                     Autorização Necessária (Zero-Trust)
                   </div>
-                  <div className="text-[11px] text-zinc-300 font-mono mt-0.5 break-all">
+                  <div className="text-[11px] text-[#E5E7EB] font-mono mt-0.5 break-all">
                     {req.tool} {req.command ? `— ${req.command}` : ""}
                   </div>
                   {req.reason && (
-                    <p className="text-[10px] text-zinc-400 mt-0.5">{req.reason}</p>
+                    <p className="text-[10px] text-[#9CA3AF] mt-0.5">{req.reason}</p>
                   )}
                 </div>
               </div>
@@ -400,7 +400,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                 <button
                   type="button"
                   onClick={() => onResolvePermission(req.id, "deny")}
-                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-[#1F2430] text-zinc-300 hover:bg-white/[0.08] transition cursor-pointer"
+                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-[#1F2430] text-[#E5E7EB] hover:bg-white/[0.08] transition cursor-pointer"
                 >
                   Negar
                 </button>
@@ -420,20 +420,20 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
         {activeTab === "hub" && !selectedArtifactId && (
           <div className="p-3 space-y-2.5 text-xs">
             {/* 1. Subagents */}
-            <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+            <div className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleAccordion("subagents")}
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
               >
-                <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-[#E5E7EB] font-mono text-[11px]">
                   {openAccordions.subagents ? (
                     <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="font-semibold uppercase text-zinc-200">SUBAGENTS</span>
+                  <span className="font-semibold uppercase text-[#F3F4F6]">SUBAGENTS</span>
                   <span className="text-zinc-500">({String(subagents.length).padStart(2, "0")})</span>
                 </div>
                 {subagents.some((s) => s.status === "running") && (
@@ -451,10 +451,10 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                     subagents.slice(0, expandedSections.subagents ? subagents.length : 5).map((sub) => (
                       <div
                         key={sub.id}
-                        className="p-2 rounded bg-[#12151C]/70 border border-white/[0.04] flex items-center justify-between font-mono text-[11px]"
+                        className="p-2 rounded bg-[#1E1E20]/70 border border-white/[0.04] flex items-center justify-between font-mono text-[11px]"
                       >
                         <div className="min-w-0 flex-1 pr-2">
-                          <div className="font-semibold text-zinc-200 truncate">{sub.role}</div>
+                          <div className="font-semibold text-[#F3F4F6] truncate">{sub.role}</div>
                           <div className="text-zinc-500 text-[10px] truncate">{sub.goal}</div>
                         </div>
                         <span
@@ -463,7 +463,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                               : sub.status === "running"
                               ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse"
-                              : "bg-zinc-800 text-zinc-400"
+                              : "bg-[#222224] text-[#9CA3AF]"
                           }`}
                         >
                           {sub.status}
@@ -485,24 +485,24 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             </div>
 
             {/* 2. Files Changed (com dropdown de branch/estado) */}
-            <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+            <div className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleAccordion("changes")}
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
               >
-                <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-[#E5E7EB] font-mono text-[11px]">
                   {openAccordions.changes ? (
                     <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <GitPullRequest className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="font-semibold uppercase text-zinc-200">FILES CHANGED</span>
+                  <span className="font-semibold uppercase text-[#F3F4F6]">FILES CHANGED</span>
                   <span className="text-zinc-500">({String(changes.length).padStart(2, "0")})</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
+                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF] border border-white/[0.06]">
                     Uncommitted
                   </span>
                 </div>
@@ -536,7 +536,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                           >
                             {change.type}
                           </span>
-                          <span className="text-zinc-200 truncate">{change.path}</span>
+                          <span className="text-[#F3F4F6] truncate">{change.path}</span>
                         </div>
                         <span className="text-[10px] text-zinc-500 shrink-0 pl-2">
                           {change.status}
@@ -559,20 +559,20 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
 
             {/* 3. Artifacts (Renderiza apenas quando houver dados para evitar poluição visual de estados vazios rígidos) */}
             {artifacts.length > 0 && (
-              <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+              <div className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden">
                 <button
                   type="button"
                   onClick={() => toggleAccordion("artifacts")}
                   className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
                 >
-                  <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                  <div className="flex items-center gap-2 text-[#E5E7EB] font-mono text-[11px]">
                     {openAccordions.artifacts ? (
                       <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                     ) : (
                       <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                     )}
                     <BookOpen className="w-3.5 h-3.5 text-blue-400" />
-                    <span className="font-semibold uppercase text-zinc-200">ARTIFACTS</span>
+                    <span className="font-semibold uppercase text-[#F3F4F6]">ARTIFACTS</span>
                     <span className="text-zinc-500">({String(artifacts.length).padStart(2, "0")})</span>
                   </div>
                   <span className="text-[9px] font-mono text-zinc-500">docs / code</span>
@@ -587,12 +587,12 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                         className="p-1.5 rounded hover:bg-[#1F2430] transition cursor-pointer flex items-center justify-between font-mono text-[11px] group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="w-3.5 h-3.5 text-zinc-400 group-hover:text-blue-300 shrink-0" />
-                          <span className="text-zinc-200 group-hover:text-white truncate">
+                          <FileText className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-blue-300 shrink-0" />
+                          <span className="text-[#F3F4F6] group-hover:text-white truncate">
                             {art.name}
                           </span>
                         </div>
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 shrink-0">
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF] shrink-0">
                           {art.type}
                         </span>
                       </div>
@@ -612,20 +612,20 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             )}
 
             {/* 4. Uploads & Files Analyzed */}
-            <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+            <div className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleAccordion("files")}
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
               >
-                <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-[#E5E7EB] font-mono text-[11px]">
                   {openAccordions.files ? (
                     <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="font-semibold uppercase text-zinc-200">FILES ANALYZED</span>
+                  <span className="font-semibold uppercase text-[#F3F4F6]">FILES ANALYZED</span>
                   <span className="text-zinc-500 font-mono">({String(files.length).padStart(2, "0")})</span>
                 </div>
               </button>
@@ -644,7 +644,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <FileCode className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                          <span className="text-zinc-300 truncate" title={file.path}>
+                          <span className="text-[#E5E7EB] truncate" title={file.path}>
                             {file.name}
                           </span>
                         </div>
@@ -668,21 +668,21 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             </div>
 
             {/* 5. Background Tasks / Plano de Etapas */}
-            <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+            <div className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleAccordion("tasks")}
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
               >
-                <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-[#E5E7EB] font-mono text-[11px]">
                   {openAccordions.tasks ? (
                     <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
-                  <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="font-semibold uppercase text-zinc-200">PIPELINE</span>
-                  <span className="text-zinc-400 font-mono">
+                  <Clock className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                  <span className="font-semibold uppercase text-[#F3F4F6]">PIPELINE</span>
+                  <span className="text-[#9CA3AF] font-mono">
                     {completedTasks}/{tasks.length}
                   </span>
                 </div>
@@ -698,7 +698,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                     return (
                       <div
                         key={task.id}
-                        className="p-1.5 rounded bg-[#12151C]/60 flex items-start gap-2 font-mono text-[11px]"
+                        className="p-1.5 rounded bg-[#1E1E20]/60 flex items-start gap-2 font-mono text-[11px]"
                       >
                         <div className="shrink-0 mt-0.5">
                           {isSuccess ? (
@@ -715,10 +715,10 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                           <span
                             className={
                               isSuccess
-                                ? "text-zinc-400 line-through"
+                                ? "text-[#9CA3AF] line-through"
                                 : isFailed
                                 ? "text-rose-300 font-medium"
-                                : "text-zinc-200"
+                                : "text-[#F3F4F6]"
                             }
                           >
                             {task.title}
@@ -741,23 +741,23 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             </div>
 
             {/* 6. Terminals & Processos Ativos */}
-            <div className="rounded-lg border border-white/[0.06] bg-[#12151C] overflow-hidden">
+            <div className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggleAccordion("terminals")}
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/[0.02] transition cursor-pointer"
               >
-                <div className="flex items-center gap-2 text-zinc-300 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-[#E5E7EB] font-mono text-[11px]">
                   {openAccordions.terminals ? (
                     <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                   ) : (
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
                   )}
                   <Terminal className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="font-semibold uppercase text-zinc-200">TERMINALS</span>
+                  <span className="font-semibold uppercase text-[#F3F4F6]">TERMINALS</span>
                   <span className="text-zinc-500 font-mono">({String(terminals.length).padStart(2, "0")})</span>
                 </div>
-                <span className="text-[9.5px] font-mono uppercase px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
+                <span className="text-[9.5px] font-mono uppercase px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF] border border-white/[0.06]">
                   POWERSHELL.EXE
                 </span>
               </button>
@@ -773,7 +773,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                       }}
                       className="p-1.5 rounded hover:bg-[#1F2430] transition cursor-pointer flex items-center justify-between font-mono text-[11px]"
                     >
-                      <div className="min-w-0 flex-1 truncate text-zinc-300">
+                      <div className="min-w-0 flex-1 truncate text-[#E5E7EB]">
                         <span className="text-zinc-500 mr-1.5">$</span>
                         {term.command}
                       </div>
@@ -813,9 +813,9 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
           <div className="h-full flex flex-col md:flex-row bg-[#0A0B0E] divide-y md:divide-y-0 md:divide-x divide-white/[0.06]">
             {/* Coluna Esquerda: Lista de Arquivos Alterados */}
             <div className="w-full md:w-56 shrink-0 bg-[#0E0E10] flex flex-col">
-              <div className="p-2.5 border-b border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span className="font-semibold text-zinc-200">Uncommitted</span>
-                <span className="px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400">
+              <div className="p-2.5 border-b border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-[#9CA3AF]">
+                <span className="font-semibold text-[#F3F4F6]">Uncommitted</span>
+                <span className="px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF]">
                   {changes.length} arquivos
                 </span>
               </div>
@@ -829,7 +829,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                       className={`w-full p-2 rounded text-left font-mono text-[11px] transition flex items-center justify-between cursor-pointer ${
                         activeChange?.id === c.id
                           ? "bg-[#1F2430] text-white font-medium"
-                          : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.02]"
+                          : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.02]"
                       }`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -861,8 +861,8 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             <div className="flex-1 flex flex-col bg-[#0A0B0E] overflow-hidden">
               {activeChange ? (
                 <>
-                  <div className="h-10 px-3 border-b border-white/[0.06] bg-[#12151C] flex items-center justify-between text-xs font-mono">
-                    <span className="text-zinc-200 truncate">{activeChange.path}</span>
+                  <div className="h-10 px-3 border-b border-white/[0.06] bg-[#1E1E20] flex items-center justify-between text-xs font-mono">
+                    <span className="text-[#F3F4F6] truncate">{activeChange.path}</span>
                     {onReviewChange && activeChange.status === "pending_review" && (
                       <div className="flex items-center gap-2">
                         <button
@@ -884,7 +884,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 p-3 overflow-auto font-mono text-[11px] leading-relaxed text-zinc-300 space-y-0.5">
+                  <div className="flex-1 p-3 overflow-auto font-mono text-[11px] leading-relaxed text-[#E5E7EB] space-y-0.5">
                     {(activeChange.diff || activeChange.newContent || "")
                       .split("\n")
                       .map((line, idx) => {
@@ -898,7 +898,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                                 ? "bg-emerald-950/40 text-emerald-300"
                                 : isDel
                                 ? "bg-rose-950/40 text-rose-300"
-                                : "text-zinc-400"
+                                : "text-[#9CA3AF]"
                             }`}
                           >
                             <span className="text-zinc-600 select-none mr-2 w-6 inline-block text-right">
@@ -913,7 +913,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-500 space-y-2">
                   <FileCode className="w-8 h-8 text-zinc-700" />
-                  <p className="text-xs font-mono text-zinc-400">
+                  <p className="text-xs font-mono text-[#9CA3AF]">
                     Nenhuma alteração pendente para revisão
                   </p>
                   <p className="text-[11px] text-zinc-600 max-w-xs">
@@ -932,9 +932,9 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
           <div className="h-full flex flex-col md:flex-row bg-[#0A0B0E] divide-y md:divide-y-0 md:divide-x divide-white/[0.06]">
             {/* Coluna Esquerda: Sessões de Terminal */}
             <div className="w-full md:w-56 shrink-0 bg-[#0E0E10] flex flex-col">
-              <div className="p-2.5 border-b border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span className="font-semibold text-zinc-200">Sessões Locais</span>
-                <span className="px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400">
+              <div className="p-2.5 border-b border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-[#9CA3AF]">
+                <span className="font-semibold text-[#F3F4F6]">Sessões Locais</span>
+                <span className="px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF]">
                   {terminals.length}
                 </span>
               </div>
@@ -948,7 +948,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                       className={`w-full p-2 rounded text-left font-mono text-[11px] transition flex items-center justify-between cursor-pointer ${
                         activeTerminal?.id === t.id
                           ? "bg-[#1F2430] text-white font-medium"
-                          : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.02]"
+                          : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.02]"
                       }`}
                     >
                       <div className="truncate pr-1">
@@ -968,8 +968,8 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
 
             {/* Coluna Direita: Buffer xterm-style e Prompt de Entrada */}
             <div className="flex-1 flex flex-col bg-[#0A0B0E] overflow-hidden">
-              <div className="h-10 px-3 border-b border-white/[0.06] bg-[#12151C] flex items-center justify-between text-xs font-mono">
-                <div className="flex items-center gap-2 text-zinc-300 truncate">
+              <div className="h-10 px-3 border-b border-white/[0.06] bg-[#1E1E20] flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center gap-2 text-[#E5E7EB] truncate">
                   <Terminal className="w-3.5 h-3.5 text-indigo-400" />
                   <span className="truncate">{activeTerminal?.command || "PowerShell Windows"}</span>
                 </div>
@@ -977,7 +977,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   <button
                     type="button"
                     onClick={() => handleCopyDocument(activeTerminal.output)}
-                    className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+                    className="p-1 rounded text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
                     title="Copiar buffer"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -986,7 +986,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               </div>
 
               {/* Buffer do Terminal */}
-              <div className="flex-1 p-3 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-300 bg-[#0A0B0E] select-text whitespace-pre-wrap break-all">
+              <div className="flex-1 p-3 overflow-y-auto font-mono text-[11px] leading-relaxed text-[#E5E7EB] bg-[#0A0B0E] select-text whitespace-pre-wrap break-all">
                 {activeTerminal ? (
                   activeTerminal.output || "[Processo finalizado sem saída de texto]"
                 ) : (
@@ -997,7 +997,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
               </div>
 
               {/* Input Interativo no Rodapé */}
-              <div className="p-2 border-t border-white/[0.06] bg-[#12151C] flex items-center gap-2 font-mono text-xs">
+              <div className="p-2 border-t border-white/[0.06] bg-[#1E1E20] flex items-center gap-2 font-mono text-xs">
                 <span className="text-indigo-400 font-bold select-none text-[11px]">
                   PS&gt;
                 </span>
@@ -1013,7 +1013,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   }}
                   disabled={isExecutingCli}
                   placeholder="Execute um comando no Windows (ex: dir, git status)..."
-                  className="flex-1 bg-transparent text-zinc-200 placeholder:text-zinc-600 focus:outline-none text-[11px]"
+                  className="flex-1 bg-transparent text-[#F3F4F6] placeholder:text-zinc-600 focus:outline-none text-[11px]"
                 />
                 <button
                   type="button"
@@ -1033,22 +1033,22 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             MODO C: VISUALIZADOR DE ARTEFATOS / MARKDOWN COM BUSCA
             ========================================================= */}
         {activeArtifact && (activeTab === "artifact" || selectedArtifactId !== null) && (
-          <div className="h-full flex flex-col bg-[#090A0F] overflow-hidden">
+          <div className="h-full flex flex-col bg-[#161618] overflow-hidden">
             {/* Barra de Ações Rápidas do Documento */}
-            <div className="h-10 px-3 bg-[#12151C] border-b border-white/[0.06] flex items-center justify-between text-xs font-mono shrink-0">
+            <div className="h-10 px-3 bg-[#1E1E20] border-b border-white/[0.06] flex items-center justify-between text-xs font-mono shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <button
                   type="button"
                   onClick={handleCloseArtifact}
-                  className="text-zinc-400 hover:text-white transition cursor-pointer text-[11px] hover:underline flex items-center gap-1"
+                  className="text-[#9CA3AF] hover:text-white transition cursor-pointer text-[11px] hover:underline flex items-center gap-1"
                 >
                   <span>← Hub</span>
                 </button>
                 <span className="text-zinc-600">/</span>
-                <span className="font-semibold text-zinc-200 truncate max-w-[140px]">
+                <span className="font-semibold text-[#F3F4F6] truncate max-w-[140px]">
                   {activeArtifact.name}
                 </span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF] border border-white/[0.06]">
                   {activeArtifact.type}
                 </span>
               </div>
@@ -1062,7 +1062,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                     value={docSearchQuery}
                     onChange={(e) => setDocSearchQuery(e.target.value)}
                     placeholder="Filtrar..."
-                    className="w-24 focus:w-36 transition-all pl-6 pr-2 py-0.5 rounded bg-black/40 border border-white/[0.06] text-[10px] text-zinc-300 placeholder:text-zinc-600 focus:outline-none"
+                    className="w-24 focus:w-36 transition-all pl-6 pr-2 py-0.5 rounded bg-black/40 border border-white/[0.06] text-[10px] text-[#E5E7EB] placeholder:text-zinc-600 focus:outline-none"
                   />
                 </div>
 
@@ -1070,7 +1070,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   type="button"
                   onClick={() => handleCopyDocument(activeArtifact.content)}
                   title="Copiar conteúdo"
-                  className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+                  className="p-1 rounded text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
                 >
                   {docCopied ? (
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -1083,7 +1083,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
                   type="button"
                   onClick={() => handleDownloadDocument(activeArtifact)}
                   title="Exportar documento"
-                  className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition cursor-pointer"
+                  className="p-1 rounded text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04] transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                 </button>
@@ -1091,7 +1091,7 @@ export const AgentSidePanel: React.FC<AgentSidePanelProps> = ({
             </div>
 
             {/* Área de Leitura Fluida */}
-            <div className="flex-1 p-4 overflow-y-auto font-sans leading-relaxed text-zinc-200 text-xs select-text">
+            <div className="flex-1 p-4 overflow-y-auto font-sans leading-relaxed text-[#F3F4F6] text-xs select-text">
               <div className="max-w-none prose prose-invert prose-xs space-y-2">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}

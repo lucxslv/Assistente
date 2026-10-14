@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   RefreshCw,
@@ -221,9 +221,9 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
   );
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 h-full bg-[#0A0B0E] text-[#F3F4F6] overflow-y-auto font-sans select-none">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full bg-[#161618] text-[#F3F4F6] overflow-hidden font-sans select-none">
       {/* Top Header Bar */}
-      <header className="h-16 border-b border-white/[0.06] bg-[#0E0F12]/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 flex-shrink-0">
+      <header className="min-h-[56px] border-b border-white/[0.06] bg-[#161618] px-4 sm:px-6 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToChat}
@@ -237,8 +237,8 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
           <div className="h-5 w-[1px] bg-white/[0.08] hidden sm:block" />
 
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-1 flex-shrink-0 shadow-sm">
-              <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
+            <div className="w-8 h-8 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-1.5 flex-shrink-0">
+              <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain object-center" />
             </div>
             <div>
               <h1 className="text-sm font-semibold tracking-tight text-[#F3F4F6] flex items-center gap-2">
@@ -289,7 +289,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
             <button
               onClick={() => handleExport('json')}
               disabled={isExporting}
-              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/20 text-xs font-medium text-primary transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+              className="px-2.5 sm:px-3 py-1.5 rounded-full bg-white text-black hover:bg-white/90 text-xs font-medium transition-colors cursor-pointer/10 hover:bg-primary/20 border border-primary/20 text-xs font-medium text-primary transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
               title="Exportar todos os registros em JSON"
             >
               <FileJson className="w-3.5 h-3.5" />
@@ -300,11 +300,11 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
       </header>
 
       {/* Main Container */}
-      <div className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-auto touch-pan-y p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
         {/* Metric Cards Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Gasto Total USD */}
-          <div className="bg-[#111317] border border-white/[0.08] rounded-xl p-4 sm:p-5 relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+          <div className="bg-[#1E1E20] border border-white/[0.06] rounded-[14px] p-4 sm:p-5 relative overflow-hidden group hover:border-white/[0.10] transition-colors">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-[#9CA3AF] tracking-wide uppercase">Custo Total (USD)</span>
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -321,7 +321,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
           </div>
 
           {/* Card 2: Total de Requisições */}
-          <div className="bg-[#111317] border border-white/[0.08] rounded-xl p-4 sm:p-5 relative overflow-hidden group hover:border-primary/30 transition-colors">
+          <div className="bg-[#1E1E20] border border-white/[0.06] rounded-[14px] p-4 sm:p-5 relative overflow-hidden group hover:border-white/[0.10] transition-colors">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-[#9CA3AF] tracking-wide uppercase">Total de Interações</span>
               <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
@@ -338,7 +338,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
           </div>
 
           {/* Card 3: Total Tokens */}
-          <div className="bg-[#111317] border border-white/[0.08] rounded-xl p-4 sm:p-5 relative overflow-hidden group hover:border-blue-500/30 transition-colors">
+          <div className="bg-[#1E1E20] border border-white/[0.06] rounded-[14px] p-4 sm:p-5 relative overflow-hidden group hover:border-white/[0.10] transition-colors">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-[#9CA3AF] tracking-wide uppercase">Tokens Processados</span>
               <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
@@ -355,7 +355,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
           </div>
 
           {/* Card 4: Usuários Testadores */}
-          <div className="bg-[#111317] border border-white/[0.08] rounded-xl p-4 sm:p-5 relative overflow-hidden group hover:border-amber-500/30 transition-colors">
+          <div className="bg-[#1E1E20] border border-white/[0.06] rounded-[14px] p-4 sm:p-5 relative overflow-hidden group hover:border-white/[0.10] transition-colors">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-[#9CA3AF] tracking-wide uppercase">Amigos / Testadores</span>
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
@@ -374,12 +374,12 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
 
         {/* View Mode Toggle: [Conversas por Amigo] vs [Logs Brutos] */}
         <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#111317] border border-white/[0.08]">
+          <div className="flex items-center gap-1.5 p-1 rounded-[14px] bg-[#1E1E20] border border-white/[0.08]">
             <button
               onClick={() => setActiveTab('users')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'users'
-                  ? 'bg-primary text-white shadow-md'
+                  ? 'bg-white text-black'
                   : 'text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]'
               }`}
             >
@@ -391,7 +391,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
               onClick={() => setActiveTab('raw_logs')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'raw_logs'
-                  ? 'bg-primary text-white shadow-md'
+                  ? 'bg-white text-black'
                   : 'text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]'
               }`}
             >
@@ -408,7 +408,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
 
         {/* Error Notification */}
         {error && (
-          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+          <div className="p-3 rounded-[10px] bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -418,9 +418,9 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
         {activeTab === 'users' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             {/* Left Pane: AMIGOS / USUÁRIOS (Directory) */}
-            <div className="lg:col-span-4 bg-[#111317] border border-white/[0.08] rounded-xl overflow-hidden flex flex-col max-h-[750px] sticky top-20">
+            <div className="lg:col-span-4 bg-[#1E1E20] border border-white/[0.06] rounded-[14px] overflow-hidden flex flex-col min-h-0 max-h-[60vh] lg:max-h-[720px] lg:sticky lg:top-4 self-start">
               {/* Directory Header */}
-              <div className="p-3.5 border-b border-white/[0.06] bg-[#14171E]/60 space-y-2.5">
+              <div className="p-3.5 border-b border-white/[0.06] bg-[#1E1E20] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold text-[#D1D5DB] tracking-wide uppercase flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-primary" />
@@ -439,13 +439,13 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                     placeholder="Filtrar por e-mail..."
                     value={userSearchQuery}
                     onChange={(e) => setUserSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-[#0E0F12] border border-white/[0.08] rounded-lg text-[#F3F4F6] placeholder-[#6B7280] focus:outline-none focus:border-primary/50"
+                    className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-[#1A1A1E] border border-white/[0.06] rounded-full text-white placeholder:text-white/35 text-[13px] focus:outline-none focus:border-white/15"
                   />
                 </div>
               </div>
 
               {/* Users List */}
-              <div className="overflow-y-auto divide-y divide-white/[0.04] p-1.5">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-auto touch-pan-y divide-y divide-white/[0.04] p-1.5">
                 {isLoadingUsers ? (
                   <div className="py-12 text-center text-xs text-[#9CA3AF] flex flex-col items-center gap-2">
                     <RefreshCw className="w-4 h-4 animate-spin text-primary" />
@@ -499,9 +499,9 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
             </div>
 
             {/* Right Pane: CONVERSAS DO USUÁRIO SELECIONADO */}
-            <div className="lg:col-span-8 bg-[#111317] border border-white/[0.08] rounded-xl overflow-hidden flex flex-col min-h-[500px]">
+            <div className="lg:col-span-8 bg-[#1E1E20] border border-white/[0.06] rounded-[14px] overflow-hidden flex flex-col min-h-0 min-h-[480px] lg:min-h-[600px]">
               {/* Header of Selected User */}
-              <div className="p-4 border-b border-white/[0.06] bg-[#14171E]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-4 border-b border-white/[0.06] bg-[#1E1E20] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="min-w-0">
                   <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wider block">
                     Conversas do Usuário Selecionado
@@ -543,7 +543,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
               </div>
 
               {/* Sessions Dialogue Flow */}
-              <div className="p-4 sm:p-5 overflow-y-auto space-y-6 flex-1">
+              <div className="p-4 sm:p-5 overflow-y-auto audit-scroll space-y-6 flex-1 min-h-0">
                 {isLoadingConversations ? (
                   <div className="py-24 text-center text-xs text-[#9CA3AF] flex flex-col items-center gap-2">
                     <RefreshCw className="w-6 h-6 animate-spin text-primary" />
@@ -557,10 +557,10 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                   selectedUserData.sessions.map((session, sIdx) => (
                     <div
                       key={session.session_id || sIdx}
-                      className="border border-white/[0.08] rounded-xl bg-[#0E0F12]/80 overflow-hidden shadow-sm"
+                      className="border border-white/[0.08] rounded-[14px] bg-[#1E1E20] overflow-hidden shadow-sm"
                     >
                       {/* Session Header Card */}
-                      <div className="px-4 py-2.5 bg-[#14171E] border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="px-4 py-2.5 bg-[#222224] border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5 text-primary" />
                           <span className="font-semibold text-[#F3F4F6]">
@@ -593,7 +593,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                         {session.messages.map((msg) => (
                           <div
                             key={msg.id}
-                            className="rounded-xl border border-white/[0.06] bg-[#111317] overflow-hidden space-y-2 p-3 text-xs"
+                            className="rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden space-y-2 p-3 text-xs"
                           >
                             {/* 👤 Amigo Prompt */}
                             <div className="space-y-1">
@@ -632,7 +632,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                               <div className="flex items-center justify-between text-[11px] text-[#9CA3AF]">
                                 <span className="font-bold text-primary flex items-center gap-1.5">
                                   <div className="w-4 h-4 rounded bg-black border border-white/[0.1] flex items-center justify-center overflow-hidden p-0.5 flex-shrink-0">
-                                    <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
+                                    <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain object-center" />
                                   </div>
                                   <span>Charlie:</span>
                                 </span>
@@ -670,7 +670,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
 
         {/* TAB 2: RAW LOGS TABLE (VISÃO GERAL DETALHADA) */}
         {activeTab === 'raw_logs' && (
-          <div className="bg-[#111317] border border-white/[0.08] rounded-xl p-4 sm:p-5 space-y-4">
+          <div className="bg-[#1E1E20] border border-white/[0.06] rounded-[14px] p-4 sm:p-5 space-y-4">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-[#F3F4F6] flex items-center gap-2">
@@ -698,7 +698,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                     placeholder="Buscar texto ou email..."
                     value={rawSearchQuery}
                     onChange={(e) => setRawSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#0E0F12] border border-white/[0.08] rounded-lg text-[#F3F4F6] placeholder-[#6B7280] focus:outline-none focus:border-primary/50"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#1A1A1E] border border-white/[0.06] rounded-full text-white placeholder:text-white/35 text-[13px] focus:outline-none focus:border-white/15"
                   />
                 </div>
 
@@ -708,7 +708,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                     setSelectedModel(e.target.value);
                     setPage(1);
                   }}
-                  className="py-1.5 px-2.5 text-xs bg-[#0E0F12] border border-white/[0.08] rounded-lg text-[#F3F4F6] focus:outline-none focus:border-primary/50 cursor-pointer"
+                  className="py-1.5 px-2.5 text-xs bg-[#1A1A1E] border border-white/[0.06] rounded-lg text-[#F3F4F6] focus:outline-none focus:border-white/15 cursor-pointer"
                 >
                   <option value="">Todos os Modelos</option>
                   <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
@@ -721,7 +721,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
 
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-medium transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-full bg-white text-black hover:bg-white/90 text-xs font-medium transition-colors cursor-pointer hover:bg-primary-hover text-white text-xs font-medium transition-colors cursor-pointer"
                 >
                   Filtrar
                 </button>
@@ -738,7 +738,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                 Nenhuma interação encontrada.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overscroll-auto touch-pan-x touch-pan-y">
                 <table className="w-full text-left text-xs font-sans">
                   <thead>
                     <tr className="border-b border-white/[0.06] text-[#9CA3AF]">
@@ -857,7 +857,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
       >
         {selectedLog && (
           <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1 text-xs">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-lg bg-[#0E0F12] border border-white/[0.06]">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-lg bg-[#1A1A1E] border border-white/[0.06]">
               <div>
                 <span className="text-[10px] text-[#6B7280] block uppercase">Usuário</span>
                 <span className="text-[#F3F4F6] font-medium truncate block">{selectedLog.user_email}</span>
@@ -882,7 +882,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
               <span className="text-xs font-semibold text-[#D1D5DB] uppercase tracking-wide">
                 Prompt do Usuário
               </span>
-              <div className="p-3 rounded-lg bg-[#0E0F12] border border-white/[0.06] font-mono text-[11px] text-[#E5E7EB] whitespace-pre-wrap select-text max-h-48 overflow-y-auto">
+              <div className="p-3 rounded-lg bg-[#1A1A1E] border border-white/[0.06] font-mono text-[11px] text-[#E5E7EB] whitespace-pre-wrap select-text max-h-48 overflow-y-auto overscroll-auto touch-pan-y">
                 {selectedLog.user_prompt}
               </div>
             </div>
@@ -894,7 +894,7 @@ export const AuditDashboard: React.FC<AuditDashboardProps> = ({ onBackToChat }) 
                   {selectedLog.model_name}
                 </Badge>
               </span>
-              <div className="p-3 rounded-lg bg-[#0E0F12] border border-white/[0.06] font-mono text-[11px] text-[#D1D5DB] whitespace-pre-wrap select-text max-h-64 overflow-y-auto">
+              <div className="p-3 rounded-lg bg-[#1A1A1E] border border-white/[0.06] font-mono text-[11px] text-[#D1D5DB] whitespace-pre-wrap select-text max-h-64 overflow-y-auto overscroll-auto touch-pan-y">
                 {selectedLog.model_response}
               </div>
             </div>

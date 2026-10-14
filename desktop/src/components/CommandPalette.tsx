@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Settings as SettingsIcon,
@@ -244,12 +244,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl bg-card/90 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col backdrop-blur-2xl ring-1 ring-white/10 animate-scale-in"
+        className="w-full max-w-xl bg-[#0E0E10] border border-white/[0.07] rounded-[18px] shadow-[0_16px_64px_-12px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col animate-scale-in"
       >
         {/* Barra de Busca Minimalista Estilo Raycast / Spotlight */}
-        <div className="flex items-center px-4 py-3.5 border-b border-border/50 gap-3 bg-card/40">
-          <div className="w-7 h-7 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center shrink-0 overflow-hidden p-1 shadow-sm">
-            <img src="/charlie-logo.svg" alt="Charlie" className="w-full h-full object-contain" />
+        <div className="flex items-center px-4 py-3.5 border-b border-white/[0.06] gap-3 bg-[#0E0E10]">
+          <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center shrink-0 overflow-hidden p-1.5">
+            <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain object-center" />
           </div>
           <input
             ref={inputRef}
@@ -280,10 +280,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   key={action.id}
                   onClick={() => action.run()}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-[14px] cursor-pointer transition-all ${
                     isSelected
-                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                      : "text-foreground hover:bg-muted/40"
+                      ? "bg-white text-black shadow-sm"
+                      : "text-white hover:bg-white/[0.06]"
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -331,7 +331,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Rodapé Informativo */}
-        <div className="px-4 py-2 bg-card/60 border-t border-border/40 flex items-center justify-between text-[10.5px] text-muted-foreground/70 select-none">
+        <div className="px-4 py-2 bg-[#0E0E10] border-t border-white/[0.06] flex items-center justify-between text-[10.5px] text-white/40 select-none">
           <span className="flex items-center gap-1.5">
             <kbd className="px-1 py-0.2 bg-muted/60 rounded text-[9px] font-mono">↑</kbd>
             <kbd className="px-1 py-0.2 bg-muted/60 rounded text-[9px] font-mono">↓</kbd>

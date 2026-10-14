@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect } from 'react';
 import { Sparkles, Code, Brain, PenTool, HelpCircle } from 'lucide-react';
 import { Message, CharlieAIStatus } from '../../types/chat';
 import { MessageItem } from './MessageItem';
@@ -67,8 +67,8 @@ export const MessageFeed: React.FC<MessageFeedProps> = ({
         {messages.length === 0 ? (
           <div className="min-h-full flex flex-col items-center justify-center max-w-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 text-center animate-fade-in">
             {/* Center Logo Icon */}
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-black border border-white/[0.08] flex items-center justify-center shadow-glow mb-4 sm:mb-6 overflow-hidden p-2">
-              <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain" />
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-2.5 mb-4 sm:mb-6 shadow-glow-sm">
+              <img src="/logo.png" alt="Charlie Logo" className="w-full h-full object-contain object-center" />
             </div>
 
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#F3F4F6] mb-1.5 sm:mb-2">

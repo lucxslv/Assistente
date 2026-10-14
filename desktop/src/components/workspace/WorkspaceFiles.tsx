@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { AgentFile, AgentFileCategory } from "../../types";
 import {
   Folder,
@@ -73,13 +73,13 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[#090A0F] text-[#F2F3F5]">
+    <div className="flex h-full w-full overflow-hidden bg-[#161618] text-[#F2F3F5]">
       {/* ================= Coluna Principal: Navegador de Arquivos ================= */}
       <div className="flex-1 flex flex-col h-full border-r border-white/[0.08]">
         {/* Barra Superior de Busca e Filtros */}
-        <div className="p-4 border-b border-white/[0.08] bg-[#12151C]/50 space-y-3">
+        <div className="p-4 border-b border-white/[0.08] bg-[#1E1E20]/50 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono">
+            <h3 className="text-xs font-semibold text-[#F3F4F6] uppercase tracking-wider font-mono">
               Arquivos da Sessão ({files.length})
             </h3>
             <div className="text-xs text-zinc-500 font-mono">
@@ -95,7 +95,7 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar arquivos ou caminhos..."
-                className="w-full bg-[#090A0F] text-xs text-zinc-200 placeholder-zinc-500 rounded-lg pl-8 pr-3 py-1.5 border border-white/[0.08] focus:outline-none focus:border-zinc-500"
+                className="w-full bg-[#161618] text-xs text-[#F3F4F6] placeholder-zinc-500 rounded-[14px] pl-8 pr-3 py-1.5 border border-white/[0.08] focus:outline-none focus:border-zinc-500"
               />
             </div>
 
@@ -113,7 +113,7 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                     className={`px-2.5 py-1 rounded-md text-[11px] font-mono transition flex items-center gap-1.5 cursor-pointer border ${
                       active
                         ? "bg-white/[0.12] text-zinc-100 border-white/[0.2]"
-                        : "bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:bg-white/[0.06]"
+                        : "bg-white/[0.03] text-[#9CA3AF] border-white/[0.06] hover:bg-white/[0.06]"
                     }`}
                   >
                     <span>{c.label}</span>
@@ -145,9 +145,9 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <File className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                    <File className="w-4 h-4 text-[#9CA3AF] flex-shrink-0" />
                     <div className="truncate">
-                      <div className="text-xs font-mono text-zinc-200 truncate">{file.name}</div>
+                      <div className="text-xs font-mono text-[#F3F4F6] truncate">{file.name}</div>
                       <div className="text-[11px] font-mono text-zinc-500 truncate">{file.path}</div>
                     </div>
                   </div>
@@ -174,17 +174,17 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
       </div>
 
       {/* ================= Painel Direito: Detalhes & Prévia do Arquivo ================= */}
-      <div className="w-96 flex flex-col h-full bg-[#12151C]/40 overflow-hidden">
+      <div className="w-96 flex flex-col h-full bg-[#1E1E20]/40 overflow-hidden">
         {selectedFile ? (
           <div className="flex flex-col h-full">
             <div className="p-4 border-b border-white/[0.08] flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-300 font-mono uppercase tracking-wider">
+              <span className="text-xs font-semibold text-[#E5E7EB] font-mono uppercase tracking-wider">
                 Detalhes do Arquivo
               </span>
               <button
                 type="button"
                 onClick={() => handleCopyPath(selectedFile.path)}
-                className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition"
+                className="text-xs text-[#9CA3AF] hover:text-[#F3F4F6] flex items-center gap-1 transition"
                 title="Copiar caminho completo"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -197,7 +197,7 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                 <label className="text-[10px] uppercase font-mono text-zinc-500 block mb-1">
                   Nome do Arquivo
                 </label>
-                <div className="text-xs font-mono text-zinc-200 font-medium">
+                <div className="text-xs font-mono text-[#F3F4F6] font-medium">
                   {selectedFile.name}
                 </div>
               </div>
@@ -206,7 +206,7 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                 <label className="text-[10px] uppercase font-mono text-zinc-500 block mb-1">
                   Caminho no Disco
                 </label>
-                <div className="text-xs font-mono text-zinc-400 break-all p-2 rounded bg-[#090A0F] border border-white/[0.06]">
+                <div className="text-xs font-mono text-[#9CA3AF] break-all p-2 rounded bg-[#161618] border border-white/[0.06]">
                   {selectedFile.path}
                 </div>
               </div>
@@ -229,7 +229,7 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                     <label className="text-[10px] uppercase font-mono text-zinc-500 block mb-1">
                       Tamanho
                     </label>
-                    <div className="text-xs font-mono text-zinc-300">
+                    <div className="text-xs font-mono text-[#E5E7EB]">
                       {selectedFile.size} bytes
                     </div>
                   </div>
@@ -241,7 +241,7 @@ export const WorkspaceFiles: React.FC<WorkspaceFilesProps> = ({ files }) => {
                   <label className="text-[10px] uppercase font-mono text-zinc-500 block mb-1">
                     Prévia do Conteúdo
                   </label>
-                  <pre className="text-xs font-mono text-zinc-300 bg-[#090A0F] border border-white/[0.08] rounded-lg p-3 whitespace-pre-wrap max-h-60 overflow-y-auto leading-relaxed select-text">
+                  <pre className="text-xs font-mono text-[#E5E7EB] bg-[#161618] border border-white/[0.08] rounded-[14px] p-3 whitespace-pre-wrap max-h-60 overflow-y-auto leading-relaxed select-text">
                     {selectedFile.contentPreview}
                   </pre>
                 </div>

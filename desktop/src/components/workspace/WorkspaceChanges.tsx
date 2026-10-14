@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { AgentChange, ChangeReviewStatus } from "../../types";
 import {
   GitCommit,
@@ -76,24 +76,24 @@ export const WorkspaceChanges: React.FC<WorkspaceChangesProps> = ({
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[#090A0F] text-[#F2F3F5]">
+    <div className="flex h-full w-full overflow-hidden bg-[#161618] text-[#F2F3F5]">
       {/* ================= Painel Esquerdo: Lista de Arquivos Alterados (Change Set) ================= */}
-      <div className="w-80 border-r border-white/[0.08] bg-[#12151C]/60 flex flex-col h-full">
+      <div className="w-80 border-r border-white/[0.08] bg-[#1E1E20]/60 flex flex-col h-full">
         {/* Cabeçalho do Change Set */}
         <div className="p-4 border-b border-white/[0.08] space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GitCommit className="w-4 h-4 text-slate-400" />
-              <h3 className="text-xs font-semibold text-zinc-200 uppercase font-mono tracking-wider">
+              <h3 className="text-xs font-semibold text-[#F3F4F6] uppercase font-mono tracking-wider">
                 Conjunto de Mudanças
               </h3>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.08]">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/[0.04] text-[#9CA3AF] border border-white/[0.08]">
               {changes.length} arquivos
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono">
+          <div className="flex items-center gap-2 text-[11px] text-[#9CA3AF] font-mono">
             <span>{modifiedCount} modificados</span>
             <span>•</span>
             <span>{addedCount} adicionados</span>
@@ -124,7 +124,7 @@ export const WorkspaceChanges: React.FC<WorkspaceChangesProps> = ({
                 >
                   <div className="mt-0.5">{renderTypeBadge(chg.type)}</div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-mono text-zinc-200 truncate">
+                    <div className="text-xs font-mono text-[#F3F4F6] truncate">
                       {chg.path}
                     </div>
                     <div className="mt-1 flex items-center justify-between">
@@ -139,11 +139,11 @@ export const WorkspaceChanges: React.FC<WorkspaceChangesProps> = ({
       </div>
 
       {/* ================= Painel Direito: Visualizador Unificado de Diff ================= */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#090A0F]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#161618]">
         {selectedChange ? (
           <>
             {/* Header do Diff */}
-            <div className="px-6 py-3.5 border-b border-white/[0.08] bg-[#12151C]/40 flex flex-wrap items-center justify-between gap-4">
+            <div className="px-6 py-3.5 border-b border-white/[0.08] bg-[#1E1E20]/40 flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 {renderTypeBadge(selectedChange.type)}
                 <div>
@@ -186,7 +186,7 @@ export const WorkspaceChanges: React.FC<WorkspaceChangesProps> = ({
             {/* Visualizador de Diff Linha a Linha */}
             <div className="flex-1 overflow-y-auto p-6 font-mono text-xs select-text">
               <div className="max-w-5xl mx-auto rounded-xl border border-white/[0.08] bg-[#0C0D12] overflow-hidden shadow-sm">
-                <div className="px-4 py-2 border-b border-white/[0.06] bg-white/[0.02] text-zinc-400 flex items-center justify-between text-[11px]">
+                <div className="px-4 py-2 border-b border-white/[0.06] bg-white/[0.02] text-[#9CA3AF] flex items-center justify-between text-[11px]">
                   <span>Diff Unificado</span>
                   <span>Codificação UTF-8</span>
                 </div>
@@ -244,7 +244,7 @@ export const WorkspaceChanges: React.FC<WorkspaceChangesProps> = ({
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-2">
             <GitCommit className="w-10 h-10 text-zinc-600 mb-2" />
-            <h4 className="text-sm font-medium text-zinc-400">Nenhuma alteração selecionada</h4>
+            <h4 className="text-sm font-medium text-[#9CA3AF]">Nenhuma alteração selecionada</h4>
             <p className="text-xs max-w-sm">
               Quando o agente editar ou criar arquivos, você poderá revisar linha a linha com poder de aceitar ou reverter com segurança.
             </p>
