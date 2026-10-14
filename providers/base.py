@@ -41,9 +41,14 @@ class BaseLLMProvider(ABC):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model_override: Optional[str] = None,
+        cancel_event: Optional[Any] = None,
     ) -> AsyncGenerator[StreamChunk, None]:
         """Gera chunks de resposta em streaming. Pode ser sobrescrito pelo provedor."""
+        if cancel_event and getattr(cancel_event, "is_set", lambda: False)():
+            return
         response = await self.chat(system_prompt, messages, tools, model_override=model_override)
+        if cancel_event and getattr(cancel_event, "is_set", lambda: False)():
+            return
         yield StreamChunk(text=response.content, tool_calls=response.tool_calls, is_done=True)
 
     async def generate(

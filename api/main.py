@@ -112,15 +112,15 @@ async def root():
 @app.get("/health")
 @app.get("/api/health")
 async def health_check():
-    """Healthcheck rápido e diagnóstico."""
-    from api.db import get_or_init_db_pool, get_last_db_error
+    """Healthcheck rápido e diagnóstico público seguro (sem vazar erros internos de infraestrutura)."""
+    from api.db import get_or_init_db_pool
     pool = await get_or_init_db_pool()
     return {
         "status": "ok",
         "service": "charlie-api",
         "version": "2.0.0",
         "database_connected": pool is not None,
-        "database_error": get_last_db_error(),
+        "database_status": "connected" if pool is not None else "unavailable",
     }
 
 

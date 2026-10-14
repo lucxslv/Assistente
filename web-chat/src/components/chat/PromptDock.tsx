@@ -17,8 +17,8 @@ interface PromptDockProps {
   isKeyboardOpen?: boolean;
 }
 
-const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-const MAX_DOC_SIZE_BYTES = 2 * 1024 * 1024;    // 2 MB
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_DOC_SIZE_BYTES = 2 * 1024 * 1024;
 const MAX_ATTACHMENTS = 5;
 
 export const PromptDock: React.FC<PromptDockProps> = ({
@@ -36,7 +36,6 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auto-resize textarea to fit text up to 5 lines (~140px on mobile, ~180px on desktop)
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -52,68 +51,69 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     adjustHeight();
   }, [value, adjustHeight]);
 
+  useEffect(() => {
+    const handleFocusShortcut = () => {
+      textareaRef.current?.focus();
+    };
+    window.addEventListener('charlie:focus-prompt', handleFocusShortcut);
+    return () => window.removeEventListener('charlie:focus-prompt', handleFocusShortcut);
+  }, []);
+
   const handleProcessFiles = useCallback(
     async (files: FileList | File[]) => {
       setValidationError(null);
-
       if (attachments.length + files.length > MAX_ATTACHMENTS) {
         setValidationError(`Limite de no máximo ${MAX_ATTACHMENTS} anexos por mensagem.`);
         hapticFeedback.warning();
         return;
       }
-
       const newAttachments: FileAttachment[] = [];
-
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const isImg = file.type.startsWith('image/');
-
-        // Validação estrita de tamanho
+        const lowerName = file.name.toLowerCase();
+        const isBinaryPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
         if (isImg && file.size > MAX_IMAGE_SIZE_BYTES) {
           setValidationError(`A imagem "${file.name}" excede o limite máximo de 10 MB.`);
           hapticFeedback.warning();
           continue;
         }
-
         if (!isImg && file.size > MAX_DOC_SIZE_BYTES) {
           setValidationError(`O arquivo "${file.name}" excede o limite máximo de 2 MB.`);
           hapticFeedback.warning();
           continue;
         }
-
         const attachmentId = generateUUID();
         const attachment: FileAttachment = {
           id: attachmentId,
           name: file.name,
           size: file.size,
-          type: file.type,
+          type: file.type || 'application/octet-stream',
           isImage: isImg,
         };
-
         if (isImg) {
-          // Ler DataURL
           const dataUrl = await new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve((e.target?.result as string) || '');
             reader.readAsDataURL(file);
           });
           attachment.dataUrl = dataUrl;
-
-          // Salva no cache IndexedDB em segundo plano
           mediaDb.saveMedia(attachmentId, dataUrl, file.type);
-        } else {
-          // Arquivos de texto ou código
+        } else if (!isBinaryPdf) {
           try {
-            const text = await file.text();
-            attachment.textPreview = text.slice(0, 15000);
+            const rawText = await file.text();
+            const sanitized = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').slice(0, 15000);
+            if (sanitized.trim()) {
+              attachment.textPreview = sanitized;
+              attachment.extractedText = sanitized;
+              attachment.has_extracted_text = true;
+            }
           } catch {
             // Binário não textual
           }
         }
-
         newAttachments.push(attachment);
       }
-
       if (newAttachments.length > 0) {
         hapticFeedback.light();
         setAttachments((prev) => [...prev, ...newAttachments]);
@@ -122,7 +122,6 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     [attachments.length]
   );
 
-  // Handle paste events (e.g. pasted screenshots)
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const items = e.clipboardData.items;
@@ -141,16 +140,13 @@ export const PromptDock: React.FC<PromptDockProps> = ({
     [handleProcessFiles]
   );
 
-  // Drag & drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
   };
-
   const handleDragLeave = () => {
     setIsDragging(false);
   };
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -172,10 +168,8 @@ export const PromptDock: React.FC<PromptDockProps> = ({
       onStop();
       return;
     }
-
     const trimmed = value.trim();
     if (!trimmed && attachments.length === 0) return;
-
     hapticFeedback.light();
     onSend(trimmed, attachments);
     setAttachments([]);
@@ -196,7 +190,6 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   const canSend = value.trim().length > 0 || attachments.length > 0;
 
   const handleFocus = () => {
-    // Mantém window no topo sem deslocar cabeçalho
     if (typeof window !== 'undefined') {
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
@@ -210,23 +203,19 @@ export const PromptDock: React.FC<PromptDockProps> = ({
   return (
     <div
       className={cn(
-        'w-full max-w-4xl mx-auto px-2.5 sm:px-4 pt-1 flex-shrink-0 transition-all duration-150',
+        'w-full max-w-4xl mx-auto px-3 sm:px-6 pt-2 flex-shrink-0',
         isKeyboardOpen
-          ? 'pb-[max(0.625rem,env(safe-area-inset-bottom,0px))] sm:pb-3'
-          : 'pb-[max(1.5rem,calc(env(safe-area-inset-bottom,0px)+1rem))] sm:pb-3'
+          ? 'pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:pb-3'
+          : 'pb-[max(1rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] sm:pb-4'
       )}
     >
-      {/* Alerta de Validação de Anexo */}
       {validationError && (
-        <div className="mb-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between animate-slide-up">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>{validationError}</span>
-          </div>
-          <button
-            onClick={() => setValidationError(null)}
-            className="p-1 hover:text-white cursor-pointer"
-          >
+        <div className="mb-2 px-3 py-2 rounded-[12px] bg-amber-500/10 border border-amber-500/15 text-xs text-amber-300 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            {validationError}
+          </span>
+          <button onClick={() => setValidationError(null)} className="p-1 hover:text-white cursor-pointer">
             <X className="w-3 h-3" />
           </button>
         </div>
@@ -236,23 +225,18 @@ export const PromptDock: React.FC<PromptDockProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative flex flex-col rounded-2xl sm:rounded-xl bg-[#0E0F12] border transition-all duration-150 ${
-          isDragging
-            ? 'border-primary shadow-glow bg-[#13151D]'
-            : 'border-white/[0.08] hover:border-white/[0.12] focus-within:border-primary/50 focus-within:shadow-glow-sm'
+        className={`relative flex flex-col rounded-[14px] border bg-[#1E1E20] transition-colors ${
+          isDragging ? 'border-white/[0.14] bg-[#222224]' : 'border-white/[0.07] focus-within:border-white/[0.12]'
         }`}
       >
-        {/* Attachment Previews */}
         <FilePreview attachments={attachments} onRemove={handleRemoveAttachment} />
 
-        {/* Input Area — align-items flex-end for multiline, gap+padding harmonized, contrast AA */}
         <div className="flex items-end gap-3 px-4 py-3">
-          {/* File Upload Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
-            className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-white/60 hover:text-white/90 active:bg-white/[0.08] transition-colors disabled:opacity-40 cursor-pointer"
+            className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-white/60 hover:text-white/90 transition-colors disabled:opacity-40 cursor-pointer"
             title="Anexar imagem ou arquivo (máx. 10MB)"
             aria-label="Anexar imagem ou arquivo"
           >
@@ -270,7 +254,6 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             }}
           />
 
-          {/* Auto-expanding Textarea */}
           <textarea
             ref={textareaRef}
             rows={1}
@@ -281,29 +264,26 @@ export const PromptDock: React.FC<PromptDockProps> = ({
             onFocus={handleFocus}
             disabled={disabled}
             placeholder={isStreaming ? 'Charlie está respondendo...' : 'Envie uma mensagem para o Charlie...'}
-            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-[10px] bg-transparent text-[#F3F4F6] placeholder:text-white/50 text-[15px] sm:text-sm resize-none focus:outline-none leading-relaxed font-sans"
+            className="flex-1 max-h-[140px] sm:max-h-[180px] min-h-[44px] py-[10px] bg-transparent text-white placeholder:text-white/50 text-[15px] sm:text-sm resize-none focus:outline-none leading-relaxed"
           />
 
-          {/* Action Button: Send Arrow [ → ] or Stop Square [ ■ ] — breathing room on right */}
           {isStreaming ? (
             <button
               type="button"
               onClick={onStop}
-              className="w-9 h-9 shrink-0 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 flex items-center justify-center transition-colors cursor-pointer"
+              className="w-9 h-9 shrink-0 rounded-full bg-white text-black flex items-center justify-center cursor-pointer"
               title="Interromper geração"
               aria-label="Interromper geração"
             >
-              <Square className="w-4 h-4 fill-current" />
+              <Square className="w-3.5 h-3.5 fill-current" />
             </button>
           ) : (
             <button
               type="button"
               onClick={handleSend}
               disabled={disabled || !canSend}
-              className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition-colors ${
-                canSend
-                  ? 'bg-primary text-white hover:bg-primary-hover cursor-pointer shadow-glow-sm'
-                  : 'bg-white/[0.06] text-white/30 cursor-not-allowed'
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors ${
+                canSend ? 'bg-white text-black hover:bg-white/90 cursor-pointer' : 'bg-white/[0.08] text-white/30 cursor-not-allowed'
               }`}
               title="Enviar mensagem [Enter]"
               aria-label="Enviar mensagem"
@@ -314,9 +294,8 @@ export const PromptDock: React.FC<PromptDockProps> = ({
         </div>
       </div>
 
-      {/* Footer subtle caption (Hidden on mobile to save vertical space) */}
       <div className="hidden sm:flex items-center justify-center mt-2 select-none">
-        <span className="text-[10px] tracking-wider text-[#6B7280] font-mono uppercase">
+        <span className="text-[10px] tracking-[0.14em] text-white/25 font-mono uppercase">
           ENTER PARA ENVIAR • SHIFT+ENTER PARA QUEBRA DE LINHA
         </span>
       </div>

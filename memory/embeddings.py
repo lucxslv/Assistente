@@ -45,19 +45,5 @@ def generate_embedding(text: str, model: str = "gemini-embedding-001") -> Option
         except Exception as e:
             logger.error(f"Erro ao gerar embedding com google-genai para '{text[:30]}...': {e}")
 
-    # Fallback legado para google.generativeai caso necessário
-    try:
-        import google.generativeai as genai
-        if config.gemini_api_key:
-            genai.configure(api_key=config.gemini_api_key)
-        target_model = model if model.startswith("models/") else f"models/{model}"
-        res = genai.embed_content(
-            model=target_model,
-            content=text.strip(),
-            output_dimensionality=768,
-        )
-        return res.get("embedding")
-    except Exception as e:
-        logger.error(f"Erro no fallback de embedding para '{text[:30]}...': {e}")
-        return None
+    return None
 
