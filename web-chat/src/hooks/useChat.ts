@@ -1,10 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Message, Thread, FileAttachment, ConnectionStatus, CharlieAIStatus } from '../types/chat';
+import {
+  Message,
+  Thread,
+  FileAttachment,
+  ConnectionStatus,
+  CharlieAIStatus,
+  ToolExecutionCard,
+} from '../types/chat';
 import { ThreadsService } from '../services/threadsService';
 import { StorageService } from '../services/storage';
-import { chatStream, ImageAttachmentPayload } from '../services/chatStream';
+import {
+  chatStream,
+  ImageAttachmentPayload,
+  DocumentAttachmentPayload,
+} from '../services/chatStream';
 import { api } from '../services/api';
 import { generateUUID } from '../utils/formatters';
+
+interface SendInternalOptions {
+  skipUserMessageSave?: boolean;
+  skipUserBubbleInsert?: boolean;
+}
 
 export function useChat() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -15,11 +31,15 @@ export function useChat() {
   const [charlieStatus, setCharlieStatus] = useState<CharlieAIStatus>('idle');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('online');
   const [draft, setDraftState] = useState<string>('');
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestIdRef = useRef<string | null>(null);
   const isFirstLoadRef = useRef<boolean>(true);
+  const isCreatingThreadRef = useRef<Promise<Thread> | null>(null);
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
+  const threadsRef = useRef<Thread[]>([]);
+  threadsRef.current = threads;
   const streamingThreadIdRef = useRef<string | null>(null);
 
   // Monitor connection status
@@ -28,7 +48,6 @@ export function useChat() {
       setConnectionStatus(isOnline ? 'online' : 'offline');
     });
 
-    // Check backend health periodically
     const healthInterval = window.setInterval(async () => {
       const res = await api.checkHealth();
       setConnectionStatus(res.ok ? 'online' : 'offline');
@@ -59,17 +78,20 @@ export function useChat() {
     };
   }, []);
 
-  // Fetch threads on mount
-  const refreshThreads = useCallback(async () => {
-    try {
-      const list = await ThreadsService.getThreads();
-      setThreads(list);
-      return list;
-    } catch (e) {
-      console.warn('Erro ao atualizar threads:', e);
-      return [];
-    }
-  }, []);
+  // Fetch threads
+  const refreshThreads = useCallback(
+    async (options?: { q?: string; includeArchived?: boolean }) => {
+      try {
+        const list = await ThreadsService.getThreads(options);
+        setThreads(list);
+        return list;
+      } catch (e) {
+        console.warn('Erro ao atualizar threads:', e);
+        return [];
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     async function init() {
@@ -98,20 +120,15 @@ export function useChat() {
         return;
       }
 
-      // Persist active thread selection
       StorageService.setActiveThreadId(activeThreadId);
 
-      // Load draft for this thread
       const savedDraft = StorageService.getDraft(activeThreadId);
       setDraftState(savedDraft);
 
-      // Race condition guard: If this thread was just created and is actively streaming,
-      // do not overwrite in-flight optimistic user & assistant messages with empty DB results
       if (streamingThreadIdRef.current === activeThreadId && messagesRef.current.length > 0) {
         return;
       }
 
-      // Load messages
       setIsLoadingMessages(true);
       try {
         const msgs = await ThreadsService.getMessages(activeThreadId);
@@ -136,7 +153,6 @@ export function useChat() {
     };
   }, [activeThreadId]);
 
-  // Draft change handler
   const setDraft = useCallback(
     (text: string) => {
       setDraftState(text);
@@ -147,26 +163,84 @@ export function useChat() {
     [activeThreadId]
   );
 
-  // Create new thread
-  const createNewThread = useCallback(async (name = 'Nova Conversa'): Promise<Thread> => {
-    const thread = await ThreadsService.createThread(name);
-    setThreads((prev) => [thread, ...prev.filter((t) => t.id !== thread.id)]);
-    setActiveThreadId(thread.id);
-    setMessages([]);
-    setDraftState('');
-    return thread;
-  }, []);
+  // Create new thread with concurrency lock + empty-thread reuse to avoid duplicates
+  const createNewThread = useCallback(
+    async (name = 'Nova Conversa', forceNew = false): Promise<Thread> => {
+      if (isCreatingThreadRef.current) {
+        return isCreatingThreadRef.current;
+      }
+
+      // Se a conversa ativa já está vazia e sem mensagens (ex: usuário clicou várias vezes em "Nova Conversa"), reaproveita!
+      if (!forceNew && activeThreadId && messagesRef.current.length === 0) {
+        const existingEmpty = threadsRef.current.find((t) => t.id === activeThreadId);
+        if (
+          existingEmpty &&
+          (existingEmpty.name === 'Nova Conversa' || existingEmpty.name === 'Novo Chat')
+        ) {
+          return existingEmpty;
+        }
+      }
+
+      const idempotencyKey = `new-thread-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const promise = (async () => {
+        try {
+          const thread = await ThreadsService.createThread(name, idempotencyKey);
+          setThreads((prev) => [thread, ...prev.filter((t) => t.id !== thread.id)]);
+          setActiveThreadId(thread.id);
+          setMessages([]);
+          setDraftState('');
+          return thread;
+        } finally {
+          isCreatingThreadRef.current = null;
+        }
+      })();
+
+      isCreatingThreadRef.current = promise;
+      return promise;
+    },
+    [activeThreadId]
+  );
 
   // Rename thread
-  const renameThread = useCallback(
-    async (threadId: string, newName: string) => {
-      if (!newName.trim()) return;
-      await ThreadsService.updateThreadName(threadId, newName.trim());
+  const renameThread = useCallback(async (threadId: string, newName: string) => {
+    if (!newName.trim()) return;
+    await ThreadsService.updateThreadName(threadId, newName.trim());
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? { ...t, name: newName.trim(), updatedAt: new Date().toISOString() }
+          : t
+      )
+    );
+  }, []);
+
+  // Pin / Unpin thread
+  const togglePinThread = useCallback(async (threadId: string) => {
+    const target = threadsRef.current.find((t) => t.id === threadId);
+    const nextPinned = !(target?.isPinned ?? false);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === threadId ? { ...t, isPinned: nextPinned } : t))
+    );
+    await ThreadsService.updateThread(threadId, { is_pinned: nextPinned });
+  }, []);
+
+  // Archive / Unarchive thread
+  const toggleArchiveThread = useCallback(
+    async (threadId: string) => {
+      const target = threadsRef.current.find((t) => t.id === threadId);
+      const nextArchived = !(target?.isArchived ?? false);
       setThreads((prev) =>
-        prev.map((t) => (t.id === threadId ? { ...t, name: newName.trim(), updatedAt: new Date().toISOString() } : t))
+        prev.map((t) => (t.id === threadId ? { ...t, isArchived: nextArchived } : t))
       );
+      await ThreadsService.updateThread(threadId, { is_archived: nextArchived });
+      if (nextArchived && activeThreadId === threadId) {
+        const remaining = threadsRef.current.filter(
+          (t) => t.id !== threadId && !t.isArchived
+        );
+        setActiveThreadId(remaining.length > 0 ? remaining[0].id : null);
+      }
     },
-    []
+    [activeThreadId]
   );
 
   // Delete thread
@@ -185,12 +259,20 @@ export function useChat() {
     [activeThreadId]
   );
 
-  // Stop active streaming
+  // Stop active streaming (end-to-end: aborts client fetch AND signals POST /api/chat/cancel on backend)
   const stopStreaming = useCallback(() => {
+    const reqId = activeRequestIdRef.current;
+    const thId = streamingThreadIdRef.current || activeThreadId;
+
+    if (reqId || thId) {
+      ThreadsService.cancelStream(reqId, thId);
+    }
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    activeRequestIdRef.current = null;
     setIsStreaming(false);
     setCharlieStatus('idle');
     streamingThreadIdRef.current = null;
@@ -200,7 +282,12 @@ export function useChat() {
       if (!hasStreaming) return prev;
       const updated = prev.map((msg) =>
         msg.isStreaming || msg.status === 'streaming'
-          ? { ...msg, isStreaming: false, status: 'done' as const }
+          ? {
+              ...msg,
+              content: msg.content || 'Geração interrompida pelo usuário.',
+              isStreaming: false,
+              status: 'cancelled' as const,
+            }
           : msg
       );
       if (activeThreadId) {
@@ -210,56 +297,44 @@ export function useChat() {
     });
   }, [activeThreadId]);
 
-  // Send message
+  // Send message (supports structured attachments without dumping file contents into the chat bubble)
   const sendMessage = useCallback(
-    async (text: string, attachments: FileAttachment[] = [], customThreadId?: string) => {
+    async (
+      text: string,
+      attachments: FileAttachment[] = [],
+      customThreadId?: string,
+      internalOpts?: SendInternalOptions
+    ) => {
       const trimmedText = text.trim();
       if (!trimmedText && attachments.length === 0) return;
 
-      // Abort any ongoing stream
-      stopStreaming();
+      if (isStreaming) {
+        stopStreaming();
+      }
 
-      // Ensure we have an active thread
       let targetThreadId = customThreadId || activeThreadId;
       if (!targetThreadId) {
-        const newThreadTitle = trimmedText ? trimmedText.slice(0, 30) + (trimmedText.length > 30 ? '...' : '') : 'Nova Conversa';
-        const newThread = await createNewThread(newThreadTitle);
+        const newThreadTitle = trimmedText
+          ? trimmedText.slice(0, 36) + (trimmedText.length > 36 ? '...' : '')
+          : 'Nova Conversa';
+        const newThread = await createNewThread(newThreadTitle, true);
         targetThreadId = newThread.id;
       }
 
-      // Mark this thread as actively streaming to shield against loadThreadData race condition
       streamingThreadIdRef.current = targetThreadId;
 
-      // Format full prompt including text attachments if any
-      let finalPrompt = trimmedText;
-      if (attachments.length > 0) {
-        const attachmentNotes = attachments
-          .map((att) => {
-            if (att.isImage) {
-              return `[Anexo Imagem: ${att.name}]`;
-            }
-            if (att.textPreview) {
-              return `\n\n--- Conteúdo do Arquivo (${att.name}) ---\n${att.textPreview}\n--- Fim do Arquivo ---`;
-            }
-            return `[Anexo: ${att.name} (${att.size} bytes)]`;
-          })
-          .join('\n');
-        finalPrompt = `${finalPrompt}\n\n${attachmentNotes}`.trim();
-      }
+      const reqId = `req_${generateUUID().replace(/-/g, '').slice(0, 16)}`;
+      activeRequestIdRef.current = reqId;
 
       const userMsgId = generateUUID();
       const asstMsgId = generateUUID();
       const now = new Date().toISOString();
 
-      const userMessage: Message = {
-        id: userMsgId,
-        role: 'user',
-        content: trimmedText || '(Arquivo anexo enviado)',
-        createdAt: now,
-        status: 'done',
-        attachments,
-        threadId: targetThreadId,
-      };
+      const visibleUserText =
+        trimmedText ||
+        (attachments.length > 0
+          ? `Arquivo anexado: ${attachments.map((a) => a.name).join(', ')}`
+          : '');
 
       const pendingAsstMessage: Message = {
         id: asstMsgId,
@@ -267,19 +342,35 @@ export function useChat() {
         content: '',
         createdAt: now,
         status: 'streaming',
+        requestId: reqId,
         isStreaming: true,
+        tools: [],
         threadId: targetThreadId,
       };
 
-      setMessages((prev) => [...prev, userMessage, pendingAsstMessage]);
-
-      // Clear draft
-      setDraft('');
-      if (targetThreadId) {
-        StorageService.clearDraft(targetThreadId);
+      if (internalOpts?.skipUserBubbleInsert) {
+        setMessages((prev) => [...prev, pendingAsstMessage]);
+      } else {
+        const userMessage: Message = {
+          id: userMsgId,
+          role: 'user',
+          content: visibleUserText,
+          createdAt: now,
+          status: 'done',
+          requestId: reqId,
+          attachments: attachments.length > 0 ? attachments : undefined,
+          threadId: targetThreadId,
+        };
+        setMessages((prev) => [...prev, userMessage, pendingAsstMessage]);
       }
 
-      // Start streaming
+      if (!internalOpts?.skipUserBubbleInsert) {
+        setDraft('');
+        if (targetThreadId) {
+          StorageService.clearDraft(targetThreadId);
+        }
+      }
+
       setIsStreaming(true);
       setCharlieStatus('thinking');
 
@@ -300,19 +391,18 @@ export function useChat() {
         );
       };
 
-      // Snapshot fresco e atômico via messagesRef.current (elimina Stale Closure)
       const currentMessages = messagesRef.current;
       const conversationHistory = currentMessages
-        .filter((m) => m.content && m.content.trim())
+        .filter((m) => m.content && m.content.trim() && m.id !== asstMsgId)
         .slice(-20)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      // Extrai anexos de imagem para payload multimodal real
+      // Extrai anexos de imagem para payload multimodal
       const imagePayloads: ImageAttachmentPayload[] = attachments
         .filter((att) => att.isImage && att.dataUrl)
         .map((att) => {
           let b64 = att.dataUrl || '';
-          let mime = 'image/png';
+          let mime = att.type || 'image/png';
           if (b64.startsWith('data:')) {
             const matches = b64.match(/^data:([^;]+);base64,(.+)$/);
             if (matches) {
@@ -329,13 +419,25 @@ export function useChat() {
           };
         });
 
+      // Estrutura anexos de documentos/código sem poluir o balão de mensagem
+      const documentPayloads: DocumentAttachmentPayload[] = attachments.map((att) => ({
+        id: att.id,
+        name: att.name,
+        type: att.type || 'application/octet-stream',
+        size: att.size,
+        extracted_text: att.textPreview || att.extractedText || undefined,
+      }));
+
       try {
         await chatStream.send({
-          message: finalPrompt,
+          message: visibleUserText,
           threadId: targetThreadId,
+          requestId: reqId,
           skipTts: true,
+          skipUserMessageSave: Boolean(internalOpts?.skipUserMessageSave),
           history: conversationHistory,
           images: imagePayloads.length > 0 ? imagePayloads : undefined,
+          attachments: documentPayloads.length > 0 ? documentPayloads : undefined,
           signal: abortController.signal,
           onToken: (token) => {
             accumulatedReply += token;
@@ -346,6 +448,50 @@ export function useChat() {
               });
             }
           },
+          onToolStart: (name, friendlyName, args) => {
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id !== asstMsgId) return msg;
+                const existingTools = msg.tools || [];
+                const newTool: ToolExecutionCard = {
+                  name,
+                  friendlyName,
+                  args,
+                  status: 'executing',
+                };
+                return { ...msg, tools: [...existingTools, newTool] };
+              })
+            );
+          },
+          onToolEnd: (name, friendlyName, result, statusStr) => {
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id !== asstMsgId) return msg;
+                const existingTools = [...(msg.tools || [])];
+                const idx = existingTools.findIndex(
+                  (t) => t.name === name && t.status === 'executing'
+                );
+                const resolvedStatus: 'completed' | 'error' =
+                  statusStr === 'error' ? 'error' : 'completed';
+                if (idx !== -1) {
+                  existingTools[idx] = {
+                    ...existingTools[idx],
+                    friendlyName: friendlyName || existingTools[idx].friendlyName,
+                    result,
+                    status: resolvedStatus,
+                  };
+                } else {
+                  existingTools.push({
+                    name,
+                    friendlyName,
+                    result,
+                    status: resolvedStatus,
+                  });
+                }
+                return { ...msg, tools: existingTools };
+              })
+            );
+          },
           onResetAndFallback: () => {
             if (rafId) {
               cancelAnimationFrame(rafId);
@@ -355,13 +501,11 @@ export function useChat() {
             setCharlieStatus('thinking');
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === asstMsgId
-                  ? { ...msg, content: '', status: 'streaming' }
-                  : msg
+                msg.id === asstMsgId ? { ...msg, content: '', status: 'streaming' } : msg
               )
             );
           },
-          onDone: (fullReply) => {
+          onCancelled: (partialReply) => {
             if (rafId) {
               cancelAnimationFrame(rafId);
               rafId = null;
@@ -370,12 +514,44 @@ export function useChat() {
             setCharlieStatus('idle');
             streamingThreadIdRef.current = null;
             abortControllerRef.current = null;
+            activeRequestIdRef.current = null;
+            const finalPartial =
+              partialReply || accumulatedReply || 'Geração interrompida pelo usuário.';
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === asstMsgId
+                  ? {
+                      ...msg,
+                      content: finalPartial,
+                      status: 'cancelled' as const,
+                      isStreaming: false,
+                    }
+                  : msg
+              )
+            );
+          },
+          onDone: (fullReply, meta) => {
+            if (rafId) {
+              cancelAnimationFrame(rafId);
+              rafId = null;
+            }
+            setIsStreaming(false);
+            setCharlieStatus('idle');
+            streamingThreadIdRef.current = null;
+            abortControllerRef.current = null;
+            activeRequestIdRef.current = null;
             const finalContent = fullReply || accumulatedReply;
 
             setMessages((prev) => {
               const updated = prev.map((msg) =>
                 msg.id === asstMsgId
-                  ? { ...msg, content: finalContent, status: 'done' as const, isStreaming: false }
+                  ? {
+                      ...msg,
+                      id: meta?.assistantMessageId || msg.id,
+                      content: finalContent,
+                      status: 'done' as const,
+                      isStreaming: false,
+                    }
                   : msg
               );
               if (targetThreadId) {
@@ -384,13 +560,14 @@ export function useChat() {
               return updated;
             });
 
-            // Update thread title if needed
             setThreads((prev) =>
               prev.map((t) => {
                 if (t.id === targetThreadId) {
-                  const shouldRename = t.name === 'Nova Conversa' || t.name === 'Novo Chat' || !t.name;
+                  const shouldRename =
+                    t.name === 'Nova Conversa' || t.name === 'Novo Chat' || !t.name;
                   const newName = shouldRename
-                    ? (trimmedText.slice(0, 32) + (trimmedText.length > 32 ? '...' : ''))
+                    ? visibleUserText.slice(0, 42) +
+                      (visibleUserText.length > 42 ? '...' : '')
                     : t.name;
                   return {
                     ...t,
@@ -412,6 +589,7 @@ export function useChat() {
             setCharlieStatus('error');
             streamingThreadIdRef.current = null;
             abortControllerRef.current = null;
+            activeRequestIdRef.current = null;
             setTimeout(() => {
               setCharlieStatus((curr) => (curr === 'error' ? 'idle' : curr));
             }, 3500);
@@ -439,6 +617,7 @@ export function useChat() {
         setCharlieStatus('error');
         streamingThreadIdRef.current = null;
         abortControllerRef.current = null;
+        activeRequestIdRef.current = null;
         setTimeout(() => {
           setCharlieStatus((curr) => (curr === 'error' ? 'idle' : curr));
         }, 3500);
@@ -452,54 +631,125 @@ export function useChat() {
         );
       }
     },
-    [activeThreadId, createNewThread, setDraft, stopStreaming]
+    [activeThreadId, createNewThread, isStreaming, setDraft, stopStreaming]
+  );
+
+  // Edit user message inline, truncate subsequent messages in DB + UI, and stream new assistant reply
+  const editUserMessage = useCallback(
+    async (userMsgId: string, newContent: string) => {
+      const clean = newContent.trim();
+      if (!clean || isStreaming || !activeThreadId) return;
+
+      const currentMsgs = messagesRef.current;
+      const targetIdx = currentMsgs.findIndex((m) => m.id === userMsgId);
+      if (targetIdx === -1) return;
+
+      const targetMsg = currentMsgs[targetIdx];
+
+      try {
+        await ThreadsService.editMessage(activeThreadId, userMsgId, clean, true);
+      } catch (err) {
+        console.warn('Aviso ao persistir edição no backend:', err);
+      }
+
+      const updatedUserMsg: Message = {
+        ...targetMsg,
+        content: clean,
+        isEdited: true,
+        editedAt: new Date().toISOString(),
+        version: (targetMsg.version || 1) + 1,
+      };
+
+      const truncated = [...currentMsgs.slice(0, targetIdx), updatedUserMsg];
+      setMessages(truncated);
+      StorageService.setCachedMessages(activeThreadId, truncated);
+
+      await sendMessage(clean, targetMsg.attachments || [], activeThreadId, {
+        skipUserMessageSave: true,
+        skipUserBubbleInsert: true,
+      });
+    },
+    [activeThreadId, isStreaming, sendMessage]
+  );
+
+  // Regenerate assistant message without duplicating the user message
+  const regenerateAssistantMessage = useCallback(
+    async (assistantMsgId: string) => {
+      if (isStreaming || !activeThreadId) return;
+      const currentMsgs = messagesRef.current;
+      const asstIdx = currentMsgs.findIndex((m) => m.id === assistantMsgId);
+      if (asstIdx === -1) return;
+
+      let precedingUserMsg: Message | null = null;
+      for (let i = asstIdx - 1; i >= 0; i--) {
+        if (currentMsgs[i].role === 'user') {
+          precedingUserMsg = currentMsgs[i];
+          break;
+        }
+      }
+      if (!precedingUserMsg) return;
+
+      try {
+        await ThreadsService.deleteFromMessage(activeThreadId, assistantMsgId, true);
+      } catch (err) {
+        console.warn('Aviso ao truncar mensagem para regeneração:', err);
+      }
+
+      const truncated = currentMsgs.slice(0, asstIdx);
+      setMessages(truncated);
+      StorageService.setCachedMessages(activeThreadId, truncated);
+
+      await sendMessage(
+        precedingUserMsg.content,
+        precedingUserMsg.attachments || [],
+        activeThreadId,
+        {
+          skipUserMessageSave: true,
+          skipUserBubbleInsert: true,
+        }
+      );
+    },
+    [activeThreadId, isStreaming, sendMessage]
   );
 
   // Regenerate last message
   const regenerateLastMessage = useCallback(() => {
-    if (messages.length === 0 || isStreaming) return;
-    const currentMsgs = messagesRef.current;
-    const lastUserMsg = [...currentMsgs].reverse().find((m) => m.role === 'user');
-    if (!lastUserMsg) return;
-
-    // Remove last assistant message
-    setMessages((prev) => {
-      const idx = prev.map((m) => m.role).lastIndexOf('assistant');
-      if (idx !== -1) {
-        return prev.slice(0, idx);
-      }
-      return prev;
-    });
-
-    sendMessage(lastUserMsg.content, lastUserMsg.attachments);
-  }, [isStreaming, sendMessage]);
+    if (messagesRef.current.length === 0 || isStreaming) return;
+    const lastAsst = [...messagesRef.current].reverse().find((m) => m.role === 'assistant');
+    if (lastAsst) {
+      regenerateAssistantMessage(lastAsst.id);
+    }
+  }, [isStreaming, regenerateAssistantMessage]);
 
   // Retry failed assistant message without duplicating questions
   const retryAssistantMessage = useCallback(
     (failedMsgId: string) => {
-      if (isStreaming) return;
-      const currentMsgs = messagesRef.current;
-      const failedIdx = currentMsgs.findIndex((m) => m.id === failedMsgId);
-      if (failedIdx === -1) return;
-
-      // Find the preceding user message
-      let userMsg: Message | null = null;
-      for (let i = failedIdx - 1; i >= 0; i--) {
-        if (currentMsgs[i].role === 'user') {
-          userMsg = currentMsgs[i];
-          break;
-        }
-      }
-      if (!userMsg) return;
-
-      // Remove the failed assistant message so it can be cleanly re-executed
-      setMessages((prev) => prev.filter((m) => m.id !== failedMsgId));
-      sendMessage(userMsg.content, userMsg.attachments, activeThreadId || undefined);
+      regenerateAssistantMessage(failedMsgId);
     },
-    [isStreaming, sendMessage, activeThreadId]
+    [regenerateAssistantMessage]
   );
 
-  // Resend or edit user message
+  // Submit feedback 👍 (+1) / 👎 (-1)
+  const submitMessageFeedback = useCallback(
+    async (messageId: string, rating: 1 | -1) => {
+      if (!activeThreadId) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, feedback: m.feedback === rating ? null : rating }
+            : m
+        )
+      );
+      try {
+        await ThreadsService.submitMessageFeedback(activeThreadId, messageId, rating);
+      } catch (err) {
+        console.warn('Erro ao enviar avaliação da mensagem:', err);
+      }
+    },
+    [activeThreadId]
+  );
+
+  // Resend user message into draft
   const resendUserMessage = useCallback(
     (userMsg: Message) => {
       if (isStreaming) return;
@@ -531,11 +781,16 @@ export function useChat() {
     setActiveThreadId,
     createNewThread,
     renameThread,
+    togglePinThread,
+    toggleArchiveThread,
     deleteThread,
     sendMessage,
     stopStreaming,
+    editUserMessage,
+    regenerateAssistantMessage,
     regenerateLastMessage,
     retryAssistantMessage,
+    submitMessageFeedback,
     resendUserMessage,
     clearCurrentChat,
     refreshThreads,

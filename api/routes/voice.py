@@ -2,9 +2,10 @@
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.routes.auth import require_local_or_authenticated
 from audio.service import voice_service, VoiceState
 from config import config
 
@@ -26,13 +27,16 @@ class TestVoiceRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_voice_status():
+async def get_voice_status(user: dict = Depends(require_local_or_authenticated)):
     """Retorna o status atual do serviço de voz e configurações ativas."""
     return voice_service.get_status()
 
 
 @router.post("/toggle")
-async def toggle_voice_service(req: ToggleVoiceRequest):
+async def toggle_voice_service(
+    req: ToggleVoiceRequest,
+    user: dict = Depends(require_local_or_authenticated),
+):
     """Liga ou desliga a escuta em segundo plano do Wake Word."""
     try:
         if req.enabled:
@@ -47,11 +51,17 @@ async def toggle_voice_service(req: ToggleVoiceRequest):
         }
     except Exception as e:
         logger.exception("Erro ao alternar estado do serviço de voz: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível alternar o estado do serviço de voz no momento.",
+        )
 
 
 @router.post("/speak")
-async def speak_text(req: SpeakRequest):
+async def speak_text(
+    req: SpeakRequest,
+    user: dict = Depends(require_local_or_authenticated),
+):
     """Sintetiza um texto sob demanda no alto-falante via TTS."""
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="Texto vazio para reprodução de áudio.")
@@ -61,11 +71,17 @@ async def speak_text(req: SpeakRequest):
         return {"status": "ok", "message": "Áudio reproduzido com sucesso."}
     except Exception as e:
         logger.exception("Erro ao sintetizar áudio: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao sintetizar ou reproduzir áudio no dispositivo.",
+        )
 
 
 @router.post("/test")
-async def test_voice(req: Optional[TestVoiceRequest] = None):
+async def test_voice(
+    req: Optional[TestVoiceRequest] = None,
+    user: dict = Depends(require_local_or_authenticated),
+):
     """Reproduz uma frase de teste no alto-falante usando a voz configurada."""
     text_to_speak = (
         req.text if req and req.text
@@ -77,4 +93,7 @@ async def test_voice(req: Optional[TestVoiceRequest] = None):
         return {"status": "ok", "message": "Áudio de teste disparado com sucesso."}
     except Exception as e:
         logger.exception("Erro ao disparar áudio de teste: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao disparar áudio de teste no dispositivo.",
+        )

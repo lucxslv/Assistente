@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import platform
+from typing import Any, Optional
 
 from config import config
 from brain.context.manager import ContextManager
@@ -54,9 +55,15 @@ class AssistantPipeline:
         self.memory = ConversationMemory(max_messages=config.max_history_messages)
         self.llm = self._get_llm_provider()
         self.last_model_used: str = config.gemini_model
+        self.last_provider_used: str = config.llm_provider.lower()
+        self.last_route_mode: str = "fast"
+        self.last_fallback_used: bool = False
+        self.last_fallback_reason: Optional[str] = None
+        self.last_usage_metadata: Optional[dict[str, Any]] = None
+        self.last_error_detail: Optional[str] = None
 
-    def _get_llm_provider(self) -> BaseLLMProvider:
-        provider = config.llm_provider.lower()
+    def _get_llm_provider(self, provider_name: Optional[str] = None) -> BaseLLMProvider:
+        provider = (provider_name or config.llm_provider).lower()
         if provider == "openai":
             return OpenAIProvider()
         if provider == "gemini":
@@ -90,11 +97,18 @@ class AssistantPipeline:
         tool_results: list[dict] | None = None,
         history: list[dict] | None = None,
         images: list[dict] | None = None,
+        cancel_event: Any = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
+        import inspect
         import os
         import uuid
         from tools.registry import ToolScope
+
+        def _is_cancelled() -> bool:
+            return bool(cancel_event and getattr(cancel_event, "is_set", lambda: False)())
+
+        self.last_error_detail = None
 
         is_cloud = bool(
             os.getenv("VERCEL")
@@ -157,6 +171,11 @@ class AssistantPipeline:
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
         route_decision = self.router.route(user_text or "continuar análise do sistema")
         self.last_model_used = route_decision.model_name
+        self.last_provider_used = route_decision.provider_name
+        self.last_route_mode = route_decision.mode.value
+        self.last_fallback_used = False
+        self.last_fallback_reason = None
+        self.last_usage_metadata = None
         logger.info(f"Rota selecionada: {route_decision.mode.value} -> {route_decision.model_name} ({route_decision.reason})")
 
         # Etapa 4: Contexto Inteligente & Presença
@@ -334,7 +353,37 @@ class AssistantPipeline:
         final_reply = ""
         emitted_any_token = False
 
+        active_llm_instance = self.llm
+
+        def _invoke_chat_stream(model_name: str, provider_override: Optional[str] = None):
+            nonlocal active_llm_instance
+            if provider_override and provider_override.lower() != route_decision.provider_name.lower():
+                try:
+                    active_llm_instance = self._get_llm_provider(provider_override)
+                except Exception:
+                    active_llm_instance = self.llm
+            else:
+                active_llm_instance = self.llm
+
+            stream_kwargs = {
+                "system_prompt": system_prompt,
+                "messages": req_memory.get_messages(),
+                "tools": active_tools,
+                "model_override": model_name,
+            }
+            try:
+                sig = inspect.signature(active_llm_instance.chat_stream)
+                if "cancel_event" in sig.parameters or any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                ):
+                    stream_kwargs["cancel_event"] = cancel_event
+            except Exception:
+                pass
+            return active_llm_instance.chat_stream(**stream_kwargs)
+
         while iterations < MAX_ITERATIONS:
+            if _is_cancelled():
+                break
             iterations += 1
             iteration_reply = ""
             tool_calls = []
@@ -342,12 +391,9 @@ class AssistantPipeline:
             # Streaming dos chunks e detecção de tool calls com suporte a fallback
             stream_parser = StreamingMessageParser()
             try:
-                async for chunk in self.llm.chat_stream(
-                    system_prompt=system_prompt,
-                    messages=req_memory.get_messages(),
-                    tools=active_tools,
-                    model_override=route_decision.model_name,
-                ):
+                async for chunk in _invoke_chat_stream(route_decision.model_name, route_decision.provider_name):
+                    if _is_cancelled():
+                        break
                     if chunk.tool_calls:
                         tool_calls.extend(chunk.tool_calls)
                     if chunk.text:
@@ -366,35 +412,49 @@ class AssistantPipeline:
                         if not chunk.tool_calls and clean_token:
                             emitted_any_token = True
                             yield StreamEvent(type="token", data={"token": clean_token})
+                if getattr(active_llm_instance, "last_usage_metadata", None):
+                    self.last_usage_metadata = getattr(active_llm_instance, "last_usage_metadata")
             except Exception as e:
-                logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando fallback...")
-                fallback_model = config.gemini_model
-                if fallback_model == route_decision.model_name:
-                    fallback_model = "gemini-flash-lite-latest" if route_decision.model_name != "gemini-flash-lite-latest" else "gemini-3.5-flash-lite"
+                if _is_cancelled():
+                    break
+                logger.warning(f"Aviso na rota {route_decision.model_name}: {e}. Executando cadeia de fallback...")
+                self.last_error_detail = str(e)
+                self.last_fallback_reason = str(e)
 
-                if fallback_model != route_decision.model_name:
+                fallback_candidates = self.router.get_fallback_chain(route_decision)
+                if not fallback_candidates:
+                    fb_default = config.gemini_model
+                    if fb_default == route_decision.model_name:
+                        fb_default = "gemini-2.5-flash-lite" if route_decision.model_name != "gemini-2.5-flash-lite" else "gemini-2.5-flash"
+                    if fb_default != route_decision.model_name:
+                        fallback_candidates = [(route_decision.provider_name, fb_default)]
+
+                recovered_via_fallback = False
+                for fb_provider, fallback_model in fallback_candidates:
+                    if _is_cancelled():
+                        break
                     if emitted_any_token:
                         logger.info(f"[pipeline] Falha mid-stream detectada ({len(iteration_reply)} chars). Emitindo reset_and_fallback.")
                         yield StreamEvent(
                             type="reset_and_fallback",
                             data={
-                                "reason": f"Fallback ativado após erro no modelo {route_decision.model_name}: {e}",
+                                "reason": f"Alternando automaticamente para o modelo de contingência ({fallback_model}).",
                                 "fallback_model": fallback_model,
+                                "fallback_provider": fb_provider,
                             },
                         )
                     iteration_reply = ""
                     tool_calls.clear()
                     emitted_any_token = False
                     self.last_model_used = fallback_model
+                    self.last_provider_used = fb_provider
+                    self.last_fallback_used = True
                     stream_parser = StreamingMessageParser()
 
                     try:
-                        async for chunk in self.llm.chat_stream(
-                            system_prompt=system_prompt,
-                            messages=req_memory.get_messages(),
-                            tools=active_tools,
-                            model_override=fallback_model,
-                        ):
+                        async for chunk in _invoke_chat_stream(fallback_model, fb_provider):
+                            if _is_cancelled():
+                                break
                             if chunk.tool_calls:
                                 tool_calls.extend(chunk.tool_calls)
                             if chunk.text:
@@ -413,16 +473,27 @@ class AssistantPipeline:
                                 if not chunk.tool_calls and clean_token:
                                     emitted_any_token = True
                                     yield StreamEvent(type="token", data={"token": clean_token})
-                    except Exception as fb_err:
-                        logger.error(f"[pipeline] Falha também no modelo de fallback {fallback_model}: {fb_err}")
-                        yield StreamEvent(type="error", data={"error": f"Erro nos modelos de linguagem: {fb_err}"})
-                        final_reply = "Desculpe, ocorreu uma instabilidade temporária na comunicação com os modelos de IA. Por favor, tente novamente em instantes."
+                        if getattr(active_llm_instance, "last_usage_metadata", None):
+                            self.last_usage_metadata = getattr(active_llm_instance, "last_usage_metadata")
+                        recovered_via_fallback = True
                         break
-                else:
-                    logger.error(f"[pipeline] Rota {route_decision.model_name} falhou sem modelo alternativo: {e}")
-                    yield StreamEvent(type="error", data={"error": str(e)})
-                    final_reply = "Desculpe, ocorreu um erro ao gerar a resposta. Por favor, tente novamente."
+                    except Exception as fb_err:
+                        logger.error(f"[pipeline] Falha no candidato de fallback {fb_provider}/{fallback_model}: {fb_err}")
+                        self.last_error_detail = f"{e} | fallback({fb_provider}/{fallback_model}): {fb_err}"
+                        continue
+
+                if not recovered_via_fallback:
+                    yield StreamEvent(
+                        type="error",
+                        data={"error": "Ocorreu uma instabilidade temporária na comunicação com os modelos de IA. Tente novamente em instantes."},
+                    )
+                    final_reply = "Desculpe, ocorreu uma instabilidade temporária na comunicação com os modelos de IA. Por favor, tente novamente em instantes."
                     break
+
+            if _is_cancelled():
+                remaining_clean, _ = stream_parser.flush()
+                final_reply = remaining_clean or iteration_reply or final_reply
+                break
 
             if not tool_calls:
                 remaining_clean, meta = stream_parser.flush()
@@ -440,12 +511,16 @@ class AssistantPipeline:
             # Notifica início das ferramentas
             client_tools_to_exec = []
             for call in tool_calls:
+                if _is_cancelled():
+                    break
                 scope_enum = self.tools.get_scope(call.name)
+                friendly_label = self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
                 yield StreamEvent(
                     type="tool_start",
                     data={
                         "name": call.name,
+                        "friendly_name": friendly_label,
                         "args": call.arguments,
                         "scope": scope_enum.value,
                         "call_id": c_id,
@@ -457,6 +532,10 @@ class AssistantPipeline:
                         "name": call.name,
                         "args": call.arguments,
                     })
+
+            if _is_cancelled():
+                final_reply = iteration_reply or final_reply
+                break
 
             # Se estiver na nuvem e houver ferramentas de dispositivo, despacha para execução física no Windows via Desktop
             if client_tools_to_exec:
@@ -474,15 +553,39 @@ class AssistantPipeline:
 
             # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
             for call in tool_calls:
+                if _is_cancelled():
+                    break
                 scope_enum = self.tools.get_scope(call.name)
+                friendly_label = self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
-                res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
+                if "execute" not in getattr(self.tools, "__dict__", {}) and hasattr(self.tools, "execute_structured"):
+                    structured = await self.tools.execute_structured(
+                        call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid
+                    )
+                    res = structured["output"]
+                    tool_status = structured["status"]
+                    duration_ms = structured["duration_ms"]
+                    error_type = structured["error_type"]
+                    is_recoverable = structured["is_recoverable"]
+                else:
+                    res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
+                    is_err = str(res).lower().startswith("erro")
+                    tool_status = "error" if is_err else "success"
+                    duration_ms = 0
+                    error_type = "tool_error" if is_err else None
+                    is_recoverable = is_err
+
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
                 yield StreamEvent(
                     type="tool_end",
                     data={
                         "name": call.name,
+                        "friendly_name": friendly_label,
                         "result": res,
+                        "status": tool_status,
+                        "duration_ms": duration_ms,
+                        "error_type": error_type,
+                        "is_recoverable": is_recoverable,
                         "scope": scope_enum.value,
                         "call_id": c_id,
                     },
@@ -504,6 +607,10 @@ class AssistantPipeline:
                     except Exception as w_err:
                         logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
 
+            if _is_cancelled():
+                final_reply = iteration_reply or final_reply
+                break
+
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 
             if iterations == MAX_ITERATIONS:
@@ -512,6 +619,21 @@ class AssistantPipeline:
 
         from core.message_parser import parse_assistant_message_content
         final_reply, _ = parse_assistant_message_content(final_reply)
+
+        if _is_cancelled():
+            if final_reply and final_reply.strip():
+                req_memory.add_assistant(final_reply)
+                self.memory = req_memory
+            yield StreamEvent(
+                type="cancelled",
+                data={
+                    "reply": final_reply,
+                    "thread_id": thread_id,
+                    "model": self.last_model_used,
+                    "status": "cancelled",
+                },
+            )
+            return
 
         if not final_reply or final_reply.startswith("Chamando ferramenta:"):
             final_reply = "Ação concluída com sucesso."

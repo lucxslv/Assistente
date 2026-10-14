@@ -69,6 +69,7 @@ class PairingSession:
         lan_url: str,
         tunnel_url: Optional[str],
         name: str,
+        user_id: str = "default",
         ttl_seconds: int = 300,
         max_attempts: int = 5,
     ):
@@ -78,6 +79,7 @@ class PairingSession:
         self.lan_url = lan_url
         self.tunnel_url = tunnel_url
         self.name = name
+        self.user_id = user_id or "default"
         self.created_at = time.time()
         self.expires_at = self.created_at + ttl_seconds
         self.attempts = 0
@@ -134,7 +136,6 @@ _load_authorized_devices()
 
 def _cleanup_expired_sessions() -> None:
     """Purga sessões expiradas da memória."""
-    now = time.time()
     expired_ids = [s_id for s_id, s in _active_sessions.items() if s.is_expired()]
     for s_id in expired_ids:
         sess = _active_sessions.pop(s_id, None)
@@ -166,7 +167,8 @@ async def get_authorized_device_async(token: str) -> Optional[Dict[str, Any]]:
         try:
             async with pool.acquire() as conn:
                 row = await conn.fetchrow("""
-                    SELECT device_id, device_name, platform, token, paired_at, last_seen, permissions
+                    SELECT device_id, device_name, platform, token, paired_at, last_seen, permissions,
+                           COALESCE(user_id, 'default') as user_id
                     FROM device_authorized_devices
                     WHERE token = $1;
                 """, clean_token)
@@ -176,6 +178,7 @@ async def get_authorized_device_async(token: str) -> Optional[Dict[str, Any]]:
                         "device_name": row["device_name"],
                         "platform": row["platform"],
                         "token": row["token"],
+                        "user_id": row["user_id"] or "default",
                         "paired_at": row["paired_at"],
                         "last_seen": time.time(),
                         "permissions": json.loads(row["permissions"]) if isinstance(row["permissions"], str) else (row["permissions"] or ["mobile_client"]),
@@ -186,6 +189,28 @@ async def get_authorized_device_async(token: str) -> Optional[Dict[str, Any]]:
         except Exception as e:
             logger.warning(f"Erro ao buscar dispositivo no Supabase: {e}")
     return None
+
+
+async def _persist_session_attempts(pairing_id: str, attempts: int, locked_out: bool = False) -> None:
+    """Atualiza o contador de tentativas no banco para proteção distribuída contra força bruta."""
+    pool = await get_or_init_db_pool()
+    if not pool:
+        return
+    try:
+        async with pool.acquire() as conn:
+            if locked_out:
+                await conn.execute(
+                    "DELETE FROM device_pairing_sessions WHERE pairing_id = $1",
+                    pairing_id,
+                )
+            else:
+                await conn.execute(
+                    "UPDATE device_pairing_sessions SET attempts = $1 WHERE pairing_id = $2",
+                    attempts,
+                    pairing_id,
+                )
+    except Exception as e:
+        logger.debug(f"Aviso ao atualizar attempts no Supabase: {e}")
 
 
 class PairInitRequest(BaseModel):
@@ -210,8 +235,16 @@ class VerifyQrRequest(BaseModel):
     platform: Optional[str] = None
 
 
+from fastapi import Depends, Request
+from api.routes.auth import get_current_user_optional, require_local_or_authenticated
+from api.security.rate_limiter import rate_limiter, extract_client_ip
+
+
 @router.post("/init")
-async def init_pairing(req: PairInitRequest):
+async def init_pairing(
+    req: PairInitRequest,
+    user: Optional[dict] = Depends(get_current_user_optional),
+):
     """Gera sessão de pareamento com PIN de 6 dígitos (secrets.randbelow), segredo efêmero e TTL de 5 min."""
     _cleanup_expired_sessions()
 
@@ -222,6 +255,7 @@ async def init_pairing(req: PairInitRequest):
 
     pairing_id = str(uuid.uuid4())
     secret = secrets.token_urlsafe(32)
+    uid = str(user["id"]) if user and user.get("id") else "default"
 
     # Identificação do IP local
     local_ips = get_local_ip_addresses()
@@ -243,6 +277,7 @@ async def init_pairing(req: PairInitRequest):
         lan_url=lan_url,
         tunnel_url=tunnel_url,
         name=req.name or "Desktop Principal",
+        user_id=uid,
         ttl_seconds=300,
         max_attempts=5,
     )
@@ -257,11 +292,11 @@ async def init_pairing(req: PairInitRequest):
             async with pool.acquire() as conn:
                 await conn.execute("""
                     INSERT INTO device_pairing_sessions (
-                        pairing_id, pin, secret, lan_url, tunnel_url, name, expires_at, attempts, paired
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, FALSE)
+                        pairing_id, pin, secret, lan_url, tunnel_url, name, user_id, expires_at, attempts, paired
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, FALSE)
                     ON CONFLICT (pairing_id) DO UPDATE
-                    SET pin = EXCLUDED.pin, secret = EXCLUDED.secret, expires_at = EXCLUDED.expires_at;
-                """, pairing_id, pin, secret, lan_url, tunnel_url, req.name or "Desktop Principal", session.expires_at)
+                    SET pin = EXCLUDED.pin, secret = EXCLUDED.secret, expires_at = EXCLUDED.expires_at, user_id = EXCLUDED.user_id;
+                """, pairing_id, pin, secret, lan_url, tunnel_url, req.name or "Desktop Principal", uid, session.expires_at)
         except Exception as e:
             logger.warning(f"Aviso ao salvar sessão de pareamento no Supabase: {e}")
 
@@ -298,9 +333,16 @@ async def init_pairing(req: PairInitRequest):
 
 
 @router.post("/verify-pin")
-async def verify_pin(req: VerifyPinRequest):
+async def verify_pin(req: VerifyPinRequest, request: Request):
     """Valida o PIN de 6 dígitos com rate limiting (máximo 5 tentativas) e emite token de longa duração."""
     _cleanup_expired_sessions()
+    client_ip = extract_client_ip(request)
+    await rate_limiter.enforce(
+        f"pair_pin:{client_ip}",
+        limit=25,
+        window_seconds=60,
+        detail="Muitas tentativas de pareamento. Aguarde 1 minuto.",
+    )
 
     clean_pin = req.pin.replace("-", "").replace(" ", "").strip()
     session_id = _pin_to_session_id.get(clean_pin)
@@ -312,7 +354,9 @@ async def verify_pin(req: VerifyPinRequest):
             try:
                 async with pool.acquire() as conn:
                     row = await conn.fetchrow("""
-                        SELECT pairing_id, pin, secret, lan_url, tunnel_url, name, expires_at, attempts, paired
+                        SELECT pairing_id, pin, secret, lan_url, tunnel_url, name,
+                               COALESCE(user_id, 'default') as user_id,
+                               expires_at, attempts, paired
                         FROM device_pairing_sessions
                         WHERE pin = $1 AND expires_at > $2 AND paired = FALSE;
                     """, clean_pin, time.time())
@@ -324,6 +368,7 @@ async def verify_pin(req: VerifyPinRequest):
                             lan_url=row["lan_url"] or "",
                             tunnel_url=row["tunnel_url"],
                             name=row["name"] or "Desktop Principal",
+                            user_id=row["user_id"] or "default",
                             ttl_seconds=max(10, int(row["expires_at"] - time.time())),
                         )
                         session.attempts = row["attempts"] or 0
@@ -340,7 +385,9 @@ async def verify_pin(req: VerifyPinRequest):
             target_sess = active_sess_list[0]
             target_sess.attempts += 1
             remaining = target_sess.max_attempts - target_sess.attempts
-            if remaining <= 0:
+            locked = remaining <= 0
+            await _persist_session_attempts(target_sess.pairing_id, target_sess.attempts, locked_out=locked)
+            if locked:
                 _active_sessions.pop(target_sess.pairing_id, None)
                 _pin_to_session_id.pop(target_sess.pin, None)
                 raise HTTPException(
@@ -371,6 +418,7 @@ async def verify_pin(req: VerifyPinRequest):
     if session.attempts >= session.max_attempts:
         _active_sessions.pop(session_id, None)
         _pin_to_session_id.pop(clean_pin, None)
+        await _persist_session_attempts(session.pairing_id, session.attempts, locked_out=True)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="PIN bloqueado por excesso de tentativas. Gere um novo código no Desktop.",
@@ -380,7 +428,9 @@ async def verify_pin(req: VerifyPinRequest):
     if not hmac.compare_digest(session.pin, clean_pin):
         session.attempts += 1
         remaining = session.max_attempts - session.attempts
-        if remaining <= 0:
+        locked = remaining <= 0
+        await _persist_session_attempts(session.pairing_id, session.attempts, locked_out=locked)
+        if locked:
             _active_sessions.pop(session_id, None)
             _pin_to_session_id.pop(clean_pin, None)
             raise HTTPException(
@@ -392,7 +442,7 @@ async def verify_pin(req: VerifyPinRequest):
             detail=f"PIN incorreto. {remaining} tentativa(s) restante(s).",
         )
 
-    # PIN correto: Emite credencial permanente vinculada ao device_id
+    # PIN correto: Emite credencial permanente vinculada ao device_id e user_id
     device_token = f"charlie_dev_{secrets.token_urlsafe(32)}"
     now = time.time()
     device_data = {
@@ -400,6 +450,7 @@ async def verify_pin(req: VerifyPinRequest):
         "device_name": req.device_name or "Dispositivo Móvel",
         "platform": req.platform or "mobile",
         "token": device_token,
+        "user_id": session.user_id,
         "paired_at": now,
         "last_seen": now,
         "permissions": ["mobile_client"],
@@ -427,12 +478,12 @@ async def verify_pin(req: VerifyPinRequest):
                     UPDATE device_pairing_sessions
                     SET paired = TRUE, paired_at = $1, device_token = $2, device_info = $3::jsonb
                     WHERE pairing_id = $4;
-                    INSERT INTO device_authorized_devices (device_id, device_name, platform, token, paired_at, last_seen, permissions)
-                    VALUES ($5, $6, $7, $8, $9, $10, $11::jsonb)
+                    INSERT INTO device_authorized_devices (device_id, device_name, platform, token, user_id, paired_at, last_seen, permissions)
+                    VALUES ($5, $6, $7, $8, $9, $10, $11, $12::jsonb)
                     ON CONFLICT (device_id) DO UPDATE
-                    SET token = EXCLUDED.token, last_seen = EXCLUDED.last_seen;
+                    SET token = EXCLUDED.token, user_id = EXCLUDED.user_id, last_seen = EXCLUDED.last_seen;
                 """, now, device_token, json.dumps(session.device_info), session.pairing_id,
-                req.device_id, req.device_name or "Dispositivo Móvel", req.platform or "mobile", device_token, now, now, json.dumps(["mobile_client"]))
+                req.device_id, req.device_name or "Dispositivo Móvel", req.platform or "mobile", device_token, session.user_id, now, now, json.dumps(["mobile_client"]))
         except Exception as e:
             logger.warning(f"Erro ao salvar pareamento no Supabase: {e}")
 
@@ -452,9 +503,16 @@ async def verify_pin(req: VerifyPinRequest):
 
 
 @router.post("/verify-qr")
-async def verify_qr(req: VerifyQrRequest):
+async def verify_qr(req: VerifyQrRequest, request: Request):
     """Valida o QR Code via segredo de sessão (tempo constante) e emite token de longa duração."""
     _cleanup_expired_sessions()
+    client_ip = extract_client_ip(request)
+    await rate_limiter.enforce(
+        f"pair_qr:{client_ip}",
+        limit=25,
+        window_seconds=60,
+        detail="Muitas tentativas de pareamento via QR Code. Aguarde 1 minuto.",
+    )
 
     session = _active_sessions.get(req.id)
 
@@ -465,7 +523,9 @@ async def verify_qr(req: VerifyQrRequest):
             try:
                 async with pool.acquire() as conn:
                     row = await conn.fetchrow("""
-                        SELECT pairing_id, pin, secret, lan_url, tunnel_url, name, expires_at, attempts, paired
+                        SELECT pairing_id, pin, secret, lan_url, tunnel_url, name,
+                               COALESCE(user_id, 'default') as user_id,
+                               expires_at, attempts, paired
                         FROM device_pairing_sessions
                         WHERE pairing_id = $1 AND expires_at > $2 AND paired = FALSE;
                     """, req.id, time.time())
@@ -477,6 +537,7 @@ async def verify_qr(req: VerifyQrRequest):
                             lan_url=row["lan_url"] or "",
                             tunnel_url=row["tunnel_url"],
                             name=row["name"] or "Desktop Principal",
+                            user_id=row["user_id"] or "default",
                             ttl_seconds=max(10, int(row["expires_at"] - time.time())),
                         )
                         session.attempts = row["attempts"] or 0
@@ -492,6 +553,7 @@ async def verify_qr(req: VerifyQrRequest):
 
     if session.attempts >= session.max_attempts:
         _active_sessions.pop(req.id, None)
+        await _persist_session_attempts(session.pairing_id, session.attempts, locked_out=True)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Sessão bloqueada por excesso de tentativas inválidas.",
@@ -500,7 +562,9 @@ async def verify_qr(req: VerifyQrRequest):
     # Comparação criptográfica de tempo constante contra timing-attacks
     if not hmac.compare_digest(session.secret, req.secret):
         session.attempts += 1
-        if session.attempts >= session.max_attempts:
+        locked = session.attempts >= session.max_attempts
+        await _persist_session_attempts(session.pairing_id, session.attempts, locked_out=locked)
+        if locked:
             _active_sessions.pop(req.id, None)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -518,6 +582,7 @@ async def verify_qr(req: VerifyQrRequest):
         "device_name": req.device_name or "Dispositivo Móvel",
         "platform": req.platform or "mobile",
         "token": device_token,
+        "user_id": session.user_id,
         "paired_at": now,
         "last_seen": now,
         "permissions": ["mobile_client"],
@@ -545,12 +610,12 @@ async def verify_qr(req: VerifyQrRequest):
                     UPDATE device_pairing_sessions
                     SET paired = TRUE, paired_at = $1, device_token = $2, device_info = $3::jsonb
                     WHERE pairing_id = $4;
-                    INSERT INTO device_authorized_devices (device_id, device_name, platform, token, paired_at, last_seen, permissions)
-                    VALUES ($5, $6, $7, $8, $9, $10, $11::jsonb)
+                    INSERT INTO device_authorized_devices (device_id, device_name, platform, token, user_id, paired_at, last_seen, permissions)
+                    VALUES ($5, $6, $7, $8, $9, $10, $11, $12::jsonb)
                     ON CONFLICT (device_id) DO UPDATE
-                    SET token = EXCLUDED.token, last_seen = EXCLUDED.last_seen;
+                    SET token = EXCLUDED.token, user_id = EXCLUDED.user_id, last_seen = EXCLUDED.last_seen;
                 """, now, device_token, json.dumps(session.device_info), session.pairing_id,
-                req.device_id, req.device_name or "Dispositivo Móvel", req.platform or "mobile", device_token, now, now, json.dumps(["mobile_client"]))
+                req.device_id, req.device_name or "Dispositivo Móvel", req.platform or "mobile", device_token, session.user_id, now, now, json.dumps(["mobile_client"]))
         except Exception as e:
             logger.warning(f"Erro ao salvar pareamento QR no Supabase: {e}")
 
@@ -619,10 +684,44 @@ async def check_pairing_status(id: Optional[str] = None, pin: Optional[str] = No
 
 
 @router.get("/devices")
-async def list_authorized_devices():
-    """Retorna a lista de dispositivos móveis pareados ativos (sem expor o segredo completo)."""
+async def list_authorized_devices(user: dict = Depends(require_local_or_authenticated)):
+    """Retorna a lista de dispositivos móveis pareados ativos do usuário (sem expor o segredo completo)."""
+    uid = str(user.get("id", "default"))
+
+    # Sincroniza do Supabase caso existam dispositivos salvos na nuvem
+    pool = await get_or_init_db_pool()
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT device_id, device_name, platform, token,
+                           COALESCE(user_id, 'default') as user_id,
+                           paired_at, last_seen, permissions
+                    FROM device_authorized_devices
+                    ORDER BY last_seen DESC
+                """)
+                for r in rows:
+                    if r["device_id"] not in _authorized_devices:
+                        _authorized_devices[r["device_id"]] = {
+                            "device_id": r["device_id"],
+                            "device_name": r["device_name"],
+                            "platform": r["platform"],
+                            "token": r["token"],
+                            "user_id": r["user_id"] or "default",
+                            "paired_at": r["paired_at"],
+                            "last_seen": r["last_seen"],
+                            "permissions": json.loads(r["permissions"]) if isinstance(r["permissions"], str) else (r["permissions"] or ["mobile_client"]),
+                        }
+                        if r["token"]:
+                            _token_to_device[r["token"]] = r["device_id"]
+        except Exception as e:
+            logger.debug(f"Aviso ao sincronizar dispositivos do Supabase: {e}")
+
     devices_summary = []
     for d in _authorized_devices.values():
+        dev_uid = str(d.get("user_id") or "default")
+        if uid not in ("default", "local-loopback") and dev_uid not in ("default", uid):
+            continue
         devices_summary.append({
             "device_id": d["device_id"],
             "device_name": d["device_name"],
@@ -634,20 +733,53 @@ async def list_authorized_devices():
 
 
 @router.delete("/devices/{device_id}")
-async def revoke_device(device_id: str):
-    """Revoga imediatamente o acesso de um dispositivo móvel previamente pareado."""
+async def revoke_device(device_id: str, user: dict = Depends(require_local_or_authenticated)):
+    """Revoga imediatamente o acesso de um dispositivo móvel previamente pareado em memória, disco e banco."""
+    uid = str(user.get("id", "default"))
+    existing = _authorized_devices.get(device_id)
+    if existing:
+        dev_uid = str(existing.get("user_id") or "default")
+        if uid not in ("default", "local-loopback") and dev_uid not in ("default", uid):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não tem permissão para revogar este dispositivo.",
+            )
+
     device = _authorized_devices.pop(device_id, None)
-    if not device:
+    db_deleted = False
+
+    pool = await get_or_init_db_pool()
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                if uid not in ("default", "local-loopback"):
+                    res = await conn.execute(
+                        "DELETE FROM device_authorized_devices WHERE device_id = $1 AND (user_id = $2 OR user_id = 'default')",
+                        device_id,
+                        uid,
+                    )
+                else:
+                    res = await conn.execute(
+                        "DELETE FROM device_authorized_devices WHERE device_id = $1",
+                        device_id,
+                    )
+                db_deleted = res != "DELETE 0"
+        except Exception as e:
+            logger.warning(f"Erro ao remover dispositivo pareado do Supabase: {e}")
+
+    if not device and not db_deleted:
         raise HTTPException(status_code=404, detail="Dispositivo não encontrado.")
 
-    token = device.get("token")
-    if token and token in _token_to_device:
-        _token_to_device.pop(token, None)
+    if device:
+        token = device.get("token")
+        if token and token in _token_to_device:
+            _token_to_device.pop(token, None)
 
     _save_authorized_devices()
 
-    logger.info(f"[PAIRING REVOKE] Dispositivo {device_id} ({device.get('device_name')}) revogado pelo usuário.")
-    return {"status": "ok", "message": f"Dispositivo '{device.get('device_name')}' revogado com sucesso."}
+    dev_name = (device or {}).get("device_name") or device_id
+    logger.info(f"[PAIRING REVOKE] Dispositivo {device_id} ({dev_name}) revogado pelo usuário.")
+    return {"status": "ok", "message": f"Dispositivo '{dev_name}' revogado com sucesso."}
 
 
 class AutoLinkRequest(BaseModel):
@@ -657,8 +789,12 @@ class AutoLinkRequest(BaseModel):
 
 
 @router.post("/auto-link")
-async def auto_link_device(req: AutoLinkRequest):
-    """Permite descoberta e vinculação automática sem código para clientes na mesma LAN ou com conta sincronizada."""
+async def auto_link_device(
+    req: AutoLinkRequest,
+    user: dict = Depends(require_local_or_authenticated),
+):
+    """Permite descoberta e vinculação automática sem código apenas para clientes autenticados ou loopback local."""
+    uid = str(user.get("id", "default"))
     device_token = f"charlie_dev_{secrets.token_urlsafe(32)}"
     now = time.time()
     device_data = {
@@ -666,6 +802,7 @@ async def auto_link_device(req: AutoLinkRequest):
         "device_name": req.device_name or "Dispositivo Móvel",
         "platform": req.platform or "mobile",
         "token": device_token,
+        "user_id": uid,
         "paired_at": now,
         "last_seen": now,
         "permissions": ["mobile_client"],

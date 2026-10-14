@@ -12,6 +12,7 @@ class RemoteDeviceBroker:
 
     def __init__(self):
         self._pending_calls: Dict[str, asyncio.Future] = {}
+        self._call_owners: Dict[str, str] = {}
         self._active_device_ws = None
         self._user_devices: Dict[str, Any] = {}
 
@@ -49,7 +50,7 @@ class RemoteDeviceBroker:
         target_ws = None
         if user_id and str(user_id) in self._user_devices:
             target_ws = self._user_devices[str(user_id)]
-        elif not user_id:
+        elif not user_id or str(user_id) in ("default", "lucas-local"):
             target_ws = self._active_device_ws
 
         if not target_ws:
@@ -58,6 +59,8 @@ class RemoteDeviceBroker:
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         self._pending_calls[call_id] = future
+        if user_id:
+            self._call_owners[call_id] = str(user_id)
 
         try:
             payload = {
@@ -77,18 +80,24 @@ class RemoteDeviceBroker:
             return f"Timeout: O dispositivo demorou mais de {timeout}s para responder a '{tool_name}'."
         except Exception as e:
             logger.exception(f"Device Broker: Erro no despacho de '{tool_name}': {e}")
-            return f"Erro ao despachar '{tool_name}' para o dispositivo: {e}"
+            return f"Erro ao despachar '{tool_name}' para o dispositivo."
         finally:
             self._pending_calls.pop(call_id, None)
+            self._call_owners.pop(call_id, None)
 
-    def resolve_tool_result(self, call_id: str, result: Any):
-        """Recebe o resultado retornado pelo dispositivo e resolve a Future pendente."""
+    def resolve_tool_result(self, call_id: str, result: Any, user_id: Optional[str] = None) -> bool:
+        """Recebe o resultado retornado pelo dispositivo e resolve a Future pendente validando o tenant."""
+        owner = self._call_owners.get(call_id)
+        if owner and user_id and str(user_id) != owner and owner not in ("default", "lucas-local"):
+            logger.warning(f"Device Broker: Bloqueada tentativa cross-tenant de resolver call_id {call_id} por {user_id} (owner={owner})")
+            return False
         future = self._pending_calls.get(call_id)
         if future and not future.done():
             future.set_result(result)
-            logger.info(f"Device Broker: Resultado recebido para call_id {call_id}: {result}")
-        else:
-            logger.warning(f"Device Broker: Nenhum future pendente para call_id {call_id}")
+            logger.info(f"Device Broker: Resultado recebido para call_id {call_id}")
+            return True
+        logger.warning(f"Device Broker: Nenhum future pendente para call_id {call_id}")
+        return False
 
 
 # Instância global compartilhada

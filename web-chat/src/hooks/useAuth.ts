@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, LoginCredentials, RegisterCredentials } from '../types/auth';
+import { User, LoginCredentials, RegisterCredentials, ProfileUpdatePayload } from '../types/auth';
 import { AuthService } from '../services/authService';
 import { StorageService } from '../services/storage';
 import { api } from '../services/api';
@@ -71,6 +71,12 @@ export function useAuth() {
     }
   }, []);
 
+  const updateProfile = useCallback(async (payload: ProfileUpdatePayload) => {
+    const updated = await AuthService.updateProfile(payload);
+    setUser((prev) => (prev ? { ...prev, ...updated } : updated));
+    return updated;
+  }, []);
+
   const logout = useCallback(() => {
     const currentUserId = user?.id;
     StorageService.purgeAllUserData(currentUserId);
@@ -88,6 +94,7 @@ export function useAuth() {
     setAuthError,
     login,
     register,
+    updateProfile,
     logout,
   };
 }

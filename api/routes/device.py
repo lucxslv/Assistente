@@ -161,7 +161,7 @@ def _open_target_windows(target: str) -> str:
         return f"Alvo '{target_clean}' aberto com sucesso."
     except Exception as e:
         logger.exception(f"Erro ao abrir '{target}': {e}")
-        return f"Erro ao abrir '{target}': {e}"
+        return f"Não foi possível abrir o alvo '{target}'."
 
 
 class HostRegistration(BaseModel):
@@ -198,6 +198,10 @@ class DeviceCommandRequest(BaseModel):
     command: Optional[str] = None
 
 
+from fastapi import Depends, Request
+from api.routes.auth import require_local_or_authenticated
+from api.security.rate_limiter import rate_limiter, extract_client_ip
+
 # Armazenamento em memória para hosts e presença
 _registered_hosts: Dict[str, Dict[str, Any]] = {}  # pin -> host data
 _latest_host_state: Optional[Dict[str, Any]] = None
@@ -212,10 +216,14 @@ def _cleanup_old_pins():
 
 
 @router.post("/register-host")
-async def register_host(req: HostRegistration):
+async def register_host(
+    req: HostRegistration,
+    user: dict = Depends(require_local_or_authenticated),
+):
     """Armazena temporariamente o PIN e metadados de rede do Desktop para pareamento."""
     _cleanup_old_pins()
     clean_pin = req.pin.replace("-", "").replace(" ", "").strip()
+    uid = str(user.get("id", "default")) if user else "default"
 
     host_data = {
         "pin": clean_pin,
@@ -225,7 +233,10 @@ async def register_host(req: HostRegistration):
         "device_name": req.device_name or "Meu PC",
         "auth_secret": req.auth_secret,
         "tunnel_url": req.tunnel_url,
+        "user_id": uid,
         "registered_at": time.time(),
+        "attempts": 0,
+        "max_attempts": 5,
         "paired": False,
     }
 
@@ -234,6 +245,7 @@ async def register_host(req: HostRegistration):
     if not _latest_host_state:
         _latest_host_state = {
             "device_name": host_data["device_name"],
+            "user_id": uid,
             "local_ip": host_data["local_ip"],
             "port": host_data["port"],
             "last_heartbeat": time.time(),
@@ -257,13 +269,30 @@ async def register_host(req: HostRegistration):
 
 
 @router.post("/verify-pin")
-async def verify_pin(req: VerifyPinRequest):
-    """Valida o código de 6 dígitos enviado pelo celular e retorna os dados de conexão do PC."""
+async def verify_pin(req: VerifyPinRequest, request: Request):
+    """Valida o código de 6 dígitos enviado pelo celular com proteção contra força bruta."""
     _cleanup_old_pins()
+    client_ip = extract_client_ip(request)
+    await rate_limiter.enforce(
+        f"device_pin:{client_ip}",
+        limit=10,
+        window_seconds=60,
+        detail="Muitas tentativas de verificação de PIN. Aguarde 1 minuto.",
+    )
+
     clean_pin = req.pin.replace("-", "").replace(" ", "").strip()
     host = _registered_hosts.get(clean_pin)
 
     if not host:
+        # Incrementa contador nos hosts ativos em memória contra força bruta
+        for h_pin, h_data in list(_registered_hosts.items()):
+            h_data["attempts"] = h_data.get("attempts", 0) + 1
+            if h_data["attempts"] >= h_data.get("max_attempts", 5):
+                _registered_hosts.pop(h_pin, None)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="PIN bloqueado por excesso de tentativas. Gere um novo código no Desktop.",
+                )
         raise HTTPException(
             status_code=404,
             detail="Código PIN inválido ou expirado. Gere um novo no Desktop.",
@@ -290,10 +319,14 @@ async def verify_pin(req: VerifyPinRequest):
 
 
 @router.post("/heartbeat")
-async def device_heartbeat(req: DeviceHeartbeatRequest):
+async def device_heartbeat(
+    req: DeviceHeartbeatRequest,
+    user: dict = Depends(require_local_or_authenticated),
+):
     """Recebe o heartbeat a cada 10s do desktop com os dados reais de CPU/RAM e tarefas."""
     global _latest_host_state, _pending_commands
     now = time.time()
+    uid = str(user.get("id", "default")) if user else "default"
 
     telemetry = {
         "cpu_percent": req.cpu_percent,
@@ -307,6 +340,7 @@ async def device_heartbeat(req: DeviceHeartbeatRequest):
 
     _latest_host_state = {
         "device_name": req.device_name or "Meu PC",
+        "user_id": uid,
         "last_heartbeat": now,
         "telemetry": telemetry,
     }
@@ -318,24 +352,34 @@ async def device_heartbeat(req: DeviceHeartbeatRequest):
     if pool:
         try:
             async with pool.acquire() as conn:
-                # Upsert da telemetria do host
+                # Upsert da telemetria do host vinculada ao user_id
                 await conn.execute("""
-                    INSERT INTO device_host_state (device_name, last_heartbeat, telemetry, updated_at)
-                    VALUES ($1, $2, $3::jsonb, NOW())
+                    INSERT INTO device_host_state (device_name, user_id, last_heartbeat, telemetry, updated_at)
+                    VALUES ($1, $2, $3, $4::jsonb, NOW())
                     ON CONFLICT (device_name) DO UPDATE
-                    SET last_heartbeat = EXCLUDED.last_heartbeat,
+                    SET user_id = EXCLUDED.user_id,
+                        last_heartbeat = EXCLUDED.last_heartbeat,
                         telemetry = EXCLUDED.telemetry,
                         updated_at = NOW();
-                """, req.device_name or "Meu PC", now, json.dumps(telemetry))
+                """, req.device_name or "Meu PC", uid, now, json.dumps(telemetry))
 
-                # Busca comandos pendentes enviados via nuvem
-                rows = await conn.fetch("""
-                    SELECT id, action, level, key, target, command, params
-                    FROM device_pending_commands
-                    WHERE executed = FALSE
-                    ORDER BY created_at ASC
-                    LIMIT 10;
-                """)
+                # Busca comandos pendentes enviados via nuvem escopados por user_id
+                if uid not in ("default", "local-loopback"):
+                    rows = await conn.fetch("""
+                        SELECT id, action, level, key, target, command, params
+                        FROM device_pending_commands
+                        WHERE executed = FALSE AND (user_id = $1 OR user_id = 'default')
+                        ORDER BY created_at ASC
+                        LIMIT 10;
+                    """, uid)
+                else:
+                    rows = await conn.fetch("""
+                        SELECT id, action, level, key, target, command, params
+                        FROM device_pending_commands
+                        WHERE executed = FALSE
+                        ORDER BY created_at ASC
+                        LIMIT 10;
+                    """)
                 if rows:
                     ids = [r["id"] for r in rows]
                     await conn.execute("""
@@ -357,10 +401,16 @@ async def device_heartbeat(req: DeviceHeartbeatRequest):
         except Exception as e:
             logger.error(f"Erro ao sincronizar heartbeat do dispositivo com Supabase: {e}")
 
-    # 2. Fallback de comandos em memória local
+    # 2. Fallback de comandos em memória local filtrados por user_id
     if not commands and _pending_commands:
-        commands = list(_pending_commands)
-        _pending_commands.clear()
+        remaining_cmds = []
+        for cmd in _pending_commands:
+            cmd_uid = str(cmd.get("user_id") or "default")
+            if uid in ("default", "local-loopback") or cmd_uid in ("default", uid):
+                commands.append(cmd)
+            else:
+                remaining_cmds.append(cmd)
+        _pending_commands[:] = remaining_cmds
 
     return {
         "status": "ok",
@@ -371,21 +421,31 @@ async def device_heartbeat(req: DeviceHeartbeatRequest):
 
 
 @router.get("/status")
-async def device_status():
+async def device_status(user: dict = Depends(require_local_or_authenticated)):
     """Retorna se o PC físico do usuário está online (se houve heartbeat nos últimos 30s) e sua telemetria real."""
     now = time.time()
+    uid = str(user.get("id", "default")) if user else "default"
 
     # 1. Primeiro verifica estado recente no Supabase (robusto para ambiente serverless na Nuvem)
     pool = await get_or_init_db_pool()
     if pool:
         try:
             async with pool.acquire() as conn:
-                row = await conn.fetchrow("""
-                    SELECT device_name, last_heartbeat, telemetry
-                    FROM device_host_state
-                    ORDER BY updated_at DESC
-                    LIMIT 1;
-                """)
+                if uid not in ("default", "local-loopback"):
+                    row = await conn.fetchrow("""
+                        SELECT device_name, last_heartbeat, telemetry
+                        FROM device_host_state
+                        WHERE user_id = $1 OR user_id = 'default'
+                        ORDER BY updated_at DESC
+                        LIMIT 1;
+                    """, uid)
+                else:
+                    row = await conn.fetchrow("""
+                        SELECT device_name, last_heartbeat, telemetry
+                        FROM device_host_state
+                        ORDER BY updated_at DESC
+                        LIMIT 1;
+                    """)
                 if row:
                     dev_last = row["last_heartbeat"]
                     if (now - dev_last) <= 30.0:
@@ -465,6 +525,7 @@ async def device_status():
 @router.post("/command")
 async def device_command(
     req: DeviceCommandRequest,
+    request: Request,
     authorization: Optional[str] = Header(None),
 ):
     """Executa ações remotas enviadas pelo app mobile (volume, media, lock, screenshot, open, git_pull)."""
@@ -479,7 +540,10 @@ async def device_command(
 
     clean_token = authorization.replace("Bearer ", "").strip()
     device = await get_authorized_device_async(clean_token)
-    if not device:
+    caller_uid = "default"
+    if device:
+        caller_uid = str(device.get("user_id") or "default")
+    else:
         from api.routes.auth import verify_supabase_token
         user = await verify_supabase_token(clean_token)
         if not user:
@@ -487,6 +551,15 @@ async def device_command(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token de dispositivo ou usuário inválido ou revogado. Pareie novamente.",
             )
+        caller_uid = str(user.get("id") or "default")
+
+    client_ip = extract_client_ip(request)
+    await rate_limiter.enforce(
+        f"device_cmd:{caller_uid}:{client_ip}",
+        limit=30,
+        window_seconds=60,
+        detail="Muitos comandos remotos enviados em sequência. Aguarde alguns segundos.",
+    )
 
     action = req.action.lower()
     params = req.params or {}
@@ -501,6 +574,7 @@ async def device_command(
         cmd_id = f"cmd_{int(time.time() * 1000)}"
         cmd_obj = {
             "id": cmd_id,
+            "user_id": caller_uid,
             "action": action,
             "level": level,
             "key": key,
@@ -515,9 +589,9 @@ async def device_command(
             try:
                 async with pool.acquire() as conn:
                     await conn.execute("""
-                        INSERT INTO device_pending_commands (id, action, level, key, target, command, params, executed, created_at)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, FALSE, $8);
-                    """, cmd_id, action, level, key, target, command, json.dumps(params), time.time())
+                        INSERT INTO device_pending_commands (id, user_id, action, level, key, target, command, params, executed, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, FALSE, $9);
+                    """, cmd_id, caller_uid, action, level, key, target, command, json.dumps(params), time.time())
             except Exception as e:
                 logger.error(f"Erro ao persistir comando no Supabase: {e}")
                 _pending_commands.append(cmd_obj)

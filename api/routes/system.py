@@ -16,7 +16,7 @@ except ImportError:
 
 from api.db import get_db_pool
 from api.state import state
-from api.routes.auth import get_current_user
+from api.routes.auth import get_current_user, get_current_user_optional, require_local_or_authenticated
 from brain.context.presence import presence_manager
 from config import config
 from tools.system_control import set_system_volume, system_power_action, execute_system_command
@@ -52,8 +52,8 @@ def _press_windows_key(vk_code: int):
 
 
 @router.get("/status")
-async def system_status():
-    """Retorna a telemetria ao vivo do Charlie e do computador."""
+async def system_status(user: Optional[dict] = Depends(get_current_user_optional)):
+    """Retorna a telemetria ao vivo do Charlie e do computador com isolamento de campos sensíveis."""
     is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
 
     host_info = {
@@ -76,17 +76,19 @@ async def system_status():
 
     active_devices = presence_manager.get_active_clients()
     pool = get_db_pool()
+    uid = str(user["id"]) if user and user.get("id") else None
+    s_dict = state.to_dict(user_id=uid, include_sensitive=(user is not None))
 
     return {
         "assistant_name": config.assistant_name,
-        "is_online": state.is_online,
-        "status": state.status.value,
-        "is_speaking": state.is_speaking,
-        "is_listening": state.is_listening,
-        "active_thread_id": state.active_thread_id,
-        "active_tool": state.active_tool,
-        "current_process": state.current_process,
-        "uptime_seconds": state.to_dict()["uptime_seconds"],
+        "is_online": s_dict["is_online"],
+        "status": s_dict["status"],
+        "is_speaking": s_dict["is_speaking"],
+        "is_listening": s_dict["is_listening"],
+        "active_thread_id": s_dict["active_thread_id"],
+        "active_tool": s_dict["active_tool"],
+        "current_process": s_dict["current_process"],
+        "uptime_seconds": s_dict["uptime_seconds"],
         "database_connected": pool is not None,
         "connected_devices_count": len(active_devices),
         "host": host_info,
@@ -94,18 +96,19 @@ async def system_status():
 
 
 @router.get("/presence")
-async def system_presence():
+async def system_presence(user: dict = Depends(require_local_or_authenticated)):
     """Retorna a lista de clientes e dispositivos conectados em tempo real."""
+    is_local_or_admin = user.get("id") == "local-loopback" or bool(user.get("is_admin"))
     return [
         {
             "client_id": c.client_id,
             "client_type": c.client_type,
             "name": c.name,
             "platform": c.platform,
-            "ip_address": c.ip_address,
+            "ip_address": c.ip_address if is_local_or_admin else None,
             "connected_at": c.connected_at.isoformat(),
             "last_seen": c.last_seen.isoformat(),
-            "active_thread_id": c.active_thread_id,
+            "active_thread_id": c.active_thread_id if is_local_or_admin else None,
         }
         for c in presence_manager.get_active_clients()
     ]

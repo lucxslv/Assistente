@@ -57,26 +57,92 @@ class ToolRegistry:
     def get_scope(self, name: str) -> ToolScope:
         return self._scopes.get(name, ToolScope.CLOUD)
 
-    async def execute(
+    FRIENDLY_TOOL_NAMES: dict[str, str] = {
+        "search_web": "Pesquisando na Web",
+        "read_webpage": "Lendo página web",
+        "get_weather": "Consultando previsão do tempo",
+        "get_datetime": "Consultando data e hora",
+        "get_system_status": "Verificando status do sistema",
+        "control_device": "Controlando dispositivo inteligente",
+        "play_music": "Reproduzindo música",
+        "pause_music": "Pausando música",
+        "resume_music": "Retomando música",
+        "stop_music": "Parando música",
+        "set_volume": "Ajustando volume da mídia",
+        "set_system_volume": "Ajustando volume do sistema",
+        "system_power_action": "Executando ação de energia",
+        "manage_application": "Gerenciando aplicativo",
+        "execute_command": "Executando comando no terminal",
+        "run_command": "Executando comando no terminal",
+        "execute_system_command": "Executando comando no terminal",
+        "press_key": "Enviando atalho de teclado",
+        "type_text": "Digitando texto",
+        "take_screenshot": "Capturando tela",
+        "create_folder": "Criando pasta",
+        "list_directory": "Listando diretório",
+        "read_file": "Lendo arquivo",
+        "write_file": "Gravando arquivo",
+        "replace_in_file": "Editando arquivo",
+        "save_user_memory": "Memorizando informação relevante",
+        "memorize_fact": "Memorizando informação relevante",
+        "save_user_preference": "Salvando preferência do usuário",
+        "memorize_preference": "Salvando preferência do usuário",
+        "search_chat_history": "Buscando em conversas anteriores",
+        "get_chat_session_context": "Carregando contexto de conversa anterior",
+        "start_background_process": "Iniciando processo em segundo plano",
+        "get_background_process_logs": "Lendo logs de processo",
+        "list_background_processes": "Listando processos em segundo plano",
+        "kill_background_process": "Encerrando processo em segundo plano",
+        "call_mcp_tool": "Executando integração MCP",
+    }
+
+    def get_friendly_name(self, name: str) -> str:
+        return self.FRIENDLY_TOOL_NAMES.get(name, f"Executando {name.replace('_', ' ')}")
+
+    async def execute_structured(
         self,
         name: str,
         arguments: dict[str, Any],
         prefer_remote: bool = False,
         call_id: Optional[str] = None,
         user_id: Optional[str] = None,
-    ) -> str:
+        timeout: float = 15.0,
+    ) -> dict[str, Any]:
+        """Executa uma ferramenta de forma assíncrona não-bloqueante com timeout e contrato estruturado."""
+        import asyncio
+        import time
+
+        t0 = time.perf_counter()
+        friendly = self.get_friendly_name(name)
+        safe_args = arguments if isinstance(arguments, dict) else {}
+
         handler = self._handlers.get(name)
         if handler is None:
-            return f"Ferramenta '{name}' não encontrada."
+            return {
+                "status": "error",
+                "output": f"Ferramenta '{name}' não encontrada.",
+                "friendly_name": friendly,
+                "duration_ms": 0,
+                "error_type": "not_found",
+                "is_recoverable": False,
+            }
 
         # Sandbox & Proteção contra Comandos Perigosos
         if name in ("execute_command", "run_command", "execute_system_command"):
-            cmd = arguments.get("command", "")
+            cmd = safe_args.get("command", "")
             from tools.system_control import validate_system_command
             is_valid, reason = validate_system_command(cmd)
             if not is_valid:
                 logger.warning(f"[AUDIT DE SEGURANÇA] Comando bloqueado no registro de ferramentas: {cmd} (Motivo: {reason})")
-                return f"Segurança: O comando '{cmd}' foi bloqueado pelas políticas de proteção do Charlie por conter instruções potencialmente destrutivas ({reason})."
+                msg = f"Segurança: O comando '{cmd}' foi bloqueado pelas políticas de proteção do Charlie por conter instruções potencialmente destrutivas ({reason})."
+                return {
+                    "status": "blocked",
+                    "output": msg,
+                    "friendly_name": friendly,
+                    "duration_ms": int((time.perf_counter() - t0) * 1000),
+                    "error_type": "security_blocked",
+                    "is_recoverable": False,
+                }
 
         scope = self.get_scope(name)
 
@@ -97,63 +163,137 @@ class ToolRegistry:
                     from brain.broker.device_broker import device_broker
                     if device_broker.has_active_device(user_id=user_id):
                         c_id = call_id or f"call_{uuid.uuid4().hex[:8]}"
-                        return await device_broker.dispatch_device_tool(c_id, name, arguments, user_id=user_id)
+                        remote_out = await device_broker.dispatch_device_tool(c_id, name, safe_args, user_id=user_id)
+                        return {
+                            "status": "success",
+                            "output": str(remote_out),
+                            "friendly_name": friendly,
+                            "duration_ms": int((time.perf_counter() - t0) * 1000),
+                            "error_type": None,
+                            "is_recoverable": False,
+                        }
                 except Exception as e:
                     logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Prosseguindo com resposta desktop.")
 
             # 2. Se estiver na nuvem (executando via stream SSE para o app Desktop no Windows)
             if is_cloud:
                 if name in ("execute_command", "run_command"):
-                    cmd = arguments.get("command", "")
-                    return f"Comando '{cmd}' despachado para execução no PowerShell do computador Windows do usuário via Charlie Desktop."
+                    cmd = safe_args.get("command", "")
+                    cloud_msg = f"Comando '{cmd}' despachado para execução no PowerShell do computador Windows do usuário via Charlie Desktop."
                 elif name == "get_system_status":
-                    return "Sistema: Microsoft Windows 11 x64 (Computador do Usuário conectado via Charlie Desktop). CPU, memória e disco em níveis ideais de operação local. Terminal PowerShell e explorador de arquivos Windows ativos."
+                    cloud_msg = "Sistema: Microsoft Windows 11 x64 (Computador do Usuário conectado via Charlie Desktop). CPU, memória e disco em níveis ideais de operação local. Terminal PowerShell e explorador de arquivos Windows ativos."
                 elif name == "create_folder":
-                    folder = arguments.get("path", "pasta")
-                    return f"Comando para criar a pasta '{folder}' enviado para execução no computador local via app Desktop."
+                    folder = safe_args.get("path", "pasta")
+                    cloud_msg = f"Comando para criar a pasta '{folder}' enviado para execução no computador local via app Desktop."
                 elif name == "manage_application":
-                    app = arguments.get("app_name", "aplicativo")
-                    act = arguments.get("action", "open")
-                    return f"Comando '{act}' para '{app}' enviado para execução no computador local do usuário via app Desktop."
+                    app = safe_args.get("app_name", "aplicativo")
+                    act = safe_args.get("action", "open")
+                    cloud_msg = f"Comando '{act}' para '{app}' enviado para execução no computador local do usuário via app Desktop."
                 elif name == "write_file":
-                    p = arguments.get("path", "arquivo")
-                    return f"Comando para gravar no arquivo '{p}' enviado para execução no computador local via app Desktop."
+                    p = safe_args.get("path", "arquivo")
+                    cloud_msg = f"Comando para gravar no arquivo '{p}' enviado para execução no computador local via app Desktop."
                 elif name == "system_power_action":
-                    act = arguments.get("action", "lock")
-                    return f"Ação de energia '{act}' enviada para o computador do usuário via app Desktop."
+                    act = safe_args.get("action", "lock")
+                    cloud_msg = f"Ação de energia '{act}' enviada para o computador do usuário via app Desktop."
                 elif name == "set_system_volume":
-                    return "Comando de alteração de volume enviado para o computador do usuário via app Desktop."
+                    cloud_msg = "Comando de alteração de volume enviado para o computador do usuário via app Desktop."
                 elif name in ("press_key", "type_text", "take_screenshot"):
-                    return f"Ação de automação '{name}' enviada para o computador do usuário via app Desktop."
+                    cloud_msg = f"Ação de automação '{name}' enviada para o computador do usuário via app Desktop."
                 elif name in ("play_music", "pause_music", "resume_music", "stop_music"):
-                    return f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
+                    cloud_msg = f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
                 elif name in ("list_directory", "read_file", "replace_in_file"):
-                    p = arguments.get("path", "pasta")
-                    return f"Comando de arquivo para '{p}' enviado para o aplicativo Desktop local do usuário."
+                    p = safe_args.get("path", "pasta")
+                    cloud_msg = f"Comando de arquivo para '{p}' enviado para o aplicativo Desktop local do usuário."
                 else:
-                    return f"Comando '{name}' despachado para o aplicativo Desktop local do usuário."
+                    cloud_msg = f"Comando '{name}' despachado para o aplicativo Desktop local do usuário."
+                return {
+                    "status": "success",
+                    "output": cloud_msg,
+                    "friendly_name": friendly,
+                    "duration_ms": int((time.perf_counter() - t0) * 1000),
+                    "error_type": None,
+                    "is_recoverable": False,
+                }
 
         # Notifica o observador de estado (se o módulo de API estiver ativo)
         state_mgr = None
         try:
             from api.state import state
-            state.set_tool_start(name, arguments)
+            state.set_tool_start(name, safe_args, user_id=user_id)
             state_mgr = state
         except Exception:
             pass
 
         try:
             if inspect.iscoroutinefunction(handler):
-                result = await handler(**arguments)
+                result = await asyncio.wait_for(handler(**safe_args), timeout=timeout)
             else:
-                result = handler(**arguments)
-            return str(result)
+                result = await asyncio.wait_for(asyncio.to_thread(handler, **safe_args), timeout=timeout)
+            out_str = str(result)
+            is_err = out_str.lower().startswith("erro:") or out_str.lower().startswith("erro ao ")
+            return {
+                "status": "error" if is_err else "success",
+                "output": out_str,
+                "friendly_name": friendly,
+                "duration_ms": int((time.perf_counter() - t0) * 1000),
+                "error_type": "tool_reported_error" if is_err else None,
+                "is_recoverable": is_err,
+            }
+        except asyncio.TimeoutError:
+            logger.warning("Timeout (%ss) ao executar tool '%s'", timeout, name)
+            msg = f"Erro: A ferramenta '{friendly}' excedeu o tempo limite de {int(timeout)} segundos."
+            return {
+                "status": "timeout",
+                "output": msg,
+                "friendly_name": friendly,
+                "duration_ms": int((time.perf_counter() - t0) * 1000),
+                "error_type": "timeout",
+                "is_recoverable": True,
+            }
+        except TypeError as type_exc:
+            logger.warning("Argumentos inválidos na tool '%s': %s", name, type_exc)
+            msg = f"Erro de validação nos parâmetros de '{name}': {type_exc}"
+            return {
+                "status": "error",
+                "output": msg,
+                "friendly_name": friendly,
+                "duration_ms": int((time.perf_counter() - t0) * 1000),
+                "error_type": "invalid_arguments",
+                "is_recoverable": True,
+            }
         except Exception as exc:
             logger.exception("Erro ao executar tool '%s'", name)
-            return f"Erro ao executar '{name}': {exc}"
+            msg = f"Erro ao executar '{name}': {exc}"
+            return {
+                "status": "error",
+                "output": msg,
+                "friendly_name": friendly,
+                "duration_ms": int((time.perf_counter() - t0) * 1000),
+                "error_type": "execution_exception",
+                "is_recoverable": True,
+            }
         finally:
             if state_mgr:
-                state_mgr.set_tool_end()
+                state_mgr.set_tool_end(user_id=user_id)
+
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        prefer_remote: bool = False,
+        call_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        timeout: float = 15.0,
+    ) -> str:
+        res = await self.execute_structured(
+            name=name,
+            arguments=arguments,
+            prefer_remote=prefer_remote,
+            call_id=call_id,
+            user_id=user_id,
+            timeout=timeout,
+        )
+        return res["output"]
 
     def _register_defaults(self) -> None:
         self.register(
