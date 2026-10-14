@@ -18,11 +18,13 @@ export class ApiError extends Error {
   }
 }
 
+import { CLOUD_API_BASE, CLOUD_WS_BASE, LOCAL_API_BASE } from '../config/constants';
+
 type ConnectionListener = (isOnline: boolean) => void;
 type UnauthorizedListener = () => void;
 
-const LOCAL_API = 'http://127.0.0.1:8005/api';
-const CLOUD_API = 'https://assistente-xi.vercel.app/api';
+const LOCAL_API = LOCAL_API_BASE;
+const CLOUD_API = CLOUD_API_BASE;
 
 function resolveDefaultApi(): string {
   if (typeof window === 'undefined') return CLOUD_API;
@@ -65,12 +67,14 @@ class ApiClient {
       });
       if (res.ok) {
         this.activeBaseUrl = LOCAL_API;
+        this.hasTriedCloudFallback = false;
         return LOCAL_API;
       }
     } catch {
       // Backend local inativo; mantém CLOUD_API
     }
     this.activeBaseUrl = CLOUD_API;
+    this.hasTriedCloudFallback = false;
     return CLOUD_API;
   }
 
@@ -86,10 +90,20 @@ class ApiClient {
   }
 
   public setOnline(status: boolean): void {
+    const wasOffline = !this.isOnlineStatus;
     if (this.isOnlineStatus !== status) {
       this.isOnlineStatus = status;
       this.connectionListeners.forEach((l) => l(status));
     }
+    // Ao voltar a ficar online, permite nova tentativa de fallback se necessário
+    if (status && wasOffline) {
+      this.hasTriedCloudFallback = false;
+    }
+  }
+
+  /** Permite reset explícito do flag de fallback (ex: após detectBackend sucesso). */
+  public resetFallbackFlag(): void {
+    this.hasTriedCloudFallback = false;
   }
 
   public getBaseUrl(): string {
@@ -109,7 +123,7 @@ class ApiClient {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${proto}//${window.location.host}${base}/chat/ws`;
     }
-    return 'wss://assistente-xi.vercel.app/api/chat/ws';
+    return CLOUD_WS_BASE;
   }
 
   public getHeaders(customHeaders: HeadersInit = {}): Headers {

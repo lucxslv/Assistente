@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+﻿import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -318,7 +318,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                       ...msg,
                       content:
                         msg.content +
-                        `\n\n> ⚠️ *Erro durante execução:* ${errStr}`,
+                        `\n\n> *Erro durante execução:* ${errStr}`,
                     }
                   : msg
               )
@@ -361,7 +361,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
         <header className="px-6 py-2.5 border-b border-white/[0.08] bg-[#12151C]/70 backdrop-blur-md flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-200 font-bold text-xs">
-              ⚡
+              
             </div>
             <div className="truncate">
               <div className="flex items-center gap-2">
@@ -474,7 +474,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
             /* Onboarding do Agente quando não há mensagens */
             <div className="max-w-2xl mx-auto py-12 space-y-6 text-center">
               <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl mx-auto shadow-inner text-indigo-400">
-                ⚡
+                
               </div>
               <div className="space-y-1.5">
                 <h2 className="text-base font-semibold text-zinc-100">
@@ -497,7 +497,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   className="p-3 rounded-xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#181C26] transition text-left cursor-pointer group"
                 >
                   <div className="text-xs font-semibold text-zinc-200 group-hover:text-indigo-300 flex items-center gap-1.5 font-mono">
-                    <span>🔍 Analisar Arquitetura</span>
+                    <span className="inline-flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analisar Arquitetura</span>
                   </div>
                   <p className="text-[11px] text-zinc-400 mt-1 line-clamp-2">
                     Inspeciona pastas e módulos para identificar inconsistências e sugerir melhorias.
@@ -514,7 +514,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   className="p-3 rounded-xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#181C26] transition text-left cursor-pointer group"
                 >
                   <div className="text-xs font-semibold text-zinc-200 group-hover:text-indigo-300 flex items-center gap-1.5 font-mono">
-                    <span>🛡️ Inspecionar Autenticação</span>
+                    <span className="inline-flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Inspecionar Autenticação</span>
                   </div>
                   <p className="text-[11px] text-zinc-400 mt-1 line-clamp-2">
                     Examina rotas de login, tokens JWT e middleware de sessão.
@@ -531,7 +531,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   className="p-3 rounded-xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#181C26] transition text-left cursor-pointer group"
                 >
                   <div className="text-xs font-semibold text-zinc-200 group-hover:text-indigo-300 flex items-center gap-1.5 font-mono">
-                    <span>💡 Propor Plano de Refatoração</span>
+                    <span> Propor Plano de Refatoração</span>
                   </div>
                   <p className="text-[11px] text-zinc-400 mt-1 line-clamp-2">
                     Debate trade-offs e define o checklist de etapas antes de tocar no código.
@@ -548,7 +548,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
                   className="p-3 rounded-xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#181C26] transition text-left cursor-pointer group"
                 >
                   <div className="text-xs font-semibold text-zinc-200 group-hover:text-indigo-300 flex items-center gap-1.5 font-mono">
-                    <span>💻 Diagnóstico do Sistema</span>
+                    <span className="inline-flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Diagnóstico do Sistema</span>
                   </div>
                   <p className="text-[11px] text-zinc-400 mt-1 line-clamp-2">
                     Coleta métricas de hardware, processos ativos e status de ferramentas locais.
@@ -567,7 +567,7 @@ export const AgentEnvironment: React.FC<AgentEnvironmentProps> = ({
               >
                 {msg.type === "assistant_message" && (
                   <div className="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-xs font-bold shrink-0 mt-1">
-                    ⚡
+                    
                   </div>
                 )}
 

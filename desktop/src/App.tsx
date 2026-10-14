@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+﻿import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { SettingsModal, TabType } from "./components/SettingsModal";
@@ -709,13 +709,13 @@ export function App() {
 
   if (!currentUser) {
     return (
-      <div className="flex h-screen w-screen bg-[#0E0F12] text-[#F2F3F5] font-sans select-none overflow-hidden">
+      <div className="flex h-screen w-screen bg-black text-[#F2F3F5] font-sans select-none overflow-hidden">
         <AuthGatekeeper onSuccess={handleAuthSuccess} />
 
         {/* Banner de Feedback Rápido (Toast) */}
         {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] shadow-[0_12px_36px_rgba(0,0,0,0.6)] text-[12.5px] font-medium text-[var(--text-primary)] animate-fade-in pointer-events-none select-none">
-            <span className="text-[var(--accent)] text-[14px]">✦</span>
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.08] shadow-[0_12px_36px_rgba(0,0,0,0.6)] text-[12.5px] font-medium text-white animate-fade-in pointer-events-none select-none">
+            <span className="w-2 h-2 rounded-full bg-white/60 shrink-0"></span>
             <span>{toastMessage}</span>
           </div>
         )}
@@ -726,7 +726,7 @@ export function App() {
   const activeThread = threads.find((t) => t.id === activeThreadId);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#161618] text-[#F2F3F5] font-sans">
       {/* Barra Lateral com Histórico, Navegação e Telemetria */}
       <Sidebar
         threads={threads}
@@ -858,8 +858,8 @@ export function App() {
 
       {/* Banner de Feedback Rápido (Toast) */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] shadow-[0_12px_36px_rgba(0,0,0,0.6)] text-[12.5px] font-medium text-[var(--text-primary)] animate-fade-in pointer-events-none select-none">
-          <span className="text-[var(--accent)] text-[14px]">✦</span>
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.08] shadow-[0_12px_36px_rgba(0,0,0,0.6)] text-[12.5px] font-medium text-white animate-fade-in pointer-events-none select-none">
+          <span className="w-2 h-2 rounded-full bg-white/60 shrink-0"></span>
           <span>{toastMessage}</span>
         </div>
       )}

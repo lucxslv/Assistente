@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   Copy,
   Check,
@@ -225,8 +225,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     >
       {/* Assistant Avatar with Charlie Logo */}
       {isAssistant && (
-        <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden mt-0.5 shadow-glow-sm p-1">
-          <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
+        <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden mt-0.5 p-1.5">
+          <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain object-center" />
         </div>
       )}
 

@@ -3,6 +3,7 @@
  * Padroniza SSE como default na Web e encapsula WebSocket para agentes/runners.
  */
 
+import { CLOUD_API_BASE } from '../config/constants';
 import { api } from './api';
 import { StorageService } from './storage';
 import { StreamEvent } from '../types/chat';
@@ -103,9 +104,9 @@ export class SSEChatTransport implements ChatTransport {
         if ((fetchErr as Error)?.name === 'AbortError' || signal?.aborted) {
           return;
         }
-        if (baseUrl !== 'https://assistente-xi.vercel.app/api') {
+        if (baseUrl !== CLOUD_API_BASE) {
           console.warn('[Charlie Web] Streaming local indisponível. Alternando para Cloud API...');
-          baseUrl = 'https://assistente-xi.vercel.app/api';
+          baseUrl = CLOUD_API_BASE;
           url = `${baseUrl}/chat/stream`;
           response = await fetch(url, {
             method: 'POST',

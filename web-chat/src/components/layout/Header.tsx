@@ -6,14 +6,16 @@ import {
   Trash2,
   Download,
   RotateCcw,
-  Sliders,
-  Check,
-  X,
   FileCode,
   Shield,
   SquarePen,
+  PanelLeftClose,
+  PanelLeft,
+  Search,
+  ChevronRight,
 } from 'lucide-react';
 import { ConnectionStatus, CharlieAIStatus, Thread, Message } from '../../types/chat';
+import { User } from '../../types/auth';
 import { Badge } from '../ui/Badge';
 import { RenameThreadModal } from './RenameThreadModal';
 import { hapticFeedback } from '../../utils/haptics';
@@ -23,6 +25,8 @@ interface HeaderProps {
   connectionStatus: ConnectionStatus;
   charlieStatus: CharlieAIStatus;
   messages: Message[];
+  user: User | null;
+  isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   onNewThread: () => void;
   onRenameThread: (newName: string) => void;
@@ -37,6 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
   connectionStatus,
   charlieStatus,
   messages,
+  user,
+  isSidebarCollapsed,
   onToggleSidebar,
   onNewThread,
   onRenameThread,
@@ -49,28 +55,19 @@ export const Header: React.FC<HeaderProps> = ({
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Click outside menu listener
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsMenuOpen(false);
     };
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    if (isMenuOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen]);
 
-  const handleSaveTitle = (newName: string) => {
-    onRenameThread(newName);
-  };
+  const handleSaveTitle = (newName: string) => onRenameThread(newName);
 
   const exportAsMarkdown = () => {
     if (messages.length === 0) return;
-    const content = messages
-      .map((m) => `### ${m.role === 'user' ? 'Usuário' : 'Charlie'} (${m.createdAt})\n\n${m.content}\n\n---`)
-      .join('\n\n');
+    const content = messages.map((m) => `### ${m.role === 'user' ? 'Usuário' : 'Charlie'} (${m.createdAt})\n\n${m.content}\n\n---`).join('\n\n');
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -80,7 +77,6 @@ export const Header: React.FC<HeaderProps> = ({
     URL.revokeObjectURL(url);
     setIsMenuOpen(false);
   };
-
   const exportAsJson = () => {
     if (messages.length === 0) return;
     const blob = new Blob([JSON.stringify(messages, null, 2)], { type: 'application/json' });
@@ -94,201 +90,131 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="relative z-30 w-full min-h-14 pt-[env(safe-area-inset-top,0px)] border-b border-white/[0.06] bg-[#0A0B0E]/95 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between select-none flex-shrink-0">
-      {/* Left: Sidebar Toggle & Title */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+    <header className="relative z-30 w-full min-h-[56px] border-b border-white/[0.06] bg-[#161618] px-3 sm:px-5 flex items-center justify-between gap-3 select-none shrink-0">
+      {/* Left: collapse icon + breadcrumbs */}
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <button
-          onClick={() => {
-            hapticFeedback.light();
-            onToggleSidebar();
-          }}
-          className="md:hidden min-h-[44px] min-w-[44px] -ml-1 sm:ml-0 text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
-          title="Alternar barra lateral"
-          aria-label="Abrir menu lateral"
+          onClick={() => { hapticFeedback.light(); onToggleSidebar(); }}
+          className="hidden md:flex w-8 h-8 rounded-lg border border-white/[0.07] bg-white/[0.03] text-white/60 hover:text-white hover:bg-white/[0.06] items-center justify-center shrink-0 transition-colors cursor-pointer"
+          title={isSidebarCollapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'}
+          aria-label="Alternar barra lateral"
+        >
+          {isSidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={() => { hapticFeedback.light(); onToggleSidebar(); }}
+          className="md:hidden w-8 h-8 rounded-lg text-white/50 hover:text-white flex items-center justify-center cursor-pointer"
+          aria-label="Abrir menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Mobile Header: App Brand with Logo + Active Thread Title + Subtle Status Indicator */}
-        <div className="flex md:hidden items-center gap-2 min-w-0 flex-1">
-          <div className="w-6 h-6 rounded-lg bg-black border border-white/[0.08] flex items-center justify-center overflow-hidden p-0.5 flex-shrink-0 shadow-sm">
-            <img src="/logo.png" alt="Charlie" className="w-full h-full object-contain" />
-          </div>
-          <div className="flex flex-col min-w-0 flex-1">
-            <div
-              onClick={() => {
-                hapticFeedback.light();
-                setIsRenameModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 min-w-0 cursor-pointer active:opacity-70 transition-opacity"
-            >
-              <span className="text-xs font-semibold tracking-tight text-[#F3F4F6] truncate max-w-[150px] sm:max-w-xs">
-                {activeThread?.name || 'Nova Conversa'}
-              </span>
-              <span
-                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                  connectionStatus === 'online'
-                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                    : 'bg-red-400'
-                }`}
-                title={connectionStatus === 'online' ? 'Online' : 'Offline'}
-              />
-            </div>
-            {(charlieStatus === 'thinking' || charlieStatus === 'speaking') && (
-              <span className="text-[10px] text-primary font-mono truncate animate-pulse leading-none mt-0.5">
-                {charlieStatus === 'thinking' ? 'pensando...' : 'respondendo...'}
-              </span>
-            )}
-            {charlieStatus === 'error' && (
-              <span className="text-[10px] text-red-400 font-mono truncate leading-none mt-0.5">
-                falha no envio
-              </span>
-            )}
-          </div>
+        {/* Breadcrumbs — flat, slash separator, low-contrast trail */}
+        <nav className="hidden sm:flex items-center gap-1.5 min-w-0 text-[13px]" aria-label="Navegação">
+          <span className="text-white/35">Workspace</span>
+          <ChevronRight className="w-3 h-3 text-white/20 shrink-0" />
+          <span className="text-white/35">Conversas</span>
+          <span className="text-white/20 mx-1">/</span>
+          <button
+            onClick={() => { hapticFeedback.light(); setIsRenameModalOpen(true); }}
+            className="text-white font-[550] truncate max-w-[220px] hover:text-white/90 text-left cursor-pointer"
+            title="Clique para renomear"
+          >
+            {activeThread?.name || 'Nova conversa'}
+          </button>
+          <Pencil className="w-3 h-3 text-white/25 shrink-0 hidden lg:block" />
+        </nav>
+
+        {/* Mobile title fallback */}
+        <div className="flex sm:hidden items-center gap-1.5 min-w-0 flex-1">
+          <button
+            onClick={() => { hapticFeedback.light(); setIsRenameModalOpen(true); }}
+            className="text-[13px] font-semibold text-white truncate text-left cursor-pointer"
+          >
+            {activeThread?.name || 'Nova conversa'}
+          </button>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connectionStatus === 'online' ? 'bg-emerald-400' : 'bg-red-400'}`} />
         </div>
 
-        {/* Desktop Header: Renameable Thread Title */}
-        <div className="hidden md:flex items-center gap-2 min-w-0 flex-1">
-          <h1
-            onClick={() => {
-              hapticFeedback.light();
-              setIsRenameModalOpen(true);
-            }}
-            className="text-sm font-semibold text-[#F3F4F6] truncate max-w-md cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5 group"
-            title="Clique para renomear conversa"
-          >
-            <span>{activeThread?.name || 'Nova Conversa'}</span>
-            <Pencil className="w-3 h-3 text-[#6B7280] opacity-0 group-hover:opacity-100 transition-opacity" />
-          </h1>
-        </div>
+        {(charlieStatus === 'thinking' || charlieStatus === 'speaking') && (
+          <span className="hidden lg:inline-flex text-[11px] font-mono text-white/40 animate-pulse ml-1">
+            {charlieStatus === 'thinking' ? 'pensando…' : 'respondendo…'}
+          </span>
+        )}
       </div>
 
-      {/* Right: Actions */}
-      <div className="flex items-center gap-0.5 sm:gap-2">
-        {/* Mobile: Quick New Chat Button */}
+      {/* Right: pill search + circular avatar */}
+      <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => {
-            hapticFeedback.light();
-            onNewThread();
-          }}
-          className="md:hidden min-h-[44px] min-w-[44px] text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
-          title="Nova Conversa"
-          aria-label="Iniciar nova conversa"
+          onClick={() => { hapticFeedback.light(); onNewThread(); }}
+          className="md:hidden w-8 h-8 rounded-full bg-white text-black flex items-center justify-center cursor-pointer"
+          title="Nova conversa"
+          aria-label="Nova conversa"
         >
           <SquarePen className="w-4 h-4" />
         </button>
 
-        {/* Charlie Status (Desktop) */}
-        {charlieStatus === 'thinking' && (
-          <Badge variant="info" dot className="hidden md:inline-flex text-[10px]">
-            Pensando
-          </Badge>
-        )}
-        {charlieStatus === 'speaking' && (
-          <Badge variant="success" dot className="hidden md:inline-flex text-[10px]">
-            Transmitindo
-          </Badge>
-        )}
-        {charlieStatus === 'error' && (
-          <Badge variant="danger" dot className="hidden md:inline-flex text-[10px]">
-            Erro
-          </Badge>
-        )}
+        {charlieStatus === 'thinking' && <Badge variant="info" dot className="hidden lg:inline-flex text-[11px]">Pensando</Badge>}
+        {charlieStatus === 'speaking' && <Badge variant="success" dot className="hidden lg:inline-flex text-[11px]">Transmitindo</Badge>}
+        {charlieStatus === 'error' && <Badge variant="danger" dot className="hidden lg:inline-flex text-[11px]">Erro</Badge>}
 
-        {/* Server Connection Indicator (Desktop) */}
-        <Badge
-          variant={connectionStatus === 'online' ? 'success' : 'danger'}
-          dot
-          className="hidden md:inline-flex text-[10px]"
-        >
-          {connectionStatus === 'online' ? 'Online' : 'Offline'}
-        </Badge>
+        {/* Pill search — flat, no shadow, subtle border */}
+        <div className="hidden sm:flex items-center gap-2 h-9 px-3.5 rounded-full bg-[#1E1E20] border border-white/[0.06] text-[13px] text-white/40 min-w-[180px] max-w-[260px]">
+          <Search className="w-3.5 h-3.5 text-white/30 shrink-0" />
+          <input
+            type="text"
+            placeholder="Buscar"
+            className="bg-transparent outline-none text-white placeholder:text-white/30 w-full text-[13px]"
+            aria-label="Buscar"
+          />
+        </div>
 
-        {/* Context Menu Dropdown */}
+        {/* Circular avatar */}
+        <div className="w-8 h-8 rounded-full bg-white border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt={user.name || 'Perfil'} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-[11px] font-bold text-black">{(user?.name || 'CH').slice(0, 2).toUpperCase()}</span>
+          )}
+        </div>
+
         <div className="relative" ref={menuRef}>
           <button
-            onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="min-h-[44px] min-w-[44px] text-[#9CA3AF] hover:text-[#F3F4F6] active:bg-white/[0.08] rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+            onClick={() => setIsMenuOpen((v) => !v)}
+            className="w-8 h-8 rounded-full border border-white/[0.07] bg-white/[0.03] text-white/50 hover:text-white hover:bg-white/[0.06] flex items-center justify-center cursor-pointer"
             title="Mais opções"
             aria-label="Mais opções"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
-
           {isMenuOpen && (
-            <div className="absolute right-0 mt-2 w-52 rounded-xl bg-[#12141A] border border-white/[0.08] shadow-2xl py-1.5 z-50 animate-slide-up text-xs">
+            <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#1A1A1E] border border-white/[0.08] shadow-2xl py-1.5 z-50 animate-slide-up text-[13px]">
               {isAdmin && onOpenAudit && (
                 <>
-                  <button
-                    onClick={() => {
-                      onOpenAudit();
-                      setIsMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-emerald-500/10 text-left cursor-pointer"
-                  >
+                  <button onClick={() => { onOpenAudit(); setIsMenuOpen(false); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-white hover:bg-white/[0.06] text-left cursor-pointer">
                     <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="font-medium text-emerald-400">Vault de Auditoria</span>
+                    <span className="font-medium text-emerald-300">Vault de Auditoria</span>
                   </button>
                   <div className="my-1 border-t border-white/[0.06]" />
                 </>
               )}
-
-              <button
-                onClick={() => {
-                  hapticFeedback.light();
-                  setIsRenameModalOpen(true);
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-white/[0.06] text-left cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                <span>Renomear conversa</span>
+              <button onClick={() => { hapticFeedback.light(); setIsRenameModalOpen(true); setIsMenuOpen(false); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-white/70 hover:text-white hover:bg-white/[0.06] text-left cursor-pointer">
+                <Pencil className="w-3.5 h-3.5" /><span>Renomear conversa</span>
               </button>
-
-              <button
-                onClick={exportAsMarkdown}
-                disabled={messages.length === 0}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-white/[0.06] text-left cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Download className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                <span>Exportar como Markdown</span>
+              <button onClick={exportAsMarkdown} disabled={messages.length === 0} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-white/70 hover:text-white hover:bg-white/[0.06] text-left cursor-pointer disabled:opacity-40">
+                <Download className="w-3.5 h-3.5" /><span>Exportar Markdown</span>
               </button>
-
-              <button
-                onClick={exportAsJson}
-                disabled={messages.length === 0}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-white/[0.06] text-left cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <FileCode className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                <span>Exportar como JSON</span>
+              <button onClick={exportAsJson} disabled={messages.length === 0} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-white/70 hover:text-white hover:bg-white/[0.06] text-left cursor-pointer disabled:opacity-40">
+                <FileCode className="w-3.5 h-3.5" /><span>Exportar JSON</span>
               </button>
-
-              <button
-                onClick={() => {
-                  hapticFeedback.warning();
-                  onClearChat();
-                  setIsMenuOpen(false);
-                }}
-                disabled={messages.length === 0}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[#D1D5DB] hover:text-white hover:bg-white/[0.06] text-left cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                <span>Limpar mensagens</span>
+              <button onClick={() => { hapticFeedback.warning(); onClearChat(); setIsMenuOpen(false); }} disabled={messages.length === 0} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-white/70 hover:text-white hover:bg-white/[0.06] text-left cursor-pointer disabled:opacity-40">
+                <RotateCcw className="w-3.5 h-3.5" /><span>Limpar mensagens</span>
               </button>
-
               {activeThread && (
                 <>
                   <div className="my-1 border-t border-white/[0.06]" />
-                  <button
-                    onClick={() => {
-                      hapticFeedback.warning();
-                      onDeleteThread();
-                      setIsMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 text-left cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Excluir conversa</span>
+                  <button onClick={() => { hapticFeedback.warning(); onDeleteThread(); setIsMenuOpen(false); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-red-300 hover:text-red-200 hover:bg-red-500/10 text-left cursor-pointer">
+                    <Trash2 className="w-3.5 h-3.5" /><span>Excluir conversa</span>
                   </button>
                 </>
               )}
@@ -297,13 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Modal de Renomear Conversa (Universal para Mobile & Desktop) */}
-      <RenameThreadModal
-        isOpen={isRenameModalOpen}
-        initialName={activeThread?.name || 'Nova Conversa'}
-        onClose={() => setIsRenameModalOpen(false)}
-        onSave={handleSaveTitle}
-      />
+      <RenameThreadModal isOpen={isRenameModalOpen} initialName={activeThread?.name || 'Nova Conversa'} onClose={() => setIsRenameModalOpen(false)} onSave={handleSaveTitle} />
     </header>
   );
 };
