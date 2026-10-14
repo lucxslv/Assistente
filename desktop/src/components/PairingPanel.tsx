@@ -8,8 +8,14 @@ import {
   Globe,
   ShieldCheck,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
-import { getApiBase } from "../services/api";
+import {
+  getApiBase,
+  getAuthHeaders,
+  fetchPairedDevices,
+  revokePairedDevice,
+} from "../services/api";
 
 export interface PairingPanelProps {
   onClose?: () => void;
@@ -81,9 +87,15 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
   const [copied, setCopied] = useState(false);
   const [isPaired, setIsPaired] = useState(false);
   const [pairedDevice, setPairedDevice] = useState<PairedDeviceInfo | null>(null);
+  const [connectedDevices, setConnectedDevices] = useState<PairedDeviceInfo[]>([]);
   const [secondsRemaining, setSecondsRemaining] = useState(300);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const soundPlayedRef = useRef(false);
+
+  const loadPairedDevices = useCallback(async () => {
+    const list = await fetchPairedDevices();
+    setConnectedDevices(list);
+  }, []);
 
   const initPairing = useCallback(async () => {
     setLoading(true);
@@ -92,15 +104,15 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
     setStatusMessage(null);
     soundPlayedRef.current = false;
 
-    const serverUrl = "https://assistente-xi.vercel.app/api";
+    const serverUrl = getApiBase().replace(/\/+$/, "");
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
 
       const res = await fetch(`${serverUrl}/pair/init`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           name: "Desktop Principal",
         }),
@@ -114,12 +126,13 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
         const rawPin = payload.pin;
         const pairingId = payload.pairing_id || payload.id || payload.token;
         const secret = payload.secret || payload.token;
+        const lanUrl = payload.lan_url || serverUrl;
 
         const qrPayload: QRPayload = payload.qr_payload || payload.qrPayload || {
           v: 1,
           id: pairingId,
-          lan: serverUrl,
-          tunnel: serverUrl,
+          lan: lanUrl,
+          tunnel: payload.tunnel_url || serverUrl,
           secret,
           type: "charlie-pair",
           pin: rawPin,
@@ -130,12 +143,12 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
           pin: rawPin,
           formattedPin: payload.formatted_pin || `${rawPin.slice(0, 3)}-${rawPin.slice(3)}`,
           pairingId,
-          lanUrl: serverUrl,
-          tunnelUrl: serverUrl,
+          lanUrl,
+          tunnelUrl: payload.tunnel_url || serverUrl,
           secret,
-          expiresInSeconds: payload.expires_in || payload.expiresInSeconds || 300,
+          expiresInSeconds: payload.expires_in_seconds || payload.expires_in || payload.expiresInSeconds || 300,
           qrPayload,
-          source: "cloud",
+          source: serverUrl.includes("127.0.0.1") || serverUrl.includes("localhost") ? "local" : "cloud",
           apiBaseUrl: serverUrl,
         };
 
@@ -147,14 +160,15 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
       }
     } catch {
       setData(null);
-      setStatusMessage("Não foi possível conectar ao servidor central Charlie. Verifique sua conexão com a internet.");
+      setStatusMessage("Não foi possível iniciar o pareamento. Verifique se o backend está online.");
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     initPairing();
-  }, [initPairing]);
+    loadPairedDevices();
+  }, [initPairing, loadPairedDevices]);
 
   // Contagem regressiva de expiração
   useEffect(() => {
@@ -177,12 +191,15 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
     const interval = setInterval(async () => {
       try {
         const base = (data.apiBaseUrl || getApiBase()).replace(/\/+$/, "");
-        const res = await fetch(`${base}/pair/status?id=${data.pairingId}&pin=${data.pin}`);
+        const res = await fetch(`${base}/pair/status?id=${encodeURIComponent(data.pairingId)}&pin=${encodeURIComponent(data.pin)}`, {
+          headers: getAuthHeaders(),
+        });
         if (res.ok) {
           const status = await res.json();
           if (status.paired) {
             setIsPaired(true);
             setPairedDevice(status.device);
+            loadPairedDevices();
             if (!soundPlayedRef.current) {
               soundPlayedRef.current = true;
               playPairSuccessSound();
@@ -195,13 +212,22 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [data, isPaired, secondsRemaining]);
+  }, [data, isPaired, secondsRemaining, loadPairedDevices]);
 
   const handleCopyPin = () => {
     if (!data) return;
     navigator.clipboard.writeText(data.pin);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRevokeDevice = async (deviceId: string) => {
+    try {
+      await revokePairedDevice(deviceId);
+      setConnectedDevices((prev) => prev.filter((d) => d.device_id !== deviceId));
+    } catch {
+      // ignore
+    }
   };
 
   const minutes = Math.floor(secondsRemaining / 60);
@@ -300,7 +326,7 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
           <div>
             <h4 className="text-sm font-bold text-zinc-100">Servidor Temporariamente Indisponível</h4>
             <p className="text-xs text-zinc-400 mt-1 max-w-md">
-              Não foi possível conectar ao servidor central Charlie. Verifique sua conexão com a internet e tente novamente.
+              Não foi possível conectar ao servidor do Charlie. Verifique sua conexão e tente novamente.
             </p>
           </div>
           <button
@@ -383,12 +409,14 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
 
             {/* Metadados de Conectividade */}
             <div className="space-y-2 pt-3 border-t border-white/[0.06] text-[11px] text-zinc-400">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Servidor:</span>
+                  <span>Endereço LAN / API:</span>
                 </div>
-                <span className="font-medium text-emerald-300">Servidor Oficial Conectado</span>
+                <span className="font-mono text-[10.5px] text-emerald-300 truncate" title={data.lanUrl}>
+                  {data.lanUrl}
+                </span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -399,6 +427,44 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onClose, isModal = f
                 <span className="text-zinc-300">Sessão Segura HMAC (32-bytes)</span>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Dispositivos Pareados */}
+      {connectedDevices.length > 0 && (
+        <div className="p-4 rounded-xl border border-white/[0.08] bg-[#0D0F12] space-y-2.5">
+          <span className="text-xs font-semibold text-zinc-200 block">
+            Dispositivos Pareados Ativos ({connectedDevices.length})
+          </span>
+          <div className="space-y-1.5">
+            {connectedDevices.map((dev) => (
+              <div
+                key={dev.device_id}
+                className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#161A22] border border-white/[0.06] text-xs"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="font-medium text-zinc-200 truncate">
+                      {dev.device_name || "Dispositivo Mobile"}
+                    </div>
+                    <div className="text-[10px] text-zinc-400 font-mono">
+                      {dev.platform || "Mobile"} • ID: {dev.device_id.slice(0, 12)}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRevokeDevice(dev.device_id)}
+                  className="px-2 py-1 rounded text-[11px] text-rose-400 hover:bg-rose-500/15 transition flex items-center gap-1 cursor-pointer shrink-0"
+                  title="Revogar acesso deste dispositivo"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Desconectar</span>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

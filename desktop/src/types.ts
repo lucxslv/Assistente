@@ -6,9 +6,14 @@ export interface Thread {
 }
 
 export interface ToolCallInfo {
+  call_id?: string;
   name: string;
+  friendly_name?: string;
   args?: Record<string, any>;
   result?: any;
+  summary?: string;
+  duration_ms?: number;
+  error_category?: string | null;
   status: "executing" | "completed" | "error";
 }
 
@@ -43,6 +48,16 @@ export interface WidgetPayload<T = Record<string, any>> {
   fallbackText: string;
 }
 
+export interface MessageAttachment {
+  id?: string;
+  name: string;
+  type: "image" | "document" | "code" | "file" | string;
+  mimeType?: string;
+  sizeBytes?: number;
+  previewUrl?: string;
+  extractedText?: string;
+}
+
 export interface Message {
   id: string;
   name: string;
@@ -50,6 +65,12 @@ export interface Message {
   content: string;
   createdAt?: string | null;
   streaming?: boolean;
+  status?: "in_progress" | "completed" | "cancelled" | "interrupted" | "failed" | "unknown";
+  request_id?: string | null;
+  is_edited?: boolean;
+  version?: number;
+  attachments?: MessageAttachment[];
+  feedback?: number | null;
   tools?: ToolCallInfo[];
   widget?: WidgetPayload;
   thought?: string;
@@ -64,6 +85,7 @@ export interface StreamEvent {
     | "tool_end"
     | "status"
     | "done"
+    | "cancelled"
     | "error"
     | "reset_and_fallback"
     | "client_tool_request"
@@ -78,12 +100,18 @@ export interface Settings {
   groq_model: string;
   tts_provider?: string;
   tts_voice: string;
+  stt_provider?: string;
   elevenlabs_api_key?: string;
   elevenlabs_voice_id?: string;
   wake_word: string;
   wake_word_enabled: boolean;
+  wake_word_sensitivity?: number;
   home_assistant_url: string;
+  home_assistant_token?: string;
   home_assistant_configured: boolean;
+  knowledge_dirs?: string[];
+  auto_extract_memories?: boolean;
+  global_shortcut?: string;
 }
 
 // ================= Charlie Agentic Runtime Types =================
