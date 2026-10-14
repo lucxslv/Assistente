@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef, useId } from "react";
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle2, KeyRound, ArrowLeft } from "lucide-react";
@@ -54,12 +54,12 @@ const AnimatedFormField: React.FC<FormFieldProps> = ({
   return (
     <div className="relative group">
       <div
-        className="relative overflow-hidden rounded-lg border border-border bg-background transition-all duration-300 ease-in-out focus-within:border-primary/60"
+        className="relative flex items-center overflow-hidden rounded-[12px] border border-white/[0.08] bg-[#1A1A1E] h-[56px] transition-colors focus-within:border-white/15 focus-within:bg-[#222224]"
         onMouseMove={handleMouseMove}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
-        <div className="absolute left-3 top-9 -translate-y-1/2 text-muted-foreground transition-colors duration-200 group-focus-within:text-primary">
+        <div className="shrink-0 ml-3.5 text-white/30 flex items-center justify-center transition-colors duration-200 group-focus-within:text-white/60">
           {icon}
         </div>
 
@@ -74,7 +74,7 @@ const AnimatedFormField: React.FC<FormFieldProps> = ({
           aria-label={placeholder}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className="w-full bg-transparent pl-10 pr-12 pt-6 pb-2 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+          className="w-full h-full bg-transparent pl-2.5 pr-2 text-[14px] text-white placeholder:text-white/25 focus:outline-none disabled:opacity-50 leading-none pt-4"
           placeholder=""
         />
 
@@ -82,8 +82,8 @@ const AnimatedFormField: React.FC<FormFieldProps> = ({
           htmlFor={inputId}
           className={`absolute left-10 transition-all duration-200 ease-in-out pointer-events-none ${
             isFocused || value
-              ? "top-2 text-xs text-primary font-medium"
-              : "top-9 -translate-y-1/2 text-sm text-muted-foreground"
+              ? "top-[7px] text-[11px] font-medium tracking-wide text-white/50"
+              : "top-1/2 -translate-y-1/2 text-[14px] text-white/35"
           }`}
         >
           {placeholder}
@@ -95,7 +95,7 @@ const AnimatedFormField: React.FC<FormFieldProps> = ({
             onClick={onToggle}
             aria-label={showPassword ? "Ocultar senha" : "Exibir senha"}
             title={showPassword ? "Ocultar senha" : "Exibir senha"}
-            className="absolute right-3 top-9 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            className="shrink-0 mr-3 text-white/30 hover:text-white/70 transition-colors flex items-center justify-center"
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -339,14 +339,14 @@ export const Component: React.FC<SignInFloProps> = ({
   const busy = isLoading || isRecoverySubmitting;
 
   return (
-    <div className="h-[var(--app-height,100dvh)] w-full bg-background text-foreground flex items-center justify-center p-4 relative overflow-y-auto overflow-x-hidden select-none font-sans pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+    <div className="h-[var(--app-height,100dvh)] w-full bg-black text-white flex items-center justify-center p-4 relative overflow-y-auto overflow-x-hidden select-none font-sans pt-[max(1.5rem,env(safe-area-inset-top,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
       <FloatingParticles />
 
       <div className="relative z-10 w-full max-w-md my-auto">
-        <div className="bg-card/80 backdrop-blur-xl border border-border rounded-2xl p-8 shadow-2xl">
+        <div className="bg-[#0E0E10] border border-white/[0.07] rounded-[18px] p-8 shadow-[0_16px_64px_-12px_rgba(0,0,0,0.85)]">
           <div className="text-center mb-7">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-black border border-white/[0.08] rounded-2xl mb-4 p-2.5 shadow-glow-sm">
-              <img src="/logo.png" alt="Charlie AI" className="w-full h-full object-contain" />
+              <img src="/logo.png" alt="Charlie AI" className="w-full h-full object-contain object-center" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1.5">
               {viewMode === "signup"

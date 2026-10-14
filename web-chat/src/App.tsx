@@ -15,32 +15,32 @@ import { hapticFeedback } from './utils/haptics';
 
 function isSecretRoute(): boolean {
   if (typeof window === 'undefined') return false;
-  const path = window.location.pathname.toLowerCase();
+  const url = new URL(window.location.href);
+  const path = url.pathname.toLowerCase();
   const hash = window.location.hash.toLowerCase();
-  const search = window.location.search.toLowerCase();
   return (
     path === '/vault-audit' ||
-    path.startsWith('/vault-audit') ||
+    path.startsWith('/vault-audit/') ||
     path === '/ghost-ops' ||
-    path.startsWith('/ghost-ops') ||
+    path.startsWith('/ghost-ops/') ||
     path === '/admin-telemetry' ||
     hash === '#vault-audit' ||
     hash === '#/vault-audit' ||
     hash === '#ghost-ops' ||
-    search.includes('vault-audit') ||
-    search.includes('route=audit')
+    url.searchParams.has('vault-audit') ||
+    url.searchParams.get('route') === 'audit'
   );
 }
 
 export const App: React.FC = () => {
   const { isKeyboardOpen } = useMobileViewport();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'chat' | 'audit'>(() =>
     isSecretRoute() ? 'audit' : 'chat'
   );
 
-  // Mobile Edge Swipe (< 768px): Swipe right from left edge (x < 28px) to open sidebar
   const edgeTouchRef = useRef<{ startX: number; startY: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -50,7 +50,6 @@ export const App: React.FC = () => {
       edgeTouchRef.current = { startX: touch.clientX, startY: touch.clientY };
     }
   };
-
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!edgeTouchRef.current || isSidebarOpen) return;
     const touch = e.touches[0];
@@ -62,7 +61,6 @@ export const App: React.FC = () => {
       edgeTouchRef.current = null;
     }
   };
-
   const handleTouchEnd = () => {
     edgeTouchRef.current = null;
   };
@@ -110,16 +108,10 @@ export const App: React.FC = () => {
 
   const isAdmin = checkIsAdmin(user);
 
-  // Monitora alterações na URL para suporte a navegação por rota secreta
   useEffect(() => {
     const handleRouteChange = () => {
-      if (isSecretRoute()) {
-        setCurrentView('audit');
-      } else {
-        setCurrentView('chat');
-      }
+      setCurrentView(isSecretRoute() ? 'audit' : 'chat');
     };
-
     window.addEventListener('popstate', handleRouteChange);
     window.addEventListener('hashchange', handleRouteChange);
     return () => {
@@ -128,7 +120,6 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Atalho global Ctrl + Alt + Space para foco imediato na barra de prompt
   useEffect(() => {
     const handleGlobalShortcut = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && (e.code === 'Space' || e.key === ' ')) {
@@ -148,31 +139,21 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalShortcut);
   }, [currentView]);
 
-  // Se o usuário faz login/logout, atualiza conversas
   useEffect(() => {
-    if (token) {
-      refreshThreads();
-    }
+    if (token) refreshThreads();
   }, [token, refreshThreads]);
 
   const handleSend = (text: string, attachments: FileAttachment[]) => {
     sendMessage(text, attachments);
   };
-
   const handleSelectStarterPrompt = (promptText: string) => {
     sendMessage(promptText, []);
   };
-
   const navigateTo = (view: 'chat' | 'audit') => {
     setCurrentView(view);
-    if (view === 'audit') {
-      window.history.pushState({}, '', '/vault-audit');
-    } else {
-      window.history.pushState({}, '', '/');
-    }
+    window.history.pushState({}, '', view === 'audit' ? '/vault-audit' : '/');
   };
 
-  // Se o usuário não estiver autenticado, exige login obrigatório (Sign-in Flow)
   if (!isAuthenticated || !user) {
     return (
       <SignInFlo
@@ -185,19 +166,17 @@ export const App: React.FC = () => {
     );
   }
 
-  // Route Guard Estrito: Se tentar acessar rota secreta e NÃO for administrador,
-  // renderiza tela padrão 404 Not Found para mascarar completamente a existência da rota.
   if (currentView === 'audit' && !isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[100dvh] w-full bg-[#0A0B0E] text-[#F3F4F6] p-6 text-center select-none font-sans">
-        <div className="text-7xl font-mono font-bold text-white/[0.12] mb-3">404</div>
-        <h1 className="text-lg font-semibold text-[#F3F4F6] mb-1.5">Página não encontrada</h1>
+      <div className="flex flex-col items-center justify-center min-h-[100dvh] w-full bg-black text-[#F2F2F3] p-6 text-center select-none font-sans">
+        <div className="text-7xl font-mono font-bold text-white/[0.10] mb-3">404</div>
+        <h1 className="text-lg font-semibold text-[#F2F2F3] mb-1.5">Página não encontrada</h1>
         <p className="text-xs text-[#9CA3AF] max-w-sm mb-6 leading-relaxed">
           O recurso solicitado não existe ou não está disponível neste servidor.
         </p>
         <button
           onClick={() => navigateTo('chat')}
-          className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/[0.08] text-xs font-medium text-[#E5E7EB] hover:text-white transition-colors cursor-pointer"
+          className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] text-xs font-medium text-[#E5E7EB] transition-colors cursor-pointer"
         >
           Voltar para a página inicial
         </button>
@@ -210,100 +189,109 @@ export const App: React.FC = () => {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      className="min-h-[100dvh] w-full bg-black flex items-center justify-center p-0 md:p-3 lg:p-4 font-sans"
       style={{ height: 'var(--app-height, 100dvh)' }}
-      className="flex h-full w-full max-w-full bg-[#0A0B0E] text-[#F3F4F6] overflow-hidden font-sans"
     >
-      {/* Sidebar Navigation Drawer */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        threads={threads}
-        activeThreadId={activeThreadId}
-        connectionStatus={connectionStatus}
-        user={user}
-        onSelectThread={(id) => {
-          navigateTo('chat');
-          setActiveThreadId(id);
-        }}
-        onNewThread={() => {
-          navigateTo('chat');
-          createNewThread('Nova Conversa');
-        }}
-        onRenameThread={(id, newName) => renameThread(id, newName)}
-        onTogglePinThread={(id) => togglePinThread(id)}
-        onToggleArchiveThread={(id) => toggleArchiveThread(id)}
-        onDeleteThread={(id) => deleteThread(id)}
-        onOpenProfile={() => setIsProfileOpen(true)}
-        onLogout={() => {
-          logout();
-          setActiveThreadId(null);
-          clearCurrentChat();
-        }}
-        onOpenAudit={() => navigateTo('audit')}
-        isAdmin={isAdmin}
-      />
+      {/* Floating Window — rounded outer corners on solid black */}
+      <div className="flex h-full w-full max-w-full md:max-w-[1600px] md:h-[calc(var(--app-height,100dvh)-24px)] lg:h-[calc(var(--app-height,100dvh)-32px)] md:rounded-[18px] md:overflow-hidden md:border md:border-white/[0.07] md:shadow-window bg-[#0E0E10] overflow-hidden text-[#F2F2F3]">
+        <Sidebar
+          isOpen={isSidebarOpen}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((v) => !v)}
+          onClose={() => setIsSidebarOpen(false)}
+          threads={threads}
+          activeThreadId={activeThreadId}
+          connectionStatus={connectionStatus}
+          user={user}
+          onSelectThread={(id) => {
+            navigateTo('chat');
+            setActiveThreadId(id);
+          }}
+          onNewThread={() => {
+            navigateTo('chat');
+            createNewThread('Nova Conversa');
+          }}
+          onRenameThread={(id, newName) => renameThread(id, newName)}
+          onTogglePinThread={(id) => togglePinThread(id)}
+          onToggleArchiveThread={(id) => toggleArchiveThread(id)}
+          onDeleteThread={(id) => deleteThread(id)}
+          onOpenProfile={() => setIsProfileOpen(true)}
+          onLogout={() => {
+            logout();
+            setActiveThreadId(null);
+            clearCurrentChat();
+          }}
+          onOpenAudit={() => navigateTo('audit')}
+          isAdmin={isAdmin}
+        />
 
-      {/* Profile Modal */}
-      <ProfileModal
-        isOpen={isProfileOpen}
-        user={user}
-        onClose={() => setIsProfileOpen(false)}
-        onSaveProfile={updateProfile}
-      />
+        <ProfileModal
+          isOpen={isProfileOpen}
+          user={user}
+          onClose={() => setIsProfileOpen(false)}
+          onSaveProfile={updateProfile}
+        />
 
-      {/* Main Area: Chat or Secret Vault Dashboard */}
-      {currentView === 'audit' && isAdmin ? (
-        <AuditDashboard onBackToChat={() => navigateTo('chat')} />
-      ) : (
-        <main className="flex-1 min-h-0 flex flex-col min-w-0 h-full relative bg-[#0A0B0E] overflow-hidden">
-          {/* Top Header */}
-          <Header
-            activeThread={activeThread}
-            connectionStatus={connectionStatus}
-            charlieStatus={charlieStatus}
-            messages={messages}
-            onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-            onNewThread={() => createNewThread('Nova Conversa')}
-            onRenameThread={(newName) => {
-              if (activeThreadId) renameThread(activeThreadId, newName);
-            }}
-            onDeleteThread={() => {
-              if (activeThreadId) deleteThread(activeThreadId);
-            }}
-            onClearChat={clearCurrentChat}
-            onOpenAudit={() => navigateTo('audit')}
-            isAdmin={isAdmin}
-          />
-
-          {/* Message Feed & Input Dock Container */}
-          <div className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
-            <MessageFeed
-              messages={messages}
-              userName={user.name || 'Você'}
-              userAvatarUrl={user.avatar_url}
-              charlieStatus={charlieStatus}
-              isStreaming={isStreaming}
-              onSelectPrompt={handleSelectStarterPrompt}
-              onRetryAssistant={(failedMsg) => retryAssistantMessage(failedMsg.id)}
-              onResendUser={(userMsg) => resendUserMessage(userMsg)}
-              onEditUser={(userMsg, newContent) => editUserMessage(userMsg.id, newContent)}
-              onRegenerateAssistant={(assistantMsg) => regenerateAssistantMessage(assistantMsg.id)}
-              onFeedback={(msg, rating) => submitMessageFeedback(msg.id, rating)}
-            />
-
-            {/* Prompt Dock (Mobile-friendly Input) */}
-            <PromptDock
-              value={draft}
-              onChange={setDraft}
-              onSend={handleSend}
-              isStreaming={isStreaming}
-              onStop={stopStreaming}
-              disabled={isLoadingMessages}
-              isKeyboardOpen={isKeyboardOpen}
-            />
+        {currentView === 'audit' && isAdmin ? (
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-[#161618] md:rounded-r-[18px] overflow-hidden">
+            <AuditDashboard onBackToChat={() => navigateTo('chat')} />
           </div>
-        </main>
-      )}
+        ) : (
+          <main className="flex-1 min-h-0 flex flex-col min-w-0 h-full relative bg-[#161618] overflow-hidden md:rounded-r-[18px]">
+            {/* Subtle vertical divider — handled by layout border */}
+            <Header
+              activeThread={activeThread}
+              connectionStatus={connectionStatus}
+              charlieStatus={charlieStatus}
+              messages={messages}
+              user={user}
+              isSidebarCollapsed={isSidebarCollapsed}
+              onToggleSidebar={() => {
+                if (window.innerWidth >= 768) {
+                  setIsSidebarCollapsed((v) => !v);
+                } else {
+                  setIsSidebarOpen((prev) => !prev);
+                }
+              }}
+              onNewThread={() => createNewThread('Nova Conversa')}
+              onRenameThread={(newName) => {
+                if (activeThreadId) renameThread(activeThreadId, newName);
+              }}
+              onDeleteThread={() => {
+                if (activeThreadId) deleteThread(activeThreadId);
+              }}
+              onClearChat={clearCurrentChat}
+              onOpenAudit={() => navigateTo('audit')}
+              isAdmin={isAdmin}
+            />
+
+            <div className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
+              <MessageFeed
+                messages={messages}
+                userName={user.name || 'Você'}
+                userAvatarUrl={user.avatar_url}
+                charlieStatus={charlieStatus}
+                isStreaming={isStreaming}
+                onSelectPrompt={handleSelectStarterPrompt}
+                onRetryAssistant={(failedMsg) => retryAssistantMessage(failedMsg.id)}
+                onResendUser={(userMsg) => resendUserMessage(userMsg)}
+                onEditUser={(userMsg, newContent) => editUserMessage(userMsg.id, newContent)}
+                onRegenerateAssistant={(assistantMsg) => regenerateAssistantMessage(assistantMsg.id)}
+                onFeedback={(msg, rating) => submitMessageFeedback(msg.id, rating)}
+              />
+              <PromptDock
+                value={draft}
+                onChange={setDraft}
+                onSend={handleSend}
+                isStreaming={isStreaming}
+                onStop={stopStreaming}
+                disabled={isLoadingMessages}
+                isKeyboardOpen={isKeyboardOpen}
+              />
+            </div>
+          </main>
+        )}
+      </div>
     </div>
   );
 };

@@ -2,25 +2,25 @@ import typography from '@tailwindcss/typography';
 
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   darkMode: "class",
   theme: {
     extend: {
       colors: {
-        background: "#0A0B0E",
-        surface: "#0E0F12",
-        "surface-card": "#13151A",
-        "surface-hover": "#181B22",
-        "surface-elevated": "#1E222B",
-        border: "rgba(255, 255, 255, 0.06)",
-        "border-hover": "rgba(255, 255, 255, 0.12)",
-        "border-focus": "rgba(139, 124, 255, 0.4)",
-        /* Tokens semânticos shadcn/ui (usados por componentes em src/components/ui) */
-        foreground: "#F3F4F6",
-        card: "#13151A",
+        background: "#000000",
+        window: "#0E0E10",
+        sidebar: "#121214",
+        main: "#161618",
+        surface: "#1C1C1E",
+        "surface-card": "#222224",
+        "surface-hover": "#2A2A2E",
+        "surface-elevated": "#2E2E32",
+        border: "rgba(255, 255, 255, 0.07)",
+        "border-subtle": "rgba(255, 255, 255, 0.04)",
+        "border-hover": "rgba(255, 255, 255, 0.11)",
+        "border-focus": "rgba(139, 124, 255, 0.35)",
+        foreground: "#F2F2F3",
+        card: "#222224",
         "muted-foreground": "#9CA3AF",
         "primary-foreground": "#FFFFFF",
         primary: {
@@ -30,14 +30,14 @@ export default {
           border: "rgba(139, 124, 255, 0.25)",
         },
         accent: {
-          DEFAULT: "#181B22",
+          DEFAULT: "#2A2A2E",
           cyan: "#38BDF8",
           emerald: "#10B981",
           amber: "#F59E0B",
           rose: "#F43F5E",
         },
         text: {
-          primary: "#F3F4F6",
+          primary: "#F2F2F3",
           secondary: "#9CA3AF",
           muted: "#6B7280",
           dim: "#4B5563",
@@ -47,24 +47,33 @@ export default {
         sans: ['Inter', 'Roboto', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
+      borderRadius: {
+        md: '14px',
+        lg: '18px',
+        xl: '22px',
+        pill: '9999px',
+      },
       boxShadow: {
-        glow: "0 0 20px -3px rgba(139, 124, 255, 0.18)",
-        "glow-sm": "0 0 10px -2px rgba(139, 124, 255, 0.15)",
-        card: "0 4px 20px -2px rgba(0, 0, 0, 0.5)",
+        glow: "0 0 20px -3px rgba(139, 124, 255, 0.16)",
+        "glow-sm": "0 0 10px -2px rgba(139, 124, 255, 0.12)",
+        card: "0 4px 24px -4px rgba(0, 0, 0, 0.6)",
+        window: "0 16px 64px -12px rgba(0, 0, 0, 0.85)",
       },
       animation: {
         "pulse-subtle": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "fade-in": "fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-up": "slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+        shimmer: "shimmer 1.8s ease-in-out infinite",
       },
       keyframes: {
-        fadeIn: {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
-        },
+        fadeIn: { "0%": { opacity: "0" }, "100%": { opacity: "1" } },
         slideUp: {
           "0%": { transform: "translateY(8px)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
         },
       },
     },

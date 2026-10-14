@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -80,7 +80,7 @@ export const AuthGatekeeper: React.FC<AuthGatekeeperProps> = ({
             <img
               src="/logo.png"
               alt="Charlie Logo"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain object-center"
             />
           </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+﻿import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -66,8 +66,8 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
   };
 
   return (
-    <div className="relative my-3 rounded-[var(--radius-md)] overflow-hidden border border-[var(--border)] bg-[#0A0B0E] text-left">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)] text-[11px] font-mono select-none">
+    <div className="relative my-3 rounded-[14px] overflow-hidden border border-white/[0.06] bg-[#0A0B0E] text-left">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#1A1A1E] border-b border-white/[0.06] text-[11px] font-mono select-none">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           {language || "code"}
         </span>
@@ -129,11 +129,11 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
   };
 
   return (
-    <div className="my-1.5 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[#101217] overflow-hidden text-left max-w-full select-none transition-all">
+    <div className="my-1.5 rounded-[14px] border border-white/[0.06] bg-[#1E1E20] overflow-hidden text-left max-w-full select-none transition-all">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[11.5px]"
+        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-white/[0.06] transition-colors cursor-pointer text-[11.5px]"
       >
         <div className="flex items-center gap-2 min-w-0 pr-2">
           {isExecuting ? (
@@ -496,19 +496,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const isEmptyState = displayMessages.length === 0;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[var(--background)] relative overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-[#161618] relative overflow-hidden">
       {/* ================================================================
           1. HEADER NATIVO COM ÁREA DE ARRASTE E CONTROLES DE JANELA
           ================================================================ */}
       <header
         data-tauri-drag-region
-        className="h-[52px] border-b border-[var(--border)] flex items-center justify-between px-6 select-none bg-[var(--background)] shrink-0 z-20"
+        className="min-h-[52px] border-b border-white/[0.06] flex items-center justify-between px-4 sm:px-6 select-none bg-[#161618] shrink-0 z-10"
       >
         <div data-tauri-drag-region className="flex items-center gap-2.5 text-[13px] text-[var(--text-muted)] cursor-default min-w-0 max-w-[calc(100vw-360px)]">
           <img
-            src="/charlie-logo.svg"
+            src="/logo.png"
             alt="Charlie"
-            className="w-4 h-4 object-contain opacity-90 drop-shadow-[0_0_6px_rgba(139,124,255,0.4)] shrink-0"
+            className="w-4 h-4 object-contain object-center shrink-0"
           />
           <span
             className="font-medium text-[var(--text-secondary)] truncate"
@@ -543,7 +543,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <button
               type="button"
               onClick={onOpenShortcuts}
-              className="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer mr-1"
+              className="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer mr-1"
               title="Central de Atalhos (Ctrl+/)"
             >
               <Keyboard className="w-3.5 h-3.5" />
@@ -556,7 +556,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             className={`p-1.5 rounded-[var(--radius-sm)] transition-colors cursor-pointer mr-2 ${
               voiceActive
                 ? "text-[var(--accent)] bg-[var(--accent-soft-bg)]"
-                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06]"
             }`}
             title={voiceActive ? "Resposta por voz ativada" : "Modo silencioso (apenas texto)"}
           >
@@ -566,7 +566,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <button
             type="button"
             onClick={handleMinimize}
-            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
             title="Minimizar"
           >
             <Minus className="w-3.5 h-3.5" />
@@ -574,7 +574,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <button
             type="button"
             onClick={handleToggleMaximize}
-            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
             title="Maximizar"
           >
             <Square className="w-3 h-3" />
@@ -594,12 +594,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           2. ESTADO VAZIO (ASSISTANT-VIEW CENTRALIZADO)
           ================================================================ */}
       {isEmptyState ? (
-        <section className="flex-1 flex flex-col justify-center items-center p-10 max-w-[700px] mx-auto w-full select-none animate-fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center mb-6 shadow-[0_0_35px_rgba(139,124,255,0.25)]">
+        <section className="flex-1 flex flex-col justify-center items-center p-6 sm:p-10 max-w-[700px] mx-auto w-full select-none animate-fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-black border border-white/[0.08] flex items-center justify-center mb-6 overflow-hidden p-2.5 shrink-0">
             <img
-              src="/charlie-logo.svg"
+              src="/logo.png"
               alt="Charlie"
-              className="w-10 h-10 object-contain drop-shadow-[0_0_12px_rgba(139,124,255,0.6)]"
+              className="w-full h-full object-contain object-center"
             />
           </div>
           <h1 className="greeting-title text-[28px] font-light text-[var(--text-primary)] mb-2 text-center tracking-tight">
@@ -614,13 +614,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`w-full bg-[var(--surface)] border rounded-[var(--radius-lg)] p-4 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)] mb-6 ${
-              isDraggingOver ? "border-indigo-500 bg-indigo-500/10 shadow-[0_0_16px_rgba(99,102,241,0.2)]" : "border-[var(--border)]"
+            className={`w-full bg-[#1E1E20] border border-white/[0.06] rounded-[14px] p-4 transition-all focus-within:border-white/[0.12] focus-within:bg-[#222224] mb-6 ${
+              isDraggingOver ? "border-white/[0.14] bg-white/[0.04]" : "border-white/[0.06]"
             }`}
           >
             {/* Preview de Imagem Anexada */}
             {attachedImage && (
-              <div className="flex items-center gap-3 p-2 mb-3 rounded-lg bg-zinc-900 border border-zinc-700/80">
+              <div className="flex items-center gap-3 p-2 mb-3 rounded-[10px] bg-[#1A1A1E] border border-white/[0.06]">
                 <div className="relative w-12 h-12 rounded overflow-hidden border border-zinc-700 shrink-0 bg-black">
                   <img
                     src={attachedImage.previewUrl}
@@ -656,14 +656,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               onPaste={handlePaste}
               placeholder="Fala comigo ou cole/arraste uma imagem..."
               disabled={isLoading}
-              className="w-full bg-transparent border-none text-[var(--text-primary)] text-[15px] leading-relaxed resize-none outline-none min-h-[26px] max-h-[120px] placeholder:text-[var(--text-muted)]"
+              className="w-full bg-transparent border-none text-[var(--text-primary)] text-[15px] leading-relaxed resize-none outline-none min-h-[26px] max-h-[120px] placeholder:text-white/40"
             />
             <div className="flex justify-between items-center mt-3">
               <div className="flex gap-1 relative">
                 <button
                   type="button"
                   onClick={() => setShowPlusMenu(!showPlusMenu)}
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[16px]"
+                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors cursor-pointer text-[16px]"
                   title="Ações rápidas"
                 >
                   <Plus className="w-4 h-4" />
@@ -671,7 +671,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
                   title="Anexar imagem ou arquivo"
                 >
                   <Paperclip className="w-3.5 h-3.5" />
@@ -682,7 +682,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors cursor-pointer ${
                     voiceActive
                       ? "text-[var(--accent)] bg-[var(--accent-soft-bg)]"
-                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-white/[0.06]"
                   }`}
                   title={voiceActive ? "Resposta por voz ligada" : "Modo texto (silencioso)"}
                 >
@@ -691,14 +691,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                 {/* Menu popup do botão + */}
                 {showPlusMenu && (
-                  <div className="absolute left-0 bottom-10 bg-zinc-900 border border-zinc-700/80 rounded-lg p-1.5 shadow-2xl z-30 min-w-[200px] text-xs space-y-0.5">
+                  <div className="absolute left-0 bottom-10 bg-[#1E1E20] border border-white/[0.08] rounded-[14px] p-1.5 shadow-xl z-30 min-w-[200px] text-xs space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
                         setShowPlusMenu(false);
                         fileInputRef.current?.click();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 transition cursor-pointer"
                     >
                       <Paperclip className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Anexar Imagem ou Arquivo</span>
@@ -709,7 +709,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         setShowPlusMenu(false);
                         invoke("manage_application", { app_name: "snippingtool", action: "open" }).catch(() => {});
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 transition cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                       <span>Captura de Tela Rápida</span>
@@ -720,7 +720,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         setShowPlusMenu(false);
                         handleSend("Como está o desempenho e telemetria atual do meu computador?");
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 transition cursor-pointer"
                     >
                       <Terminal className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Auditar Sistema & Hardware</span>
@@ -748,7 +748,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 key={idx}
                 type="button"
                 onClick={() => handleSend(s.prompt)}
-                className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-secondary)] text-[13px] cursor-pointer hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)] transition-all font-sans"
+                className="px-4 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-secondary)] text-[13px] cursor-pointer hover:bg-white/[0.06] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)] transition-all font-sans"
               >
                 {s.label}
               </button>
@@ -760,7 +760,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             3. ESTADO ATIVO (LISTA DE MENSAGENS COM ROLAGEM VERTICAL)
             ================================================================ */
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6">
             {displayMessages.map((m: Message, idx: number) => {
               const isUser = m.type === "user_message";
               const messageId = m.id || `msg-${idx}`;
@@ -778,20 +778,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     }`}
                   >
                     {!isUser && (
-                      <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[#0A0B0E] border border-[var(--border)] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1 shadow-sm">
+                      <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1.5">
                         <img
-                          src="/charlie-logo.svg"
+                          src="/logo.png"
                           alt="Charlie"
-                          className="w-full h-full object-contain"
+                          className="w-full h-full object-contain object-center"
                         />
                       </div>
                     )}
 
                     <div
-                      className={`px-4 py-3 rounded-[var(--radius-lg)] text-[14px] leading-relaxed transition-all ${
+                      className={`px-4 py-3 rounded-2xl text-[14px] leading-relaxed transition-all ${
                         isUser
-                          ? "bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
-                          : "bg-[var(--surface)] border border-[var(--border)] text-[var(--text-primary)]"
+                          ? "bg-white text-black border border-white/10"
+                          : "bg-[#1E1E20] border border-white/[0.06] text-[#F3F4F6]"
                       }`}
                     >
                       {isUser ? (
@@ -801,7 +801,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               {m.attachments.map((att, aIdx) => (
                                 <div
                                   key={att.id || aIdx}
-                                  className="flex items-center gap-2.5 p-2 rounded-lg bg-[#0C0D12] border border-white/[0.08] max-w-[260px]"
+                                  className="flex items-center gap-2.5 p-2 rounded-[10px] bg-black/40 border border-white/[0.06] max-w-[260px]"
                                 >
                                   {att.previewUrl ? (
                                     <img
@@ -1007,7 +1007,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                       className="p-2.5 rounded-lg bg-[#0C0D12] border border-indigo-500/25 hover:border-indigo-400/50 flex items-center justify-between gap-3 cursor-pointer transition group shadow-sm"
                                     >
                                       <div className="flex items-center gap-2.5 min-w-0">
-                                        <span className="text-base">📄</span>
+                                        <span className="w-6 h-6 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                                         <div className="min-w-0">
                                           <div className="text-xs font-mono font-medium text-zinc-200 group-hover:text-white transition truncate">
                                             {art.name}
@@ -1046,7 +1046,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <button
                           type="button"
                           onClick={() => handleEditMessage(m.content)}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
                           title="Editar e reenviar pergunta"
                         >
                           <Pencil className="w-3 h-3" />
@@ -1055,7 +1055,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <button
                           type="button"
                           onClick={() => handleCopyMessage(messageId, m.content)}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
                           title="Copiar pergunta"
                         >
                           {isCopied ? (
@@ -1078,7 +1078,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyMessage(messageId, m.content)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
                             title="Copiar resposta"
                           >
                             {isCopied ? (
@@ -1100,7 +1100,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             className={`flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] transition-colors cursor-pointer ${
                               isSpeaking
                                 ? "text-[var(--accent)] bg-[var(--accent-soft-bg)] font-medium"
-                                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                                : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06]"
                             }`}
                             title={isSpeaking ? "Parar áudio" : "Ouvir resposta (TTS)"}
                           >
@@ -1113,7 +1113,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRegenerateMessage(idx)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-sm)] text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
                             title="Regenerar esta resposta"
                           >
                             <RotateCcw className="w-3 h-3" />
@@ -1131,14 +1131,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               (messages.length === 0 ||
                 messages[messages.length - 1].type === "user_message") && (
                 <div className="flex gap-3.5 justify-start animate-fade-in">
-                  <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[#0A0B0E] border border-[var(--border)] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1 shadow-sm">
+                  <div className="w-8 h-8 rounded-xl bg-black border border-white/[0.08] flex items-center justify-center shrink-0 mt-0.5 select-none overflow-hidden p-1.5">
                     <img
-                      src="/charlie-logo.svg"
+                      src="/logo.png"
                       alt="Charlie"
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-contain object-center"
                     />
                   </div>
-                  <div className="bg-[var(--surface)] border border-[var(--border)] px-4 py-3 rounded-[var(--radius-lg)] flex items-center gap-2 text-[13px] text-[var(--text-muted)]">
+                  <div className="bg-[#1E1E20] border border-white/[0.06] px-4 py-3 rounded-[14px] flex items-center gap-2 text-[13px] text-white/50">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
                     <span>Charlie está pensando...</span>
                   </div>
@@ -1149,18 +1149,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
 
           {/* Composer Ancorado no Rodapé com Multimodalidade */}
-          <div className="p-4 border-t border-[var(--border)] bg-[var(--background)]">
+          <div className="p-4 border-t border-white/[0.06] bg-[#161618]">
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`max-w-[800px] mx-auto w-full bg-[var(--surface)] border rounded-[var(--radius-lg)] p-3.5 transition-all focus-within:border-[rgba(139,124,255,0.55)] focus-within:shadow-[0_0_0_3px_rgba(139,124,255,0.08)] ${
-                isDraggingOver ? "border-indigo-500 bg-indigo-500/10 shadow-[0_0_16px_rgba(99,102,241,0.2)]" : "border-[var(--border)]"
+              className={`max-w-[800px] mx-auto w-full bg-[#1E1E20] border rounded-[14px] p-3.5 transition-all focus-within:border-white/[0.14] focus-within:bg-[#222224] ${
+                isDraggingOver ? "border-white/[0.14] bg-white/[0.04]" : "border-white/[0.06]"
               }`}
             >
               {/* Preview de Imagem Anexada */}
               {attachedImage && (
-                <div className="flex items-center gap-3 p-2 mb-2.5 rounded-lg bg-zinc-900 border border-zinc-700/80">
+                <div className="flex items-center gap-3 p-2 mb-2.5 rounded-[10px] bg-[#1A1A1E] border border-white/[0.06]">
                   <div className="relative w-12 h-12 rounded overflow-hidden border border-zinc-700 shrink-0 bg-black">
                     <img
                       src={attachedImage.previewUrl}
@@ -1196,14 +1196,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 onPaste={handlePaste}
                 placeholder="Fala comigo ou cole/arraste uma imagem..."
                 disabled={isLoading}
-                className="w-full bg-transparent border-none text-[var(--text-primary)] text-[14px] leading-relaxed resize-none outline-none min-h-[24px] max-h-[120px] placeholder:text-[var(--text-muted)]"
+                className="w-full bg-transparent border-none text-[var(--text-primary)] text-[14px] leading-relaxed resize-none outline-none min-h-[24px] max-h-[120px] placeholder:text-white/40"
               />
               <div className="flex justify-between items-center mt-2.5">
                 <div className="flex gap-1 relative">
                   <button
                     type="button"
                     onClick={() => setShowPlusMenu(!showPlusMenu)}
-                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer text-[16px]"
+                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors cursor-pointer text-[16px]"
                     title="Ações rápidas"
                   >
                     <Plus className="w-4 h-4" />
@@ -1211,7 +1211,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer"
+                    className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors cursor-pointer"
                     title="Anexar imagem ou arquivo"
                   >
                     <Paperclip className="w-3.5 h-3.5" />
@@ -1222,7 +1222,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors cursor-pointer ${
                       voiceActive
                         ? "text-[var(--accent)] bg-[var(--accent-soft-bg)]"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-white/[0.06]"
                     }`}
                     title={voiceActive ? "Resposta por voz ligada" : "Modo texto (silencioso)"}
                   >
@@ -1231,14 +1231,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                   {/* Menu popup do botão + */}
                   {showPlusMenu && (
-                    <div className="absolute left-0 bottom-10 bg-zinc-900 border border-zinc-700/80 rounded-lg p-1.5 shadow-2xl z-30 min-w-[200px] text-xs space-y-0.5">
+                    <div className="absolute left-0 bottom-10 bg-[#1E1E20] border border-white/[0.08] rounded-[14px] p-1.5 shadow-xl z-30 min-w-[200px] text-xs space-y-0.5">
                       <button
                         type="button"
                         onClick={() => {
                           setShowPlusMenu(false);
                           fileInputRef.current?.click();
                         }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 transition cursor-pointer"
                       >
                         <Paperclip className="w-3.5 h-3.5 text-zinc-400" />
                         <span>Anexar Imagem ou Arquivo</span>
@@ -1249,7 +1249,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           setShowPlusMenu(false);
                           invoke("manage_application", { app_name: "snippingtool", action: "open" }).catch(() => {});
                         }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 transition cursor-pointer"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                         <span>Captura de Tela Rápida</span>
@@ -1260,7 +1260,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           setShowPlusMenu(false);
                           handleSend("Como está o desempenho e telemetria atual do meu computador?");
                         }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition cursor-pointer"
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.06] flex items-center gap-2 transition cursor-pointer"
                       >
                         <Terminal className="w-3.5 h-3.5 text-emerald-400" />
                         <span>Auditar Sistema & Hardware</span>

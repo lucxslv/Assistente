@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -85,18 +85,18 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
       case "image":
         return <ImageIcon className="w-4 h-4 text-purple-300" />;
       default:
-        return <FileText className="w-4 h-4 text-zinc-400" />;
+        return <FileText className="w-4 h-4 text-[#9CA3AF]" />;
     }
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[#090A0F] text-[#F2F3F5] select-none">
+    <div className="flex h-full w-full overflow-hidden bg-[#161618] text-[#F2F3F5] select-none">
       {/* ================= Painel Lateral: Lista de Artefatos ================= */}
-      <div className="w-64 sm:w-72 border-r border-white/[0.08] bg-[#12151C]/60 flex flex-col h-full shrink-0">
+      <div className="w-64 sm:w-72 border-r border-white/[0.08] bg-[#1E1E20]/60 flex flex-col h-full shrink-0">
         {/* Header da Barra Lateral */}
         <div className="p-3.5 border-b border-white/[0.08] space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-zinc-200 font-mono uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-[#F3F4F6] font-mono uppercase tracking-wider flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
               Artefatos Produzidos ({artifacts.length})
             </span>
@@ -108,7 +108,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar artefato..."
-              className="w-full bg-[#090A0F] text-xs text-zinc-200 placeholder-zinc-500 rounded-lg pl-8 pr-3 py-1.5 border border-white/[0.08] focus:outline-none focus:border-white/20"
+              className="w-full bg-[#161618] text-xs text-[#F3F4F6] placeholder-zinc-500 rounded-[14px] pl-8 pr-3 py-1.5 border border-white/[0.08] focus:outline-none focus:border-white/20"
             />
           </div>
         </div>
@@ -135,11 +135,11 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                 >
                   <div className="mt-0.5 flex-shrink-0">{renderIcon(art.type)}</div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-mono font-medium text-zinc-200 truncate">
+                    <div className="text-xs font-mono font-medium text-[#F3F4F6] truncate">
                       {art.name}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded bg-white/[0.04] text-zinc-400 border border-white/[0.06]">
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded bg-white/[0.04] text-[#9CA3AF] border border-white/[0.06]">
                         {art.type}
                       </span>
                       {art.sizeBytes ? (
@@ -157,19 +157,19 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
       </div>
 
       {/* ================= Visualizador Principal de Artefato ================= */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#090A0F]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#161618]">
         {selectedArtifact ? (
           <>
             {/* Header do Visualizador */}
-            <div className="px-6 py-3 border-b border-white/[0.08] bg-[#12151C]/60 flex flex-wrap items-center justify-between gap-3">
+            <div className="px-6 py-3 border-b border-white/[0.08] bg-[#1E1E20]/60 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-[14px] bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
                   {renderIcon(selectedArtifact.type)}
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-xs font-mono font-semibold text-zinc-100 truncate flex items-center gap-2">
                     <span>{selectedArtifact.name}</span>
-                    <span className="text-[10px] uppercase px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+                    <span className="text-[10px] uppercase px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-white/[0.06] font-mono">
                       {selectedArtifact.type}
                     </span>
                   </h3>
@@ -184,14 +184,14 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
               {/* Botões de Ação */}
               <div className="flex items-center gap-2">
                 {(selectedArtifact.type === "markdown" || selectedArtifact.type === "report") && (
-                  <div className="flex items-center bg-[#12151C] border border-white/[0.08] rounded-lg p-0.5">
+                  <div className="flex items-center bg-[#1E1E20] border border-white/[0.08] rounded-[14px] p-0.5">
                     <button
                       type="button"
                       onClick={() => setViewMode("rendered")}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition cursor-pointer ${
                         viewMode === "rendered"
                           ? "bg-white/[0.12] text-zinc-100 font-medium"
-                          : "text-zinc-400 hover:text-zinc-200"
+                          : "text-[#9CA3AF] hover:text-[#F3F4F6]"
                       }`}
                     >
                       <Eye className="w-3.5 h-3.5" />
@@ -203,7 +203,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition cursor-pointer ${
                         viewMode === "raw"
                           ? "bg-white/[0.12] text-zinc-100 font-medium"
-                          : "text-zinc-400 hover:text-zinc-200"
+                          : "text-[#9CA3AF] hover:text-[#F3F4F6]"
                       }`}
                     >
                       <Code className="w-3.5 h-3.5" />
@@ -215,7 +215,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#12151C] hover:bg-zinc-800 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[14px] text-xs bg-[#1E1E20] hover:bg-[#222224] text-[#E5E7EB] border border-white/[0.08] transition cursor-pointer"
                   title="Copiar Conteúdo"
                 >
                   {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -225,7 +225,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                 <button
                   type="button"
                   onClick={handleDownload}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#12151C] hover:bg-zinc-800 text-zinc-300 border border-white/[0.08] transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[14px] text-xs bg-[#1E1E20] hover:bg-[#222224] text-[#E5E7EB] border border-white/[0.08] transition cursor-pointer"
                   title="Exportar Arquivo"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -237,7 +237,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
             {/* Conteúdo Renderizado com ReactMarkdown GFM de Primeira Classe */}
             <div className="flex-1 overflow-y-auto p-6 lg:p-8 select-text">
               {viewMode === "rendered" && (selectedArtifact.type === "markdown" || selectedArtifact.type === "report") ? (
-                <div className="max-w-4xl mx-auto space-y-4 text-zinc-200 text-sm leading-relaxed">
+                <div className="max-w-4xl mx-auto space-y-4 text-[#F3F4F6] text-sm leading-relaxed">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
@@ -254,22 +254,22 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                         </h2>
                       ),
                       h3: ({ children }) => (
-                        <h3 className="text-sm font-semibold text-zinc-200 mt-4 mb-2 font-mono">
+                        <h3 className="text-sm font-semibold text-[#F3F4F6] mt-4 mb-2 font-mono">
                           {children}
                         </h3>
                       ),
                       p: ({ children }) => (
-                        <p className="text-xs text-zinc-300 leading-relaxed mb-3">
+                        <p className="text-xs text-[#E5E7EB] leading-relaxed mb-3">
                           {children}
                         </p>
                       ),
                       ul: ({ children }) => (
-                        <ul className="list-disc list-inside space-y-1 text-xs text-zinc-300 mb-3 pl-2">
+                        <ul className="list-disc list-inside space-y-1 text-xs text-[#E5E7EB] mb-3 pl-2">
                           {children}
                         </ul>
                       ),
                       ol: ({ children }) => (
-                        <ol className="list-decimal list-inside space-y-1 text-xs text-zinc-300 mb-3 pl-2 font-mono">
+                        <ol className="list-decimal list-inside space-y-1 text-xs text-[#E5E7EB] mb-3 pl-2 font-mono">
                           {children}
                         </ol>
                       ),
@@ -277,19 +277,19 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                         <li className="leading-relaxed">{children}</li>
                       ),
                       blockquote: ({ children }) => (
-                        <blockquote className="border-l-2 border-indigo-400/80 bg-indigo-500/5 px-3 py-2 rounded-r my-3 text-xs italic text-zinc-300">
+                        <blockquote className="border-l-2 border-indigo-400/80 bg-indigo-500/5 px-3 py-2 rounded-r my-3 text-xs italic text-[#E5E7EB]">
                           {children}
                         </blockquote>
                       ),
                       table: ({ children }) => (
-                        <div className="overflow-x-auto my-4 border border-white/[0.08] rounded-xl bg-[#0C0D12]">
+                        <div className="overflow-x-auto my-4 border border-white/[0.08] rounded-[14px] bg-[#0C0D12]">
                           <table className="w-full text-left text-xs border-collapse">
                             {children}
                           </table>
                         </div>
                       ),
                       thead: ({ children }) => (
-                        <thead className="bg-[#12151C] text-zinc-300 font-mono text-[11px] uppercase border-b border-white/[0.08]">
+                        <thead className="bg-[#1E1E20] text-[#E5E7EB] font-mono text-[11px] uppercase border-b border-white/[0.08]">
                           {children}
                         </thead>
                       ),
@@ -304,12 +304,12 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                         </tr>
                       ),
                       th: ({ children }) => (
-                        <th className="py-2 px-3 font-semibold text-zinc-200">
+                        <th className="py-2 px-3 font-semibold text-[#F3F4F6]">
                           {children}
                         </th>
                       ),
                       td: ({ children }) => (
-                        <td className="py-2 px-3 text-zinc-300 font-mono text-[11.5px]">
+                        <td className="py-2 px-3 text-[#E5E7EB] font-mono text-[11.5px]">
                           {children}
                         </td>
                       ),
@@ -323,7 +323,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                           );
                         }
                         return (
-                          <pre className="p-3 bg-[#0C0D12] border border-white/[0.08] rounded-lg font-mono text-[11.5px] text-zinc-300 overflow-x-auto my-3 leading-relaxed">
+                          <pre className="p-3 bg-[#0C0D12] border border-white/[0.08] rounded-[14px] font-mono text-[11.5px] text-[#E5E7EB] overflow-x-auto my-3 leading-relaxed">
                             <code>{children}</code>
                           </pre>
                         );
@@ -343,7 +343,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
                 </div>
               ) : (
                 <div className="max-w-4xl mx-auto">
-                  <pre className="p-4 bg-[#0C0D12] border border-white/[0.08] rounded-xl font-mono text-xs text-zinc-300 overflow-x-auto whitespace-pre leading-relaxed">
+                  <pre className="p-4 bg-[#0C0D12] border border-white/[0.08] rounded-[14px] font-mono text-xs text-[#E5E7EB] overflow-x-auto whitespace-pre leading-relaxed">
                     {selectedArtifact.content}
                   </pre>
                 </div>
@@ -353,7 +353,7 @@ export const WorkspaceArtifacts: React.FC<WorkspaceArtifactsProps> = ({
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-2">
             <FileCode className="w-10 h-10 text-zinc-600 mb-2" />
-            <h4 className="text-sm font-medium text-zinc-400">Nenhum artefato selecionado</h4>
+            <h4 className="text-sm font-medium text-[#9CA3AF]">Nenhum artefato selecionado</h4>
             <p className="text-xs max-w-sm">
               Quando o Charlie gerar relatórios, análises ou arquivos estruturados, eles aparecerão aqui para leitura e inspeção.
             </p>

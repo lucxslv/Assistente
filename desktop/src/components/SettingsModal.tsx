@@ -430,12 +430,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in select-none">
-      <div className="w-full max-w-3xl bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col h-[620px] max-h-[92vh]">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in select-none">
+      <div className="w-full max-w-3xl bg-[#0E0E10] border border-white/[0.07] rounded-[18px] shadow-[0_16px_64px_-12px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col h-[620px] max-h-[92vh]">
         {/* Cabeçalho Superior do Modal */}
-        <div className="px-6 py-3.5 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-elevated)]/40 shrink-0">
+        <div className="px-6 py-3.5 border-b border-white/[0.06] flex items-center justify-between bg-[#0E0E10] shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[var(--accent-soft-bg)] border border-[var(--accent-soft-border)] text-[var(--accent)] flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-white/[0.06] border border-white/[0.08] text-white/70 flex items-center justify-center">
               <Sliders className="w-4 h-4" />
             </div>
             <div>
@@ -459,7 +459,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Corpo com Navegação Lateral e Conteúdo */}
         <div className="flex-1 flex overflow-hidden">
           {/* Barra Lateral com Abas Verticais */}
-          <aside className="w-[210px] border-r border-[var(--border)] bg-[var(--surface)]/80 p-3 space-y-1 shrink-0 overflow-y-auto">
+          <aside className="w-[210px] border-r border-white/[0.06] bg-[#121214] p-3 space-y-1 shrink-0 overflow-y-auto">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -468,10 +468,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-medium text-left transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[14px] text-[12.5px] font-medium text-left transition-all cursor-pointer ${
                     isActive
-                      ? "bg-[var(--accent-soft-bg)] text-[var(--accent-hover)] border border-[var(--accent-soft-border)] shadow-sm font-semibold"
-                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] border border-transparent"
+                      ? "bg-white text-black border border-white/10 shadow-sm font-semibold"
+                      : "text-white/50 hover:text-white hover:bg-white/[0.06] border border-transparent"
                   }`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]"}`} />
@@ -482,7 +482,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </aside>
 
           {/* Painel de Conteúdo da Aba Ativa */}
-          <main className="flex-1 overflow-y-auto p-6 space-y-5 text-xs bg-[var(--background)]/40">
+          <main className="flex-1 overflow-y-auto p-6 space-y-5 text-xs bg-[#161618]">
             {/* ================================================================
                 ABA 1: CONTA & PERFIL
                 ================================================================ */}
@@ -498,7 +498,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {user ? (
-                  <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-4">
+                  <div className="p-4 rounded-[14px] border border-white/[0.06] bg-[#1E1E20] space-y-4">
                     <div className="flex items-center gap-3.5">
                       {profileAvatarUrl ? (
                         <img
@@ -618,7 +618,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="button"
                           onClick={handleSaveProfile}
                           disabled={savingProfile}
-                          className="px-3.5 py-1.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                          className="px-3.5 py-1.5 rounded-full bg-white hover:bg-white/90 text-black text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                         >
                           {savingProfile ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -696,7 +696,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Card de Privacidade */}
-                <div className="p-4 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-elevated)]/30 space-y-2">
+                <div className="p-4 rounded-[14px] border border-white/[0.06] bg-[#1E1E20] space-y-2">
                   <span className="text-[11.5px] font-semibold text-[var(--text-primary)] block">
                     Privacidade e Disco Local
                   </span>
@@ -1524,7 +1524,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Rodapé do Modal com Ações */}
-        <div className="px-6 py-3 border-t border-[var(--border)] bg-[var(--surface-elevated)]/40 flex items-center justify-between shrink-0">
+        <div className="px-6 py-3 border-t border-white/[0.06] bg-[#0E0E10] flex items-center justify-between shrink-0">
           <div className="text-[11px] text-[var(--text-muted)]">
             {savedSuccess ? (
               <span className="text-emerald-400 font-medium flex items-center gap-1.5">
@@ -1547,7 +1547,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-1.5 rounded-xl bg-[var(--accent)] text-white text-xs font-semibold hover:bg-[var(--accent-hover)] transition-all flex items-center gap-1.5 shadow-md shadow-[var(--accent)]/20 cursor-pointer"
+              className="px-4 py-1.5 rounded-full bg-white text-black text-xs font-semibold hover:bg-white/90 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               {saving ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

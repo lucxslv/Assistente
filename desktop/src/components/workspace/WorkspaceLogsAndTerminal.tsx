@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   AgentSession,
   AgentLogEntry,
@@ -85,13 +85,13 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
         );
       case "MEDIUM":
         return (
-          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700">
+          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-white/[0.06]">
             Médio
           </span>
         );
       default:
         return (
-          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800/60 text-zinc-400 border border-zinc-700/50">
+          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800/60 text-[#9CA3AF] border border-white/[0.06]/50">
             Baixo
           </span>
         );
@@ -99,9 +99,9 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-[#090A0F] text-[#F2F3F5] select-none">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-[#161618] text-[#F2F3F5] select-none">
       {/* Sub-Header Compacto: Seletor de Categoria */}
-      <div className="px-6 py-2.5 border-b border-white/[0.08] bg-[#12151C]/40 flex items-center justify-between gap-4">
+      <div className="px-6 py-2.5 border-b border-white/[0.08] bg-[#1E1E20]/40 flex items-center justify-between gap-4">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -109,7 +109,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
               subTab === "terminals"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
@@ -125,7 +125,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
               subTab === "logs"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -141,7 +141,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
               subTab === "evidence"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <FileCheck className="w-3.5 h-3.5" />
@@ -157,7 +157,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 relative ${
               subTab === "permissions"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
@@ -167,7 +167,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
                 {pendingCount}
               </span>
             ) : (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-zinc-400">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-[#9CA3AF]">
                 0
               </span>
             )}
@@ -198,7 +198,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
         {subTab === "logs" && (
           <div className="flex flex-col h-full overflow-hidden p-6 space-y-4">
             {/* Filtros e Busca */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#12151C] p-3 rounded-xl border border-white/[0.08]">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E1E20] p-3 rounded-xl border border-white/[0.08]">
               <div className="flex items-center gap-1.5 overflow-x-auto">
                 {(["ALL", "SYSTEM", "AGENT", "TOOL", "PERMISSION", "VERIFIER", "REPLANNER", "ERROR"] as const).map(
                   (cat) => (
@@ -209,7 +209,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
                       className={`px-2.5 py-1 rounded text-xs font-mono transition cursor-pointer ${
                         logFilter === cat
                           ? "bg-white/[0.12] text-zinc-100"
-                          : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                          : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
                       }`}
                     >
                       {cat}
@@ -225,7 +225,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
                   value={logSearch}
                   onChange={(e) => setLogSearch(e.target.value)}
                   placeholder="Filtrar saída..."
-                  className="w-full bg-[#090A0F] border border-white/[0.08] rounded-lg pl-8 pr-3 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-white/20"
+                  className="w-full bg-[#161618] border border-white/[0.08] rounded-lg pl-8 pr-3 py-1 text-xs text-[#F3F4F6] placeholder-zinc-500 focus:outline-none focus:border-white/20"
                 />
               </div>
             </div>
@@ -254,7 +254,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
                             ? "bg-amber-950/80 text-amber-300 border border-amber-800/50"
                             : log.category === "VERIFIER"
                             ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800/50"
-                            : "bg-white/[0.06] text-zinc-400"
+                            : "bg-white/[0.06] text-[#9CA3AF]"
                         }`}
                       >
                         {log.category}
@@ -288,18 +288,18 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
           <div className="h-full overflow-y-auto p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-200 font-mono">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#F3F4F6] font-mono">
                   Controle de Permissões Zero-Trust
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-[#9CA3AF] mt-0.5">
                   Todas as ações arriscadas exigem autorização expressa antes da execução no SO.
                 </p>
               </div>
             </div>
 
             {permissions.length === 0 ? (
-              <div className="p-8 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#12151C]/60">
-                <Shield className="w-6 h-6 mx-auto mb-2 opacity-30 text-zinc-400" />
+              <div className="p-8 text-center text-zinc-500 border border-dashed border-white/[0.08] rounded-xl bg-[#1E1E20]/60">
+                <Shield className="w-6 h-6 mx-auto mb-2 opacity-30 text-[#9CA3AF]" />
                 <p className="text-xs">Nenhuma solicitação de permissão pendente ou registrada.</p>
               </div>
             ) : (
@@ -307,12 +307,12 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
                 {permissions.map((perm) => (
                   <div
                     key={perm.id}
-                    className="p-4 bg-[#12151C] border border-white/[0.08] rounded-xl space-y-3"
+                    className="p-4 bg-[#1E1E20] border border-white/[0.08] rounded-xl space-y-3"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs font-mono text-zinc-200 bg-[#0C0D12] px-2 py-0.5 rounded border border-white/[0.06]">
+                          <code className="text-xs font-mono text-[#F3F4F6] bg-[#0C0D12] px-2 py-0.5 rounded border border-white/[0.06]">
                             {perm.tool}
                           </code>
                           {renderRiskBadge(perm.risk)}
@@ -328,7 +328,7 @@ export const WorkspaceLogsAndTerminal: React.FC<WorkspaceLogsAndTerminalProps> =
                           <button
                             type="button"
                             onClick={() => onResolvePermission(perm.id, "allow_once")}
-                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[#F3F4F6] border border-white/[0.08] transition cursor-pointer"
                           >
                             Permitir Uma Vez
                           </button>

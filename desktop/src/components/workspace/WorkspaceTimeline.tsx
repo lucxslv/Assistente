@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { AgentSession, RiskLevel } from "../../types";
 import {
   CheckCircle2,
@@ -46,13 +46,13 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
         );
       case "MEDIUM":
         return (
-          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700">
+          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-white/[0.06]">
             Médio
           </span>
         );
       default:
         return (
-          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800/60 text-zinc-400 border border-zinc-700/50">
+          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-zinc-800/60 text-[#9CA3AF] border border-white/[0.06]/50">
             Baixo
           </span>
         );
@@ -60,7 +60,7 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto p-6 bg-[#090A0F] text-[#F2F3F5] space-y-6 select-none">
+    <div className="h-full w-full overflow-y-auto p-6 bg-[#161618] text-[#F2F3F5] space-y-6 select-none">
       {/* Header da Linha do Tempo */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
         <div>
@@ -70,13 +70,13 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
               Grafo de Execução DAG
             </h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-[#9CA3AF] mt-1">
             Plano de tarefas decomposto em ordem topológica com dependências e verificação de integridade.
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="px-2.5 py-1 rounded-lg bg-[#12151C] border border-white/[0.08] text-zinc-300">
+          <span className="px-2.5 py-1 rounded-lg bg-[#1E1E20] border border-white/[0.08] text-zinc-300">
             Concluídas: <strong className="text-emerald-400">{completedCount}</strong>/{session.tasks.length}
           </span>
           {runningTask && (
@@ -118,7 +118,7 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
                     <AlertCircle className="w-3.5 h-3.5" />
                   </div>
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-[#12151C] border border-white/[0.1] text-zinc-500 flex items-center justify-center text-[10px] font-mono">
+                  <div className="w-6 h-6 rounded-full bg-[#1E1E20] border border-white/[0.1] text-zinc-500 flex items-center justify-center text-[10px] font-mono">
                     {index + 1}
                   </div>
                 )}
@@ -126,7 +126,7 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
 
               {/* Card da Tarefa */}
               <div
-                className={`bg-[#12151C] border rounded-xl overflow-hidden transition ${
+                className={`bg-[#1E1E20] border rounded-xl overflow-hidden transition ${
                   isRunning
                     ? "border-indigo-500/40 shadow-sm"
                     : isWaitingPerm
@@ -153,13 +153,13 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
                     </button>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-medium text-zinc-200 truncate">
+                        <span className="text-xs font-medium text-[#F3F4F6] truncate">
                           {task.title}
                         </span>
                         {renderRiskBadge(task.risk)}
                       </div>
                       <p className="text-[11px] text-zinc-500 font-mono mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span>Ferramenta: <strong className="text-zinc-400">{task.tool || "lógica"}</strong></span>
+                        <span>Ferramenta: <strong className="text-[#9CA3AF]">{task.tool || "lógica"}</strong></span>
                         {task.dependencies && task.dependencies.length > 0 && (
                           <>
                             <span>•</span>
@@ -177,11 +177,11 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
                       </span>
                     )}
                     {task.attempts > 1 && (
-                      <span className="text-[10px] font-mono text-zinc-400 bg-white/[0.04] px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-mono text-[#9CA3AF] bg-white/[0.04] px-1.5 py-0.5 rounded">
                         tentativa {task.attempts}
                       </span>
                     )}
-                    <span className="text-xs text-zinc-400 capitalize">
+                    <span className="text-xs text-[#9CA3AF] capitalize">
                       {task.status === "success"
                         ? "Concluído"
                         : task.status === "running"
@@ -251,9 +251,9 @@ export const WorkspaceTimeline: React.FC<WorkspaceTimelineProps> = ({
                           <button
                             type="button"
                             onClick={() => onRetryTask(task.id)}
-                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/[0.08] transition cursor-pointer"
+                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-[#F3F4F6] border border-white/[0.08] transition cursor-pointer"
                           >
-                            <RotateCw className="w-3 h-3 text-zinc-400" />
+                            <RotateCw className="w-3 h-3 text-[#9CA3AF]" />
                             <span>Tentar esta etapa novamente</span>
                           </button>
                         )}

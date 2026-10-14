@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   AgentSession,
   AgentLogEntry,
@@ -52,29 +52,29 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
   // Visualização de Co-piloto Pronto quando não há tarefas ativas
   if (!session) {
     return (
-      <div className="flex flex-col h-full w-full bg-[#090A0F] text-[#F2F3F5] p-5 justify-between select-none overflow-y-auto">
+      <div className="flex flex-col h-full w-full bg-[#161618] text-[#F2F3F5] p-5 justify-between select-none overflow-y-auto">
         <div className="space-y-5">
-          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[#12151C] border border-white/[0.08] shadow-sm">
+          <div className="flex items-center gap-3 p-3.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.08] shadow-sm">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <div>
               <div className="text-xs font-semibold text-zinc-100 font-mono uppercase tracking-wider">
                 Charlie Agent Runtime
               </div>
-              <div className="text-[11px] text-zinc-400 mt-0.5">
+              <div className="text-[11px] text-[#9CA3AF] mt-0.5">
                 Co-piloto inteligente ativo e pronto para agir
               </div>
             </div>
           </div>
 
           <div className="space-y-2.5">
-            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+            <span className="text-[11px] font-mono text-[#9CA3AF] uppercase tracking-wider block">
               Como funciona o trabalho em tempo real
             </span>
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-[#E5E7EB] leading-relaxed">
               Você não precisa preencher formulários ou disparar tarefas mecânicas. A conversa no chat é a interface primária.
             </p>
-            <div className="p-3 bg-[#12151C] rounded-lg border border-white/[0.06] font-mono text-xs text-indigo-300 space-y-1">
-              <div className="font-semibold text-zinc-200 text-[11px] uppercase tracking-wider mb-1">
+            <div className="p-3 bg-[#1E1E20] rounded-[14px] border border-white/[0.06] font-mono text-xs text-indigo-300 space-y-1">
+              <div className="font-semibold text-[#F3F4F6] text-[11px] uppercase tracking-wider mb-1">
                 Ciclo Contínuo:
               </div>
               <div>Chat → Contexto → Raciocínio → Decisão → Ação</div>
@@ -82,17 +82,17 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
           </div>
 
           <div className="space-y-2">
-            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+            <span className="text-[11px] font-mono text-[#9CA3AF] uppercase tracking-wider block">
               Exemplos para experimentar no chat
             </span>
             <div className="space-y-2 text-xs">
-              <div className="p-2.5 rounded-lg bg-[#12151C] border border-white/[0.06] text-zinc-300 font-mono leading-relaxed">
+              <div className="p-2.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.06] text-[#E5E7EB] font-mono leading-relaxed">
                 "Analisa esse sistema de autenticação e vê se tem algum problema de arquitetura."
               </div>
-              <div className="p-2.5 rounded-lg bg-[#12151C] border border-white/[0.06] text-zinc-300 font-mono leading-relaxed">
+              <div className="p-2.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.06] text-[#E5E7EB] font-mono leading-relaxed">
                 "Quero refatorar essa parte do projeto. O que você acha que deveríamos fazer?"
               </div>
-              <div className="p-2.5 rounded-lg bg-[#12151C] border border-white/[0.06] text-zinc-300 font-mono leading-relaxed">
+              <div className="p-2.5 rounded-[14px] bg-[#1E1E20] border border-white/[0.06] text-[#E5E7EB] font-mono leading-relaxed">
                 "Analisa meu computador e me devolve o máximo de informações possível."
               </div>
             </div>
@@ -136,18 +136,18 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-[#090A0F] text-[#F2F3F5] select-none">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-[#161618] text-[#F2F3F5] select-none">
       {/* ================= BARRA ÚNICA DE NAVEGAÇÃO PRINCIPAL (4 SEÇÕES) ================= */}
-      <div className="px-6 border-b border-white/[0.08] bg-[#12151C]/60 backdrop-blur-md flex items-center justify-between overflow-x-auto text-xs">
+      <div className="px-6 border-b border-white/[0.08] bg-[#1E1E20]/60 backdrop-blur-md flex items-center justify-between overflow-x-auto text-xs">
         <nav className="flex space-x-1 py-1">
           {/* 1. Execução / Live */}
           <button
             type="button"
             onClick={() => setActiveTab("live")}
-            className={`py-2 px-3 rounded-lg font-medium transition flex items-center gap-2 cursor-pointer ${
+            className={`py-2 px-3 rounded-[14px] font-medium transition flex items-center gap-2 cursor-pointer ${
               activeTab === "live"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <Activity className="w-3.5 h-3.5 text-indigo-400" />
@@ -161,15 +161,15 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab("timeline")}
-            className={`py-2 px-3 rounded-lg font-medium transition flex items-center gap-2 cursor-pointer ${
+            className={`py-2 px-3 rounded-[14px] font-medium transition flex items-center gap-2 cursor-pointer ${
               activeTab === "timeline"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <GitFork className="w-3.5 h-3.5 text-slate-400" />
             <span>Linha do Tempo / DAG</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-zinc-300">
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-[#E5E7EB]">
               {session.tasks.filter((t) => t.status === "success").length}/{session.tasks.length}
             </span>
           </button>
@@ -181,16 +181,16 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
               setActiveTab("files_artifacts");
               setSubTabHint(undefined);
             }}
-            className={`py-2 px-3 rounded-lg font-medium transition flex items-center gap-2 cursor-pointer ${
+            className={`py-2 px-3 rounded-[14px] font-medium transition flex items-center gap-2 cursor-pointer ${
               activeTab === "files_artifacts"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <Layers className="w-3.5 h-3.5 text-slate-400" />
             <span>Arquivos & Artefatos</span>
             {(filesCount > 0 || artifactsCount > 0 || changesCount > 0) && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-zinc-300">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-[#E5E7EB]">
                 {filesCount + artifactsCount + changesCount}
               </span>
             )}
@@ -203,10 +203,10 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
               setActiveTab("logs_terminal");
               setSubTabHint(undefined);
             }}
-            className={`py-2 px-3 rounded-lg font-medium transition flex items-center gap-2 cursor-pointer relative ${
+            className={`py-2 px-3 rounded-[14px] font-medium transition flex items-center gap-2 cursor-pointer relative ${
               activeTab === "logs_terminal"
                 ? "bg-white/[0.12] text-zinc-100 shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
+                : "text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-white/[0.04]"
             }`}
           >
             <Terminal className="w-3.5 h-3.5 text-slate-400" />
@@ -214,7 +214,7 @@ export const AgentWorkspace: React.FC<AgentWorkspaceProps> = ({
             {pendingCount > 0 ? (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5" />
             ) : terminalsCount > 0 ? (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-zinc-300">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/[0.08] text-[#E5E7EB]">
                 {terminalsCount}
               </span>
             ) : null}

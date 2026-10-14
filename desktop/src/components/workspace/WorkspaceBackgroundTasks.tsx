@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { AgentBackgroundTask } from "../../types";
 import {
   Layers,
@@ -41,7 +41,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
         );
       case "paused":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-[#9CA3AF] border border-white/[0.06]">
             <Pause className="w-3 h-3" />
             Pausada
           </span>
@@ -57,7 +57,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto p-6 bg-[#090A0F] text-[#F2F3F5] space-y-6">
+    <div className="h-full w-full overflow-y-auto p-6 bg-[#161618] text-[#F2F3F5] space-y-6">
       {/* ================= Header da Seção ================= */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
         <div>
@@ -67,7 +67,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
               Processos em Segundo Plano (Background Tasks)
             </h2>
           </div>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-[#9CA3AF] mt-1">
             Tarefas autônomas não-bloqueantes. Você pode continuar usando o Charlie enquanto o trabalho prossegue.
           </p>
         </div>
@@ -77,7 +77,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
       {tasks.length === 0 ? (
         <div className="text-center py-20 px-4 text-xs text-zinc-500 border border-dashed border-white/[0.06] rounded-xl max-w-xl mx-auto space-y-2">
           <Layers className="w-8 h-8 text-zinc-600 mx-auto" />
-          <p className="font-medium text-zinc-400">Nenhuma tarefa rodando em segundo plano</p>
+          <p className="font-medium text-[#9CA3AF]">Nenhuma tarefa rodando em segundo plano</p>
           <p className="text-[11px] text-zinc-500">
             Varreduras assíncronas, auditorias de dependências e pipelines longos aparecerão aqui.
           </p>
@@ -87,7 +87,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
           {tasks.map((task) => (
             <div
               key={task.id}
-              className="bg-[#12151C] border border-white/[0.08] rounded-xl p-4 space-y-3 hover:border-white/[0.14] transition"
+              className="bg-[#1E1E20] border border-white/[0.08] rounded-xl p-4 space-y-3 hover:border-white/[0.14] transition"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
@@ -95,7 +95,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
                     {task.name}
                   </h3>
                   {task.description && (
-                    <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                    <p className="text-[11px] text-[#9CA3AF] mt-0.5 truncate">
                       {task.description}
                     </p>
                   )}
@@ -105,7 +105,7 @@ export const WorkspaceBackgroundTasks: React.FC<WorkspaceBackgroundTasksProps> =
 
               {/* Barra de Progresso */}
               <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                <div className="flex items-center justify-between text-[11px] font-mono text-[#9CA3AF]">
                   <span>Progresso</span>
                   <span>{task.progress}%</span>
                 </div>
