@@ -1,6 +1,7 @@
 """Carregamento de variáveis e configurações gerais."""
 
 import os
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,6 +65,21 @@ class Config:
     assistant_name: str = os.getenv("ASSISTANT_NAME", "Assistente")
     max_history_messages: int = int(os.getenv("MAX_HISTORY_MESSAGES", "20"))
     language: str = os.getenv("LANGUAGE", "pt-BR")
+    max_agent_steps_per_turn: int = 15
+
+    @property
+    def runtime_mode(self) -> str:
+        """Modo de execução: 'cloud' (Vercel/Lambda/forçado) ou 'device' (Windows local_dev)."""
+        charlie_runtime_mode = os.getenv("CHARLIE_RUNTIME_MODE")
+        charlie_env = os.getenv("CHARLIE_ENV")
+
+        is_cloud = bool(
+            os.getenv("VERCEL")
+            or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+            or charlie_runtime_mode == "cloud"
+            or (platform.system() != "Windows" and charlie_env != "local_dev")
+        )
+        return "cloud" if is_cloud else "device"
 
     # Supabase
     supabase_url: str = os.getenv("SUPABASE_URL", "")
