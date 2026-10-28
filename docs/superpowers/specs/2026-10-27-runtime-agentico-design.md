@@ -1,6 +1,6 @@
 # Design — Runtime Agêntico Unificado (Charlie AI)
 
-**Data:** 2026-10-27 (rev. 2026-10-28 pós builder-check) · **Branch:** `feat/agentic-runtime` · **Status:** aguardando respostas do dono (§8.1)
+**Data:** 2026-10-27 (rev. 2026-10-28 pós builder-check) · **Branch:** `feat/agentic-runtime` · **Status:** APROVADO pelo dono (2026-10-28) — pronto para o plano de implementação
 
 **Decisões de produto (donas: Lucas, já fechadas em conversa):**
 1. **Chat com agência inline** — tools executam dentro da conversa comum, com resultados renderizados em cards; tarefas de múltiplos passos acontecem ali mesmo.
@@ -35,7 +35,7 @@ O objetivo deste projeto é **unificar a execução agêntica do Charlie em um r
 | 2 | `client_tool_request` via SSE | `core/pipeline.py:528-551` | **Fire-and-forget dominante do chat**: emite evento pro cliente conectado, responde "Comando enviado..." e **encerra o turno**. O resultado nunca volta ao modelo. Se o desktop não estiver ouvindo, o comando evapora. |
 | 3 | `device_broker` via WebSocket | `brain/broker/device_broker.py` (dispatch com Future + timeout, registro em `api/routes/chat.py:715-775`) | O único caminho que espera resultado — mas é **in-memory** (singleton, morre a cada restart/cold start) e a Vercel **não suporta WebSocket**, então no modo nuvem nunca funcionou de verdade. |
 | 4 | Fila Postgres de comandos | `api/routes/device.py:572-610` → `device_pending_commands` | Caminho do controle remoto do mobile, **separado do chat**. Hoje é o único canal WAN que funciona (o desktop faz polling via heartbeat). |
-| 5 | `RouteMode.AGENTIC` (sequestro de turno) | `brain/router/router.py:60-96` (classificação por keywords: "execute o plano", "modo agente"...) + `core/pipeline.py:243-305` | Desvia o TURNO inteiro do chat para o `agent_runtime` singleton e streama eventos do DAG por até **600s** — o sequestro de conversa em outra forma. Ver pergunta aberta §8.1-Q2. |
+| 5 | `RouteMode.AGENTIC` (sequestro de turno) | `brain/router/router.py:60-96` (classificação por keywords: "execute o plano", "modo agente"...) + `core/pipeline.py:243-305` | Desvia o TURNO inteiro do chat para o `agent_runtime` singleton e streama eventos do DAG por até **600s** — o sequestro de conversa em outra forma. Removido no v1 (decisão do dono, §8.1-Q2). |
 
 Além dos cinco: o chat no **modo local** executa tools DEVICE direto no processo da API (caminho 1 disfarçado), e a **aba Agente** executa tudo no próprio desktop via `deviceExecutor.ts`, sem devolver resultado ao backend (ver §2.5). São, na prática, **sete produtores de execução**.
 
@@ -133,7 +133,7 @@ class ExecutorTransport(Protocol):
 - `runtime.py` deixa de ser singleton: **uma instância de execução por sessão**, com sessões **multi-tenant** em Postgres (`agent_sessions`: grafo serializado, eventos, permissões, status) — substitui o SQLite local.
 - **Permissão unificada**: `permission_gate` (backend) vira o engine ÚNICO; a aba consome `/agent/permissions/*`; o engine local do store morre. Permissão resolvida **reativa** a tarefa (corrige a trava de `waiting_permission`).
 - A aba Agente deixa de rodar loop autônomo local: envia missão ao backend (`/agent/goal` evoluído) e vira **cockpit**: timeline do DAG real, terminais com PIDs reais, evidências do verifier, artefatos, permissões pendentes com aprovação inline.
-- Hoje o chat executa `execute_command`/`start_background_process` (risco HIGH/CRITICAL no mapa de `governance.py:59-127`) **sem aprovação** — só blocklist (`tools/registry.py:131-145`, `system_control.py:34+`). Se o gate passa a valer no chat é a pergunta §8.1-Q3.
+- Hoje o chat executa `execute_command`/`start_background_process` (risco HIGH/CRITICAL no mapa de `governance.py:59-127`) **sem aprovação** — só blocklist (`tools/registry.py:131-145`, `system_control.py:34+`). **Decisão do dono (2026-10-28): o gate vale também no chat inline** — unificado com o das missões, auto-aprovar por nível de risco configurável (baixo = auto, alto = card de aprovação).
 
 ### 3.5 Runtime mode centralizado
 
@@ -144,7 +144,7 @@ class ExecutorTransport(Protocol):
 1. **Driver de missões no modo nuvem = event-driven.** Cada resultado de tool postado pelo host (`POST` acorda a sessão) ou resolução de permissão avança o DAG **um passo por invocação**, até o próximo ponto de espera. Pause/cancel/permissões viram **flags no Postgres** (fim dos `asyncio.Event` in-memory — `runtime.py:483-496`, `governance.py:160-180`). Nenhum "tick" por cron; nenhum cliente precisa estar conectado pra missão andar. Cockpit recebe eventos por polling de sessão (SSE de vida curta quando há cliente).
 2. **Identidade canônica única.** Hosts, fila, sessões e missões exigem **identidade autenticada** (UUID Supabase). Loopback local (`lucas-local`) fica restrito ao chat do modo device; os atalhos `"default"`/`"lucas-local"` do broker (`device_broker.py:53`) e das queries (`device.py:367,409`) são removidos. Consequência: missões exigem login mesmo offline (chat local continua funcionando sem).
 3. **Terminal do cockpit = família `background_process` movida pro host** (`Popen` no host, PIDs reais, polling de logs). PTY interativo fica fora do v1.
-4. **Escopo de tools do host v1 (proposta, pendente §8.1-Q4):** os 13 comandos Rust existentes + port da família `background_process` + media keys; `press_key`/`type_text` e `manage_application:close` ficam `unavailable` no v1 (capacidade declarada — o modelo sabe o que o host sabe fazer).
+4. **Escopo de tools do host v1 (confirmado pelo dono, 2026-10-28):** os 13 comandos Rust existentes + port da família `background_process` + media keys; `press_key`/`type_text` e `manage_application:close` ficam `unavailable` no v1 (capacidade declarada — o modelo sabe o que o host sabe fazer).
 
 ---
 
@@ -159,7 +159,7 @@ class ExecutorTransport(Protocol):
 - Estados honestos em toda falha de execução.
 
 **Não-metas (v1 — fases futuras):**
-- Sistema de skills (`skills/` fica reservado), subagentes reais (`multi_agent.py`), integração com pipeline de voz, app mobile, mudanças no web-chat além de herdar o backend, hosts não-Windows, PTY interativo.
+- Sistema de skills (`skills/` fica reservado), subagentes reais (`multi_agent.py`), integração com pipeline de voz, app mobile, mudanças no web-chat além de herdar o backend, hosts não-Windows, PTY interativo, spawn de missão a partir do chat (fase futura).
 
 **Anti-metas (o que caracteriza fracasso mesmo funcionando "na aparência"):**
 - Qualquer resposta fabricada com status de sucesso.
@@ -191,20 +191,20 @@ class ExecutorTransport(Protocol):
 
 - **F0 — Verdade e fundação**: `runtime_mode` centralizado; remoção de TODOS os fallbacks fabricados (registry, file_explorer, verifier) com estados honestos; testes de regressão cobrindo os dois modos.
 - **F1 — Protocolo Charlie Host**: tabelas `agent_hosts` + `agent_tool_calls` (evoluindo `device_pending_commands`), heartbeat autenticado, host service no desktop aderindo ao protocolo (reusando `deviceExecutor`), WS broker mantido como transporte rápido do modo local.
-- **F2 — Loop fechado no chat**: pipeline usa `ExecutorTransport`, resultado vira tool result, step budget, fim do `client_tool_request` fire-and-forget; cards de tool no chat do desktop. *(Forma exata depende de §8.1-Q1.)*
-- **F3 — Missões e cockpit**: sessões multi-tenant em Postgres, runtime por sessão com avanço event-driven (§3.6.1), unificação de permissões (backend único), aba Agente redesignada como cockpit (timeline real, permissões inline, terminais reais, artefatos), remoção da dupla execução, da sessão fantasma e — pendente §8.1-Q2 — do ramo AGENTIC.
+- **F2 — Loop fechado no chat**: pipeline usa `ExecutorTransport`, resultado vira tool result, step budget, fim do `client_tool_request` fire-and-forget; cards de tool no chat do desktop. *Turno **retomável** confirmado pelo dono: estado do turno persistido no Postgres, re-attach no próximo request via `ChatRequest.tool_results`.*
+- **F3 — Missões e cockpit**: sessões multi-tenant em Postgres, runtime por sessão com avanço event-driven (§3.6.1), unificação de permissões (backend único), aba Agente redesignada como cockpit (timeline real, permissões inline, terminais reais, artefatos), remoção da dupla execução, da sessão fantasma e do ramo AGENTIC (decisão do dono: remover no v1).
 - **F4 — Limpeza e qualidade**: dead code (AgentCommandCenter + 3 componentes mortos), unificação de parsers SSE/CodeBlock/badges, debounce do sync de sessão, suíte E2E chat↔host nos dois modos.
 
 ---
 
 ## 8. Abertos
 
-### 8.1 Perguntas pro DONO (builder check 2026-10-28 — a resposta muda o que será construído)
+### 8.1 Perguntas pro DONO — RESPONDIDAS (2026-10-28, em conversa)
 
-1. **Orçamento/retomabilidade do turno na nuvem.** Um turno com N tools remotas pode estourar o limite da invocação serverless (15 passos × latência de fila+execução pode ser minutos). O gancho de retomada já existe (`ChatRequest.tool_results`). *Minha recomendação:* turno **retomável** com estado persistido (re-attach no próximo request) — mais robusto, um pouco mais de trabalho; alternativa é limitar o turno e deixar o modelo continuar depois.
-2. **Chat pode spawnar missões?** Hoje `RouteMode.AGENTIC` desvia o turno inteiro por keywords (§2.1 #5). Leitura (a): chat = só loop de tools com step budget; missões nascem apenas pela aba (`/agent/goal`); o ramo AGENTIC e os triggers do router são **removidos** no v1. Leitura (b): chat continua podendo spawnar missões que aparecem no cockpit (F3 vira dependência da F2 + vínculo thread↔session). *Minha recomendação: (a) no v1, spawn-from-chat depois.*
-3. **Permission gate no chat inline ou só nas missões?** Hoje `execute_command` roda no chat sem NENHUMA aprovação (só blocklist). *Minha recomendação:* gate unificado **também no chat**, com auto-aprovar por nível de risco configurável (baixo = auto, alto = pergunta via card) — colide com Q1 e pede turno retomável de qualquer forma.
-4. **Escopo de tools do host v1** (§3.6.4 propõe: 13 Rust + background_process + media keys; `press_key`/`type_text` ficam de fora). Confirmar ou listar tools prioritárias.
+1. **Turno retomável na nuvem: SIM** (recomendação aceita) — estado do turno persistido no Postgres, re-attach no próximo request via `ChatRequest.tool_results`.
+2. **Chat spawnando missão: NÃO no v1** (leitura (a) aceita) — ramo `RouteMode.AGENTIC` e triggers por keyword do router são removidos; spawn-from-chat registrado como fase futura em não-metas.
+3. **Permission gate no chat inline: SIM** — unificado com o das missões, auto-aprovar por nível de risco configurável (baixo = auto, alto = card de aprovação).
+4. **Escopo de tools do host v1: CONFIRMADO** — 13 comandos Rust + família `background_process` + media keys; `press_key`/`type_text` ficam `unavailable` no v1.
 
 ### 8.2 Deixado pro builder (plano de implementação)
 
