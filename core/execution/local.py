@@ -17,7 +17,7 @@ class LocalExecutor:
     def __init__(self, registry: "ToolRegistry") -> None:
         self.registry = registry
     
-    def hosts_for(self, user_id: str) -> list[HostInfo]:
+    async def hosts_for(self, user_id: str) -> list[HostInfo]:
         """Retorna o host local com capabilities do registry."""
         import time
         return [HostInfo(

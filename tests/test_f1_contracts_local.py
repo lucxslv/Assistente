@@ -108,13 +108,14 @@ class TestLocalExecutor:
         assert result.error_type == "not_found"
         assert "não encontrada" in result.output
 
-    def test_hosts_for_local(self):
+    @pytest.mark.asyncio
+    async def test_hosts_for_local(self):
         """hosts_for retorna HostInfo do host local com capabilities do registry."""
         mock_registry = MagicMock()
         mock_registry.list_tools.return_value = ["list_directory", "read_file", "write_file"]
         
         executor = LocalExecutor(mock_registry)
-        hosts = executor.hosts_for("user1")
+        hosts = await executor.hosts_for("user1")
         
         assert len(hosts) == 1
         host = hosts[0]
@@ -141,8 +142,9 @@ class TestTransportFactory:
         transport = transport_module.get_transport()
         assert isinstance(transport, transport_module.LocalExecutor)
 
-    def test_get_transport_cloud_mode_raises(self, monkeypatch):
-        """Modo cloud levanta NotImplementedError (Task 6 implementa)."""
+    @pytest.mark.asyncio
+    async def test_get_transport_cloud_mode(self, monkeypatch):
+        """CHARLIE_RUNTIME_MODE=cloud → RemoteHostExecutor."""
         monkeypatch.setenv("VERCEL", "1")
         monkeypatch.delenv("CHARLIE_RUNTIME_MODE", raising=False)
         import importlib
@@ -151,5 +153,5 @@ class TestTransportFactory:
         import core.execution.transport as transport_module
         importlib.reload(transport_module)
         
-        with pytest.raises(NotImplementedError, match="RemoteHostExecutor: Task 6"):
-            transport_module.get_transport()
+        transport = transport_module.get_transport()
+        assert type(transport).__name__ == "RemoteHostExecutor"

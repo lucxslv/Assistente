@@ -30,7 +30,10 @@ class TestRemoteHostExecutor:
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
         mock_conn.fetch = AsyncMock(return_value=[])
         
-        executor = RemoteHostExecutor(lambda: mock_pool)
+        async def instant_sleep(duration):
+            return None
+        
+        executor = RemoteHostExecutor(lambda: mock_pool, sleep_func=instant_sleep)
         call = ToolCall(call_id="test-1", name="list_directory", arguments={"path": "test"})
         
         result = await executor.execute(call, user_id="user1", timeout=15.0)
@@ -57,36 +60,35 @@ class TestRemoteHostExecutor:
             {"id": "host1", "user_id": "user1", "name": "Test Host", "capabilities": ["list_directory"], "last_seen_at": time.time(), "online": True}
         ])
         
-        # INSERT retorna call_id
-        mock_conn.fetchrow = MagicMock(return_value={"call_id": "call-123"})
+        # INSERT usa execute (não retorna nada)
+        mock_conn.execute = AsyncMock(return_value=None)
         
-        # Poll: primeira vez status queued, segunda vez done
+        # Poll: primeira vez status queued, depois sempre done
         call_count = 0
         def fetchrow_side_effect(*args, **kwargs):
             nonlocal call_count
-            if call_count == 0:
-                call_count += 1
-                return {"call_id": "call-123"}
-            elif call_count == 1:
-                call_count += 1
+            call_count += 1
+            if call_count == 1:
                 return {"call_id": "call-123", "status": "queued", "result": None, "tool": "list_directory", "args": {}}
             else:
+                # Após a primeira chamada, sempre retorna done
                 return {"call_id": "call-123", "status": "done", "result": {"output": "pasta1\npasta2", "duration_ms": 50}, "tool": "list_directory", "args": {}}
         
-        mock_conn.fetchrow = MagicMock(side_effect=fetchrow_side_effect)
+        mock_conn.fetchrow = AsyncMock(side_effect=fetchrow_side_effect)
         
-        # Mock asyncio.sleep no módulo remote
-        with patch("core.execution.remote.asyncio.sleep", new_callable=AsyncMock):
-            executor = RemoteHostExecutor(lambda: mock_pool)
-            call = ToolCall(call_id="test-1", name="list_directory", arguments={"path": "test"})
-            result = await executor.execute(call, user_id="user1", timeout=15.0)
+        async def instant_sleep(duration):
+            return None
+        
+        executor = RemoteHostExecutor(lambda: mock_pool, sleep_func=instant_sleep)
+        call = ToolCall(call_id="test-1", name="list_directory", arguments={"path": "test"})
+        result = await executor.execute(call, user_id="user1", timeout=15.0)
         
         assert result.status == "success"
         assert result.output == "pasta1\npasta2"
         assert result.call_id == "test-1"
         assert result.host_id == "host1"
         # Verifica que INSERT foi chamado
-        assert mock_conn.fetchrow.called
+        assert mock_conn.execute.called
         # Verifica que poll aconteceu (fetchrow chamado múltiplas vezes)
         assert mock_conn.fetchrow.call_count >= 2
 
@@ -105,8 +107,8 @@ class TestRemoteHostExecutor:
             {"id": "host1", "user_id": "user1", "name": "Test Host", "capabilities": ["list_directory"], "last_seen_at": time.time(), "online": True}
         ])
         
-        # INSERT retorna call_id
-        mock_conn.fetchrow = MagicMock(return_value={"call_id": "call-123"})
+        # INSERT usa execute (não retorna nada)
+        mock_conn.execute = AsyncMock(return_value=None)
         
         # Poll sempre retorna queued (simula host não respondendo)
         call_count = 0
@@ -114,21 +116,19 @@ class TestRemoteHostExecutor:
             nonlocal call_count
             if call_count == 0:
                 call_count += 1
-                return {"call_id": "call-123"}
-            elif call_count == 1:
-                call_count += 1
                 return {"call_id": "call-123", "status": "queued", "result": None}
             else:
                 return {"call_id": "call-123", "status": "queued", "result": None}
         
-        mock_conn.fetchrow = MagicMock(side_effect=fetchrow_side_effect)
+        mock_conn.fetchrow = AsyncMock(side_effect=fetchrow_side_effect)
         
-        executor = RemoteHostExecutor(lambda: mock_pool)
+        async def instant_sleep(duration):
+            return None
+        
+        executor = RemoteHostExecutor(lambda: mock_pool, sleep_func=instant_sleep)
         call = ToolCall(call_id="test-1", name="list_directory", arguments={"path": "test"})
         
-        # Mock asyncio.sleep para evitar sono real
-        with patch("core.execution.remote.asyncio.sleep", new_callable=AsyncMock):
-            result = await executor.execute(call, user_id="user1", timeout=0.1)
+        result = await executor.execute(call, user_id="user1", timeout=0.1)
         
         assert result.status == "timeout"
         assert result.error_type == "host_timeout"
@@ -136,7 +136,7 @@ class TestRemoteHostExecutor:
         # Verifica que UPDATE timeout foi chamado
         assert mock_conn.execute.called
         sql_calls = [str(c[0][0]) for c in mock_conn.execute.call_args_list]
-        assert any("status='timeout'" in sql for sql in sql_calls)
+        assert any("status = 'timeout'" in sql for sql in sql_calls)
 
 
 class TestTransportFactory:

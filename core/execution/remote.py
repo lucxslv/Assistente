@@ -13,15 +13,13 @@ from api.db import get_or_init_db_pool
 class RemoteHostExecutor:
     """Executor remoto que despacha tools via fila agent_tool_calls e aguarda resultado."""
     
-    def __init__(self, pool_factory: Optional[Callable] = None):
+    def __init__(self, pool_factory: Optional[Callable] = None, sleep_func: Optional[Callable] = None):
         self.pool_factory = pool_factory or get_or_init_db_pool
+        self._sleep_func = sleep_func or asyncio.sleep
     
-    def hosts_for(self, user_id: str) -> list[HostInfo]:
+    async def hosts_for(self, user_id: str) -> list[HostInfo]:
         """Retorna hosts online do usuário (last_seen_at > now - 30s)."""
-        # This is a synchronous method, but we need to run async query
-        # For simplicity, we'll make it async in practice but sync here
-        # The actual implementation will be async in execute()
-        return []
+        return await self._get_online_hosts(user_id)
     
     async def _get_online_hosts(self, user_id: str) -> list[HostInfo]:
         """Busca hosts online do usuário (last_seen_at > now - 30s)."""
@@ -99,7 +97,7 @@ class RemoteHostExecutor:
         deadline = time.time() + timeout
         
         while time.time() < deadline:
-            await asyncio.sleep(poll_interval)
+            await self._sleep_func(poll_interval)
             
             try:
                 async with pool.acquire() as conn:
