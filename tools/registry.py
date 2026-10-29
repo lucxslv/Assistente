@@ -148,16 +148,11 @@ class ToolRegistry:
 
         # Se for ferramenta local de dispositivo
         if scope == ToolScope.DEVICE:
-            import os
-            import platform
-            is_cloud = bool(
-                os.getenv("VERCEL")
-                or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
-                or os.getenv("CHARLIE_RUNTIME_MODE") == "cloud"
-                or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
-            )
+            import config
+            is_cloud = config.config.runtime_mode == "cloud"
 
             # 1. Se estiver na nuvem e prefer_remote for solicitado (e houver dispositivo WebSocket ativo do usuário)
+            #    Mantido para compatibilidade com runtime de missões legado — será removido no Plano 2
             if is_cloud and prefer_remote:
                 try:
                     from brain.broker.device_broker import device_broker
@@ -173,49 +168,20 @@ class ToolRegistry:
                             "is_recoverable": False,
                         }
                 except Exception as e:
-                    logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Prosseguindo com resposta desktop.")
+                    logger.warning(f"Despacho remoto de '{name}' falhou: {e}. Prosseguindo com resposta honesta.")
 
-            # 2. Se estiver na nuvem (executando via stream SSE para o app Desktop no Windows)
+            # 2. Modo cloud sem executor disponível → estado honesto (não fabricar sucesso)
             if is_cloud:
-                if name in ("execute_command", "run_command"):
-                    cmd = safe_args.get("command", "")
-                    cloud_msg = f"Comando '{cmd}' despachado para execução no PowerShell do computador Windows do usuário via Charlie Desktop."
-                elif name == "get_system_status":
-                    cloud_msg = "Sistema: Microsoft Windows 11 x64 (Computador do Usuário conectado via Charlie Desktop). CPU, memória e disco em níveis ideais de operação local. Terminal PowerShell e explorador de arquivos Windows ativos."
-                elif name == "create_folder":
-                    folder = safe_args.get("path", "pasta")
-                    cloud_msg = f"Comando para criar a pasta '{folder}' enviado para execução no computador local via app Desktop."
-                elif name == "manage_application":
-                    app = safe_args.get("app_name", "aplicativo")
-                    act = safe_args.get("action", "open")
-                    cloud_msg = f"Comando '{act}' para '{app}' enviado para execução no computador local do usuário via app Desktop."
-                elif name == "write_file":
-                    p = safe_args.get("path", "arquivo")
-                    cloud_msg = f"Comando para gravar no arquivo '{p}' enviado para execução no computador local via app Desktop."
-                elif name == "system_power_action":
-                    act = safe_args.get("action", "lock")
-                    cloud_msg = f"Ação de energia '{act}' enviada para o computador do usuário via app Desktop."
-                elif name == "set_system_volume":
-                    cloud_msg = "Comando de alteração de volume enviado para o computador do usuário via app Desktop."
-                elif name in ("press_key", "type_text", "take_screenshot"):
-                    cloud_msg = f"Ação de automação '{name}' enviada para o computador do usuário via app Desktop."
-                elif name in ("play_music", "pause_music", "resume_music", "stop_music"):
-                    cloud_msg = f"Comando de mídia '{name}' enviado para o computador do usuário via app Desktop."
-                elif name in ("list_directory", "read_file", "replace_in_file"):
-                    p = safe_args.get("path", "pasta")
-                    cloud_msg = f"Comando de arquivo para '{p}' enviado para o aplicativo Desktop local do usuário."
-                else:
-                    cloud_msg = f"Comando '{name}' despachado para o aplicativo Desktop local do usuário."
                 return {
-                    "status": "success",
-                    "output": cloud_msg,
+                    "status": "unavailable",
+                    "output": f"Sem executor disponível: nenhum host do usuário está conectado para executar '{name}'.",
                     "friendly_name": friendly,
                     "duration_ms": int((time.perf_counter() - t0) * 1000),
-                    "error_type": None,
+                    "error_type": "host_offline",
                     "is_recoverable": False,
                 }
 
-        # Notifica o observador de estado (se o módulo de API estiver ativo)
+                # Notifica o observador de estado (se o módulo de API estiver ativo)
         state_mgr = None
         try:
             from api.state import state
@@ -1032,4 +998,8 @@ class ToolRegistry:
             return f"Erro ao recuperar contexto da sessão: {e}"
 
         return "Não foi possível carregar a sessão solicitada."
+
+
+# Instância global do registry para uso compartilhado
+registry = ToolRegistry()
 

@@ -45,7 +45,9 @@ packages = ["api", "audio", "brain", "core", "memory", "providers", "tools", "ev
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-asyncio>=0.25.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"

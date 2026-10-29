@@ -252,25 +252,31 @@ class Verifier:
         return cls._verify_generic(task, tool_result)
 
     @classmethod
+
+    @classmethod
     def _verify_file(cls, task: TaskNode, tool_result: str, criteria: Dict[str, Any]) -> Tuple[bool, TaskEvidence]:
         """Verifica existência física, integridade e conteúdo de arquivos."""
+        import config
         target_path_str = criteria.get("path") or task.arguments.get("path")
-        is_cloud = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
-        if is_cloud:
-            passed = any(
-                term in tool_result.lower()
-                for term in ("sucesso", "criada", "criado", "gravado", "gravada", "despachado", "enviado", "concluído", "conteúdo")
-            )
-            return passed, TaskEvidence(
+        if config.config.runtime_mode == "cloud":
+            unavailable_indicators = ("Sem executor disponível", "host_offline", "unavailable")
+            if any(ind in tool_result for ind in unavailable_indicators):
+                return False, TaskEvidence(
+                    type="file",
+                    summary=f"Verificação indisponível em modo cloud: {target_path_str or 'operação em arquivo'}",
+                    details=tool_result,
+                    passed=False,
+                )
+            return False, TaskEvidence(
                 type="file",
-                summary=f"Evidência de execução remota confirmada no Windows Desktop: {target_path_str or 'operação em arquivo'}",
+                summary=f"Verificação de arquivo não executada em modo cloud (sem executor): {target_path_str or 'operação em arquivo'}",
                 details=tool_result,
-                passed=passed,
+                passed=False,
             )
 
         if not target_path_str:
             import re
-            m = re.search(r"['\"]([^'\"]+\.[a-zA-Z0-9]+)['\"]", tool_result)
+            m = re.search(r'"([^"]+\.[a-zA-Z0-9]+)"', tool_result) or re.search(r"'([^']+\.[a-zA-Z0-9]+)'", tool_result)
             if m:
                 target_path_str = m.group(1)
             else:
@@ -292,6 +298,9 @@ class Verifier:
                 passed=False,
             )
 
+        expected_substring = criteria.get("contains")
+        file_hash = cls.calculate_file_hash(target)[:12]
+        ast_verified = False
         expected_substring = criteria.get("contains")
         file_hash = cls.calculate_file_hash(target)[:12]
         ast_verified = False
