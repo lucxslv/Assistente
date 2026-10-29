@@ -15,7 +15,7 @@ from core.execution.local import LocalExecutor
 class ExecutorTransport(Protocol):
     """Protocolo para transportes de execução de ferramentas."""
     
-    def hosts_for(self, user_id: str) -> List[HostInfo]:
+    async def hosts_for(self, user_id: str) -> List[HostInfo]:
         """Retorna lista de hosts disponíveis para o usuário."""
         ...
     
@@ -29,14 +29,15 @@ def get_transport() -> ExecutorTransport:
     Fábrica de transporte baseada no modo de execução.
     
     - Modo device: retorna LocalExecutor (execução in-process via ToolRegistry)
-    - Modo cloud: levanta NotImplementedError (Task 6 implementa RemoteHostExecutor)
+    - Modo cloud: retorna RemoteHostExecutor (execução via fila Postgres)
     """
     from config import config
     from tools.registry import registry
     from core.execution.local import LocalExecutor
+    from core.execution.remote import RemoteHostExecutor
     
     if config.runtime_mode == "cloud":
-        raise NotImplementedError("RemoteHostExecutor: Task 6")
+        return RemoteHostExecutor()
     
     return LocalExecutor(registry)
 
