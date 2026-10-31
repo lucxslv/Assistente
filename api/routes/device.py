@@ -522,6 +522,92 @@ async def device_status(user: dict = Depends(require_local_or_authenticated)):
     }
 
 
+# ===== Mappings e helpers para /command =====
+
+# Mapping de ações do device para tools do registry
+_ACTION_TO_TOOL = {
+    # Volume
+    "volume": "set_system_volume",
+    "set_volume": "set_system_volume",
+    "get_volume": "set_system_volume",
+    "volume_up": "set_system_volume",
+    "volume_down": "set_system_volume",
+    # Mute
+    "mute": "toggle_mute",
+    "toggle_mute": "toggle_mute",
+    # Media
+    "media": "media_play_pause",
+    "send_media_key": "media_play_pause",
+    # Power
+    "lock": "system_power_action",
+    "lock_workstation": "system_power_action",
+    # Window
+    "minimize_all": "minimize_all",
+    "minimize_all_windows": "minimize_all",
+    # Screenshot
+    "screenshot": "take_screenshot",
+    "take_screenshot": "take_screenshot",
+    # App/File
+    "open": "open_path_or_app",
+    "open_path_or_app": "open_path_or_app",
+    # Command
+    "command": "execute_command",
+    "run_command": "execute_command",
+    "quick_command": "execute_command",
+    "git_pull": "execute_command",
+    "sync_git": "execute_command",
+    "terminal_command": "execute_command",
+}
+
+
+def _action_to_tool(action: str) -> str:
+    """Mapeia ação do device para nome da tool no registry."""
+    return _ACTION_TO_TOOL.get(action.lower(), action.lower())
+
+
+def _map_params_to_args(action: str, params: dict, target: str = None, command: str = None, level: str = None, key: str = None) -> dict:
+    """Mapeia parâmetros da requisição device para argumentos da tool."""
+    action_lower = action.lower()
+
+    if action_lower in ("screenshot", "take_screenshot"):
+        return {}
+
+    if action_lower in ("open", "open_path_or_app"):
+        return {"path": target or ""}
+
+    if action_lower in ("command", "run_command", "quick_command", "git_pull", "sync_git", "terminal_command"):
+        return {"command": command or params.get("command", "")}
+
+    if action_lower in ("lock", "lock_workstation"):
+        return {"action": "lock"}
+
+    if action_lower in ("minimize_all", "minimize_all_windows"):
+        return {}
+
+    if action_lower in ("volume", "set_volume"):
+        return {"level": int(level) if level is not None else 50, "mute": False}
+
+    if action_lower in ("volume_up", "volume_down"):
+        step = 10 if action_lower == "volume_up" else -10
+        return {"level": step, "relative": True}
+
+    if action_lower in ("mute", "toggle_mute"):
+        return {"action": "mute"}
+
+    if action_lower in ("media", "send_media_key"):
+        key_lower = (key or "play_pause").lower()
+        if key_lower in ("play_pause", "play", "pause"):
+            return {"action": "play_pause"}
+        elif key_lower == "next":
+            return {"action": "next"}
+        elif key_lower in ("prev", "previous"):
+            return {"action": "prev"}
+        return {"action": "play_pause"}
+
+    # Fallback genérico
+    return {k: v for k, v in params.items() if v is not None}
+
+
 @router.post("/command")
 async def device_command(
     req: DeviceCommandRequest,
@@ -569,34 +655,33 @@ async def device_command(
     target = req.target or params.get("target") or params.get("path")
     command = req.command or params.get("command") or params.get("cmd")
 
-    # Se estiver rodando na nuvem (Vercel / Linux), persiste para execução no PC físico via Desktop Tauri
-    if platform.system() != "Windows" or os.getenv("VERCEL"):
-        cmd_id = f"cmd_{int(time.time() * 1000)}"
-        cmd_obj = {
-            "id": cmd_id,
-            "user_id": caller_uid,
-            "action": action,
-            "level": level,
-            "key": key,
-            "target": target,
-            "command": command,
-            "params": params,
-            "created_at": time.time(),
-        }
+    # Cloud: enfileira na fila unificada agent_tool_calls
+    from config import config
+    if config.runtime_mode == "cloud":
+        tool_name = _action_to_tool(action)
+        args = _map_params_to_args(action, params, target, command, level, key)
 
+        cmd_id = f"cmd_{int(time.time() * 1000)}"
         pool = await get_or_init_db_pool()
         if pool:
             try:
                 async with pool.acquire() as conn:
                     await conn.execute("""
-                        INSERT INTO device_pending_commands (id, user_id, action, level, key, target, command, params, executed, created_at)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, FALSE, $9);
-                    """, cmd_id, caller_uid, action, level, key, target, command, json.dumps(params), time.time())
+                        INSERT INTO agent_tool_calls (call_id, user_id, tool, args, status, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4::jsonb, 'queued', $5, $6);
+                    """, cmd_id, caller_uid, tool_name, json.dumps(args), time.time(), time.time())
             except Exception as e:
-                logger.error(f"Erro ao persistir comando no Supabase: {e}")
-                _pending_commands.append(cmd_obj)
+                logger.error(f"Erro ao enfileirar comando na fila unificada: {e}")
+                # Fallback in-memory
+                _pending_commands.append({
+                    "id": cmd_id, "user_id": caller_uid, "tool": tool_name, "args": args,
+                    "status": "queued", "created_at": time.time()
+                })
         else:
-            _pending_commands.append(cmd_obj)
+            _pending_commands.append({
+                "id": cmd_id, "user_id": caller_uid, "tool": tool_name, "args": args,
+                "status": "queued", "created_at": time.time()
+            })
 
         if len(_pending_commands) > 30:
             _pending_commands.pop(0)
@@ -605,7 +690,7 @@ async def device_command(
             "success": True,
             "status": "queued",
             "action": action,
-            "message": f"Comando '{action}' despachado para execução no PC físico via relay na nuvem.",
+            "message": f"Comando '{action}' enfileirado para execução remota.",
             "command_id": cmd_id,
         }
 
