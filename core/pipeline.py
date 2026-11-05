@@ -161,7 +161,6 @@ class AssistantPipeline:
 
         self.last_error_detail = None
 
-<<<<<<< HEAD
         is_cloud = config_module.config.runtime_mode == "cloud"
 
         # Resumable turn: generate request_id if not provided
@@ -172,9 +171,6 @@ class AssistantPipeline:
         resuming_turn = False
         if is_cloud and tool_results:
             resuming_turn = True
-=======
-        is_cloud = config.runtime_mode == "cloud"
->>>>>>> main
 
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
@@ -529,11 +525,7 @@ class AssistantPipeline:
                 break
 
             # Step budget: limite de passos por turno
-<<<<<<< HEAD
             max_steps = _test_max_steps_per_turn or getattr(self, "_max_agent_steps_per_turn", None) or config_module.config.max_agent_steps_per_turn
-=======
-            max_steps = getattr(config, "max_agent_steps_per_turn", 15)
->>>>>>> main
             steps_this_turn = 0
 
             # Executa ferramentas via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
@@ -574,7 +566,6 @@ class AssistantPipeline:
                     arguments=call.arguments,
                 )
 
-<<<<<<< HEAD
                 # Cloud mode + DEVICE tool: suspend turn and enqueue for remote execution
                 if is_cloud and scope_enum == ToolScope.DEVICE:
                     # Update turn state to suspended with pending tool calls
@@ -611,8 +602,6 @@ class AssistantPipeline:
                     )
                     return  # Suspend turn - will resume when tool results arrive
 
-=======
->>>>>>> main
                 # Executa via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
                 try:
                     result = await transport.execute(tool_call, uid, timeout=15.0)
