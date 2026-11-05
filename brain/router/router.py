@@ -29,7 +29,10 @@ class RouteDecision:
 class LLMRouter:
     """Classifica a complexidade e direciona requisições para a rota ideal (Fast vs. Reasoning vs. Agentic)."""
 
+<<<<<<< HEAD
     # Novos modelos Google (2.5 series deprecados, usar 3.x series)
+=======
+>>>>>>> main
     FAST_GEMINI_MODEL = "gemini-3.5-flash-lite"
     REASONING_GEMINI_MODEL = "gemini-3.5-flash"
     AGENTIC_GEMINI_MODEL = "gemini-3.5-flash"
@@ -236,6 +239,7 @@ class LLMRouter:
             candidates: list[tuple[str, str]] = []
             primary = (decision.provider_name.lower(), decision.model_name)
 
+<<<<<<< HEAD
             # 1. Modelos alternativos dentro do próprio provedor Gemini (modelos válidos atuais)
             if decision.provider_name.lower() == "gemini":
                 alt_gemini = (
@@ -248,6 +252,20 @@ class LLMRouter:
                 for valid_model in ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash-lite"):
                     if valid_model not in (decision.model_name, alt_gemini):
                         candidates.append(("gemini", valid_model))
+=======
+        # 1. Modelos alternativos dentro do próprio provedor Gemini (modelos válidos atuais)
+        if decision.provider_name.lower() == "gemini":
+            alt_gemini = (
+                self.FAST_GEMINI_MODEL
+                if decision.model_name != self.FAST_GEMINI_MODEL
+                else self.REASONING_GEMINI_MODEL
+            )
+            candidates.append(("gemini", alt_gemini))
+            # Adicionar modelos 3.x válidos como fallback adicional
+            for valid_model in ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash-lite"):
+                if valid_model not in (decision.model_name, alt_gemini):
+                    candidates.append(("gemini", valid_model))
+>>>>>>> main
 
             # 2. Provedor alternativo Groq se chave estiver configurada
             if getattr(config, "groq_api_key", None):
