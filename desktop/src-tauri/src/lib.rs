@@ -1,10 +1,12 @@
-use serde::Serialize;
-use std::sync::Mutex;
+use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager, WindowEvent,
 };
+use reqwest::Client;
 
 pub mod system;
 
@@ -14,6 +16,45 @@ pub struct SystemMetrics {
     pub memory_used_gb: f32,
     pub memory_total_gb: f32,
     pub memory_percent: f32,
+}
+
+// Host Service types
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HostConfig {
+    pub api_base_url: String,
+    pub host_id: Option<String>,
+    pub host_token: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HostRegistration {
+    pub host_id: String,
+    pub name: String,
+    pub capabilities: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HostHeartbeat {
+    pub host_id: String,
+    pub capabilities: Vec<String>,
+    pub telemetry: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClaimedToolCall {
+    pub call_id: String,
+    pub tool: String,
+    pub args: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ToolResultSubmission {
+    pub call_id: String,
+    pub status: String,
+    pub output: serde_json::Value,
+    pub duration_ms: u64,
+    pub error_type: Option<String>,
+    pub is_recoverable: bool,
 }
 
 #[cfg(windows)]
@@ -588,6 +629,329 @@ fn start_local_backend() -> Result<String, String> {
     Ok("Servidor em nuvem ativo.".to_string())
 }
 
+
+
+// ============================================================================
+// Host Service (Desktop Agent)
+// ============================================================================
+
+static HOST_CONFIG: Mutex<Option<HostConfig>> = Mutex::new(None);
+static HTTP_CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+
+fn get_http_client() -> &'static Client {
+    HTTP_CLIENT.get_or_init(|| Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .unwrap())
+}
+
+async fn load_host_config() -> Result<HostConfig, String> {
+    let config_guard = HOST_CONFIG.lock().unwrap();
+    if let Some(config) = config_guard.as_ref() {
+        return Ok(config.clone());
+    }
+    drop(config_guard);
+    
+    // Try to load from local config file
+    let config_path = std::env::var("USERPROFILE")
+        .map(|p| std::path::PathBuf::from(p).join(".charlie").join("host_config.json"))
+        .unwrap_or_else(|_| std::path::PathBuf::from(".charlie/host_config.json"));
+    
+    if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Erro ao ler config do host: {}", e))?;
+        let config: HostConfig = serde_json::from_str(&content)
+            .map_err(|e| format!("Erro ao parsear config do host: {}", e))?;
+        
+        let mut guard = HOST_CONFIG.lock().unwrap();
+        *guard = Some(config.clone());
+        Ok(config)
+    } else {
+        Err("Host não configurado. Execute o pairing primeiro.".to_string())
+    }
+}
+
+async fn save_host_config(config: &HostConfig) -> Result<(), String> {
+    let config_dir = std::env::var("USERPROFILE")
+        .map(|p| std::path::PathBuf::from(p).join(".charlie"))
+        .unwrap_or_else(|_| std::path::PathBuf::from(".charlie"));
+    
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Erro ao criar diretório de config: {}", e))?;
+    
+    let config_path = config_dir.join("host_config.json");
+    let content = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("Erro ao serializar config: {}", e))?;
+    
+    std::fs::write(&config_path, content)
+        .map_err(|e| format!("Erro ao salvar config do host: {}", e))?;
+    
+    let mut guard = HOST_CONFIG.lock().unwrap();
+    *guard = Some(config.clone());
+    Ok(())
+}
+
+#[tauri::command]
+async fn host_register(host_id: String, name: String, api_base_url: String) -> Result<HostRegistration, String> {
+    let mut config = load_host_config().await?;
+    config.api_base_url = api_base_url;
+    
+    let client = get_http_client();
+    let url = format!("{}/api/host/register", config.api_base_url.trim_end_matches('/'));
+    
+    let payload = serde_json::json!({
+        "host_id": host_id,
+        "name": name,
+    });
+    
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.host_token.as_ref().ok_or("Token não disponível")?))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Erro na requisição: {}", e))?;
+    
+    if !response.status().is_success() {
+        let err = response.text().await.unwrap_or_default();
+        return Err(format!("Falha no registro: {}", err));
+    }
+    
+    let registration: HostRegistration = response.json().await
+        .map_err(|e| format!("Erro ao parsear resposta: {}", e))?;
+    
+    // Update config with host_id if not set
+    if config.host_id.is_none() {
+        config.host_id = Some(registration.host_id.clone());
+        save_host_config(&config).await?;
+    }
+    
+    Ok(registration)
+}
+
+#[tauri::command]
+async fn host_heartbeat() -> Result<(), String> {
+    let client = get_http_client();
+    let config = load_host_config().await?;
+    let host_id = config.host_id.as_ref().ok_or("Host ID não configurado")?;
+    
+    let telemetry = get_system_metrics_async().await;
+    
+    let payload = HostHeartbeat {
+        host_id: host_id.clone(),
+        capabilities: vec![
+            "list_directory".to_string(),
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "execute_system_command".to_string(),
+            "create_local_directory".to_string(),
+            "system_power_action".to_string(),
+            "set_system_volume".to_string(),
+            "take_screenshot".to_string(),
+            "get_process_list".to_string(),
+            "list_local_directory".to_string(),
+            "read_local_file".to_string(),
+        ],
+        telemetry: serde_json::to_value(telemetry).unwrap_or(serde_json::json!({})),
+    };
+    
+    let url = format!("{}/api/host/heartbeat", config.api_base_url.trim_end_matches('/'));
+    
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.host_token.as_ref().ok_or("Token não disponível")?))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Erro na requisição: {}", e))?;
+    
+    if !response.status().is_success() {
+        let err = response.text().await.unwrap_or_default();
+        return Err(format!("Falha no heartbeat: {}", err));
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn host_claim_tools() -> Result<Vec<ClaimedToolCall>, String> {
+    let client = get_http_client();
+    let config = load_host_config().await?;
+    let host_id = config.host_id.as_ref().ok_or("Host ID não configurado")?;
+    
+    let url = format!("{}/api/host/claim", config.api_base_url.trim_end_matches('/'));
+    
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.host_token.as_ref().ok_or("Token não disponível")?))
+        .json(&serde_json::json!({ "host_id": host_id }))
+        .send()
+        .await
+        .map_err(|e| format!("Erro na requisição: {}", e))?;
+    
+    if response.status() == 204 || response.status() == 404 {
+        return Ok(vec![]);
+    }
+    
+    if !response.status().is_success() {
+        let err = response.text().await.unwrap_or_default();
+        return Err(format!("Falha ao reivindicar tools: {}", err));
+    }
+    
+    let tools: Vec<ClaimedToolCall> = response.json().await
+        .map_err(|e| format!("Erro ao parsear resposta: {}", e))?;
+    
+    Ok(tools)
+}
+
+#[tauri::command]
+async fn host_submit_result(call_id: String, status: String, output: serde_json::Value, duration_ms: u64, error_type: Option<String>, is_recoverable: bool) -> Result<(), String> {
+    let client = get_http_client();
+    let config = load_host_config().await?;
+    let host_id = config.host_id.as_ref().ok_or("Host ID não configurado")?;
+    
+    let payload = ToolResultSubmission {
+        call_id,
+        status,
+        output,
+        duration_ms,
+        error_type,
+        is_recoverable,
+    };
+    
+    let url = format!("{}/api/host/result", config.api_base_url.trim_end_matches('/'));
+    
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", config.host_token.as_ref().ok_or("Token não disponível")?))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Erro na requisição: {}", e))?;
+    
+    if !response.status().is_success() {
+        let err = response.text().await.unwrap_or_default();
+        return Err(format!("Falha ao enviar resultado: {}", err));
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn host_start_polling(app: tauri::AppHandle, _interval_seconds: u64) -> Result<(), String> {
+    let app_handle = app.clone();
+    
+    // Spawn background task for polling
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            let mut last_heartbeat = std::time::Instant::now();
+            let heartbeat_interval = Duration::from_secs(30);
+            
+            loop {
+                // Heartbeat
+                if last_heartbeat.elapsed() >= heartbeat_interval {
+                    if let Err(e) = host_heartbeat().await {
+                        eprintln!("Host heartbeat error: {}", e);
+                    } else {
+                        last_heartbeat = std::time::Instant::now();
+                    }
+                }
+                
+                // Claim tools
+                if let Ok(tools) = host_claim_tools().await {
+                    for tool in tools {
+                        // Emit event to frontend for tool execution
+                        let _ = app_handle.emit("host:tool_claimed", &tool);
+                    }
+                }
+                
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+    });
+    
+    Ok(())
+}
+
+// Internal async version of get_system_metrics for heartbeat
+async fn get_system_metrics_async() -> SystemMetrics {
+    #[cfg(windows)]
+    unsafe {
+        let mut mem: MEMORYSTATUSEX = std::mem::zeroed();
+        mem.dw_length = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        let mut total_gb = 16.0f32;
+        let mut used_gb = 4.0f32;
+        let mut mem_percent = 25.0f32;
+
+        if GlobalMemoryStatusEx(&mut mem) != 0 {
+            let total = mem.ull_total_phys as f32 / (1024.0 * 1024.0 * 1024.0);
+            let avail = mem.ull_avail_phys as f32 / (1024.0 * 1024.0 * 1024.0);
+            let used = (total - avail).max(0.0);
+            total_gb = (total * 10.0).round() / 10.0;
+            used_gb = (used * 10.0).round() / 10.0;
+            mem_percent = mem.dw_memory_load as f32;
+        }
+
+        let mut idle = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        let mut cpu_percent = 5.0f32;
+
+        if GetSystemTimes(&mut idle, &mut kernel, &mut user) != 0 {
+            let cur_idle = filetime_to_u64(idle);
+            let cur_kernel = filetime_to_u64(kernel);
+            let cur_user = filetime_to_u64(user);
+
+            let mut state = CPU_STATE.lock().unwrap();
+            if let Some(prev) = state.as_mut() {
+                let idle_diff = cur_idle.saturating_sub(prev.last_idle);
+                let kernel_diff = cur_kernel.saturating_sub(prev.last_kernel);
+                let user_diff = cur_user.saturating_sub(prev.last_user);
+                let total_diff = kernel_diff + user_diff;
+
+                if total_diff > 0 {
+                    let busy = total_diff.saturating_sub(idle_diff);
+                    let pct = (busy as f32 / total_diff as f32) * 100.0;
+                    cpu_percent = (pct * 10.0).round() / 10.0;
+                    prev.last_percent = cpu_percent;
+                } else {
+                    cpu_percent = prev.last_percent;
+                }
+
+                prev.last_idle = cur_idle;
+                prev.last_kernel = cur_kernel;
+                prev.last_user = cur_user;
+            } else {
+                *state = Some(CpuState {
+                    last_idle: filetime_to_u64(idle),
+                    last_kernel: filetime_to_u64(kernel),
+                    last_user: filetime_to_u64(user),
+                    last_percent: 5.0,
+                });
+            }
+        }
+
+        SystemMetrics {
+            cpu_percent: cpu_percent.clamp(0.0, 100.0),
+            memory_used_gb: used_gb,
+            memory_total_gb: total_gb,
+            memory_percent: mem_percent,
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        SystemMetrics {
+            cpu_percent: 0.0,
+            memory_used_gb: 0.0,
+            memory_total_gb: 0.0,
+            memory_percent: 0.0,
+        }
+    }
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -617,7 +981,13 @@ pub fn run() {
             system::take_screenshot,
             system::open_path_or_app,
             system::get_local_ip,
-            start_local_backend
+            start_local_backend,
+            // Host Service
+            host_register,
+            host_heartbeat,
+            host_claim_tools,
+            host_submit_result,
+            host_start_polling
         ])
         .setup(|app| {
             // Listener de ativação inter-processos (quando o usuário clica no atalho com app já aberto/oculto)
