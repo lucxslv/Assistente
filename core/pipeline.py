@@ -110,12 +110,7 @@ class AssistantPipeline:
 
         self.last_error_detail = None
 
-        is_cloud = bool(
-            os.getenv("VERCEL")
-            or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
-            or os.getenv("CHARLIE_RUNTIME_MODE") == "cloud"
-            or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
-        )
+        is_cloud = config.runtime_mode == "cloud"
 
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
@@ -509,7 +504,6 @@ class AssistantPipeline:
             req_memory.add_assistant_tool_calls(tool_calls)
 
             # Notifica início das ferramentas
-            client_tools_to_exec = []
             for call in tool_calls:
                 if _is_cancelled():
                     break
@@ -526,54 +520,70 @@ class AssistantPipeline:
                         "call_id": c_id,
                     },
                 )
-                if is_cloud and scope_enum == ToolScope.DEVICE:
-                    client_tools_to_exec.append({
-                        "call_id": c_id,
-                        "name": call.name,
-                        "args": call.arguments,
-                    })
 
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
                 break
 
-            # Se estiver na nuvem e houver ferramentas de dispositivo, despacha para execução física no Windows via Desktop
-            if client_tools_to_exec:
-                yield StreamEvent(
-                    type="client_tool_request",
-                    data={
-                        "thread_id": thread_id,
-                        "tools": client_tools_to_exec,
-                    },
-                )
-                cloud_reply = "Comando de dispositivo enviado para execução no seu computador."
-                yield StreamEvent(type="token", data={"token": cloud_reply})
-                yield StreamEvent(type="done", data={"reply": cloud_reply, "thread_id": thread_id, "model": self.last_model_used})
-                return
+            # Step budget: limite de passos por turno
+            max_steps = getattr(config, "max_agent_steps_per_turn", 15)
+            steps_this_turn = 0
 
-            # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
+            # Executa ferramentas via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+            from core.execution.transport import get_transport
+            transport = get_transport()
+
             for call in tool_calls:
                 if _is_cancelled():
                     break
+                if steps_this_turn >= max_steps:
+                    # Step budget excedido - injeta tool result sintético
+                    budget_msg = f"Limite de passos do turno atingido ({max_steps}). Conclua com o que já tem."
+                    yield StreamEvent(
+                        type="tool_end",
+                        data={
+                            "name": call.name,
+                            "friendly_name": self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name,
+                            "result": budget_msg,
+                            "status": "step_budget_exceeded",
+                            "duration_ms": 0,
+                            "error_type": "step_budget_exceeded",
+                            "is_recoverable": False,
+                            "scope": self.tools.get_scope(call.name).value,
+                            "call_id": call.id or f"call_{uuid.uuid4().hex[:8]}",
+                        },
+                    )
+                    req_memory.add_tool_result(call.name, budget_msg, tool_call_id=call.id or f"call_{uuid.uuid4().hex[:8]}")
+                    continue
+
                 scope_enum = self.tools.get_scope(call.name)
                 friendly_label = self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
-                if "execute" not in getattr(self.tools, "__dict__", {}) and hasattr(self.tools, "execute_structured"):
-                    structured = await self.tools.execute_structured(
-                        call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid
-                    )
-                    res = structured["output"]
-                    tool_status = structured["status"]
-                    duration_ms = structured["duration_ms"]
-                    error_type = structured["error_type"]
-                    is_recoverable = structured["is_recoverable"]
-                else:
-                    res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
-                    is_err = str(res).lower().startswith("erro")
-                    tool_status = "error" if is_err else "success"
+
+                # Converte call para ToolCall do contrato
+                tool_call = ToolCall(
+                    call_id=c_id,
+                    name=call.name,
+                    arguments=call.arguments,
+                )
+
+                # Executa via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+                try:
+                    result = await transport.execute(tool_call, uid, timeout=15.0)
+                    res = result.output
+                    tool_status = result.status
+                    duration_ms = result.duration_ms
+                    error_type = result.error_type
+                    is_recoverable = result.is_recoverable
+                    host_id = result.host_id
+                except Exception as e:
+                    logger.exception(f"Erro ao executar tool via transport: {e}")
+                    res = f"Erro ao executar '{call.name}': {e}"
+                    tool_status = "error"
                     duration_ms = 0
-                    error_type = "tool_error" if is_err else None
-                    is_recoverable = is_err
+                    error_type = "transport_error"
+                    is_recoverable = True
+                    host_id = None
 
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
                 yield StreamEvent(
@@ -588,6 +598,7 @@ class AssistantPipeline:
                         "is_recoverable": is_recoverable,
                         "scope": scope_enum.value,
                         "call_id": c_id,
+                        "host_id": host_id,
                     },
                 )
                 if call.name == "get_system_status":
@@ -606,6 +617,8 @@ class AssistantPipeline:
                         yield StreamEvent(type="widget", data=health_widget)
                     except Exception as w_err:
                         logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
+
+                steps_this_turn += 1
 
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
