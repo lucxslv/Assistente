@@ -50,31 +50,31 @@ def test_tool_registry_friendly_names_and_structured_contract():
 def test_router_valid_model_names_and_fallback_chain():
     """Garante que o LLMRouter usa nomes de modelos reais e gera cadeia de fallback ordenada."""
     r = LLMRouter()
-    assert r.FAST_GEMINI_MODEL == "gemini-2.5-flash-lite"
-    assert r.REASONING_GEMINI_MODEL == "gemini-2.5-flash"
+    assert r.FAST_GEMINI_MODEL == "gemini-3.5-flash-lite"
+    assert r.REASONING_GEMINI_MODEL == "gemini-3.5-flash"
     assert r.REASONING_GROQ_MODEL == "llama-3.3-70b-versatile"
 
     dec_fast = r.route("Oi, tudo bem?", preferred_provider="gemini")
     assert dec_fast.mode == RouteMode.FAST
-    assert dec_fast.model_name == "gemini-2.5-flash-lite"
+    assert dec_fast.model_name == "gemini-3.5-flash-lite"
 
     dec_reasoning = r.route("Explique detalhadamente a arquitetura de um compilador passo a passo", preferred_provider="gemini")
     assert dec_reasoning.mode == RouteMode.REASONING
-    assert dec_reasoning.model_name == "gemini-2.5-flash"
+    assert dec_reasoning.model_name == "gemini-3.5-flash"
 
     chain = r.get_fallback_chain(dec_reasoning)
     assert len(chain) >= 1
-    assert ("gemini", "gemini-2.5-flash-lite") in chain
+    assert ("gemini", "gemini-3.5-flash-lite") in chain
 
 
 def test_gemini_provider_alias_resolution():
     """Garante que aliases antigos ou inexistentes são resolvidos para modelos Gemini válidos."""
     models = GeminiProvider._resolve_models_to_try("gemini-3.8-flash")
-    assert models[0] == "gemini-2.5-flash"
-    assert "gemini-2.5-flash-lite" in models
+    assert models[0] == "gemini-3.8-flash"
+    assert "gemini-3.5-flash-lite" in models
 
     models_lite = GeminiProvider._resolve_models_to_try("gemini-3.5-flash-lite")
-    assert models_lite[0] == "gemini-2.5-flash-lite"
+    assert models_lite[0] == "gemini-3.5-flash-lite"
 
 
 def test_pipeline_stream_fallback_and_structured_tool_events():

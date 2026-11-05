@@ -18,21 +18,24 @@ class GeminiProvider(BaseLLMProvider):
 
     @staticmethod
     def _resolve_models_to_try(raw_model: str) -> list[str]:
+        # Mapear nomes ANTIGOS/depreciados para NOVOS modelos válidos
         alias_map = {
-            "gemini-3.8-flash": "gemini-2.5-flash",
-            "gemini-3.5-flash": "gemini-2.5-flash",
-            "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
-            "gemini-3.1-flash-lite": "gemini-2.5-flash-lite",
-            "gemini-3.1-flash-lite-preview": "gemini-2.5-flash-lite",
-            "gemini-flash-lite-latest": "gemini-2.5-flash-lite",
+            "gemini-2.5-flash": "gemini-3.5-flash",
+            "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+            "gemini-2.0-flash": "gemini-3.5-flash",
+            "gemini-flash-lite-latest": "gemini-3.5-flash-lite",
+            "gemini-3.8-flash": "gemini-3.8-flash",
+            "gemini-3.5-flash": "gemini-3.5-flash",
+            "gemini-3.5-flash-lite": "gemini-3.5-flash-lite",
+            "gemini-3.8-flash-lite": "gemini-3.8-flash-lite",
         }
-        target_model = alias_map.get(raw_model, raw_model or "gemini-2.5-flash")
+        target_model = alias_map.get(raw_model, raw_model or "gemini-3.5-flash-lite")
         models_to_try = [target_model]
         for fallback in (
             "gemini-3.8-flash",
+            "gemini-3.5-flash",
             "gemini-3.5-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
+            "gemini-3.8-flash-lite",
         ):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
@@ -369,4 +372,4 @@ class GeminiProvider(BaseLLMProvider):
                     parts.append(types.Part.from_text(text=str(p)))
             if parts:
                 genai_contents.append(types.Content(role=genai_role, parts=parts))
-        return genai_contents
+        return genai_contents

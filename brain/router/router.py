@@ -29,9 +29,10 @@ class RouteDecision:
 class LLMRouter:
     """Classifica a complexidade e direciona requisições para a rota ideal (Fast vs. Reasoning vs. Agentic)."""
 
-    FAST_GEMINI_MODEL = "gemini-2.5-flash-lite"
-    REASONING_GEMINI_MODEL = "gemini-2.5-flash"
-    AGENTIC_GEMINI_MODEL = "gemini-2.5-flash"
+    # Novos modelos Google (2.5 series deprecados, usar 3.x series)
+    FAST_GEMINI_MODEL = "gemini-3.5-flash-lite"
+    REASONING_GEMINI_MODEL = "gemini-3.5-flash"
+    AGENTIC_GEMINI_MODEL = "gemini-3.5-flash"
 
     FAST_OPENAI_MODEL = "gpt-4o-mini"
     REASONING_OPENAI_MODEL = "gpt-4o"
@@ -231,34 +232,36 @@ class LLMRouter:
         return decision
 
     def get_fallback_chain(self, decision: RouteDecision) -> list[tuple[str, str]]:
-        """Retorna lista ordenada de candidatos (provider_name, model_name) para fallback real."""
-        candidates: list[tuple[str, str]] = []
-        primary = (decision.provider_name.lower(), decision.model_name)
+            """Retorna lista ordenada de candidatos (provider_name, model_name) para fallback real."""
+            candidates: list[tuple[str, str]] = []
+            primary = (decision.provider_name.lower(), decision.model_name)
 
-        # 1. Modelos alternativos dentro do próprio provedor Gemini
-        if decision.provider_name.lower() == "gemini":
-            alt_gemini = (
-                self.FAST_GEMINI_MODEL
-                if decision.model_name != self.FAST_GEMINI_MODEL
-                else self.REASONING_GEMINI_MODEL
-            )
-            candidates.append(("gemini", alt_gemini))
-            if "gemini-2.0-flash" not in (decision.model_name, alt_gemini):
-                candidates.append(("gemini", "gemini-2.0-flash"))
+            # 1. Modelos alternativos dentro do próprio provedor Gemini (modelos válidos atuais)
+            if decision.provider_name.lower() == "gemini":
+                alt_gemini = (
+                    self.FAST_GEMINI_MODEL
+                    if decision.model_name != self.FAST_GEMINI_MODEL
+                    else self.REASONING_GEMINI_MODEL
+                )
+                candidates.append(("gemini", alt_gemini))
+                # Adicionar modelos 3.x válidos como fallback adicional
+                for valid_model in ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash-lite"):
+                    if valid_model not in (decision.model_name, alt_gemini):
+                        candidates.append(("gemini", valid_model))
 
-        # 2. Provedor alternativo Groq se chave estiver configurada
-        if getattr(config, "groq_api_key", None):
-            candidates.append(("groq", self.FAST_GROQ_MODEL))
+            # 2. Provedor alternativo Groq se chave estiver configurada
+            if getattr(config, "groq_api_key", None):
+                candidates.append(("groq", self.FAST_GROQ_MODEL))
 
-        # 3. Provedor alternativo OpenAI se chave estiver configurada
-        if getattr(config, "openai_api_key", None):
-            candidates.append(("openai", self.FAST_OPENAI_MODEL))
+            # 3. Provedor alternativo OpenAI se chave estiver configurada
+            if getattr(config, "openai_api_key", None):
+                candidates.append(("openai", self.FAST_OPENAI_MODEL))
 
-        # 4. Provedor Gemini caso o primário tenha sido outro provedor
-        if decision.provider_name.lower() != "gemini" and getattr(config, "gemini_api_key", None):
-            candidates.append(("gemini", self.FAST_GEMINI_MODEL))
+            # 4. Provedor Gemini caso o primário tenha sido outro provedor
+            if decision.provider_name.lower() != "gemini" and getattr(config, "gemini_api_key", None):
+                candidates.append(("gemini", self.FAST_GEMINI_MODEL))
 
-        return [c for c in candidates if c != primary]
+            return [c for c in candidates if c != primary]
 
 
 # Instância singleton global do Router e helper direto
