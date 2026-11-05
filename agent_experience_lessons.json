@@ -474,5 +474,16 @@
       "filesystem"
     ],
     "createdAt": "2026-11-05T05:51:15.952105+00:00"
+  },
+  {
+    "id": "les_af448528",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T05:54:43.718705+00:00"
   }
 ]

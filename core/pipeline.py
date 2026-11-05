@@ -95,6 +95,48 @@ class AssistantPipeline:
             logger.exception("Erro na transcrição (STT)")
             return None
 
+    async def _persist_turn_state(
+        self,
+        request_id: str,
+        user_id: str,
+        thread_id: str | None,
+        memory: ConversationMemory,
+        status: str,
+        pending_tools: list[dict] | None = None,
+    ) -> None:
+        """Persiste o estado do turno no banco para retomada posterior (modo cloud)."""
+        if not thread_id or user_id == "default":
+            return
+        try:
+            from api.db import get_or_init_db_pool
+            pool = await get_or_init_db_pool()
+            if not pool:
+                return
+            async with pool.acquire() as conn:
+                import json
+                state_data = {
+                    "memory": memory.get_messages(),
+                    "pending_tools": pending_tools or [],
+                }
+                await conn.execute(
+                    """
+                    INSERT INTO chat_turn_state (turn_id, user_id, thread_id, request_id, state, status, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    ON CONFLICT (request_id) DO UPDATE SET
+                        state = EXCLUDED.state,
+                        status = EXCLUDED.status,
+                        updated_at = NOW()
+                    """,
+                    request_id,
+                    user_id,
+                    thread_id,
+                    request_id,
+                    json.dumps(state_data),
+                    status,
+                )
+        except Exception as e:
+            logger.debug(f"Falha ao persistir turn state: {e}")
+
     async def run_pipeline_stream(
         self,
         user_text: str,
@@ -105,6 +147,7 @@ class AssistantPipeline:
         history: list[dict] | None = None,
         images: list[dict] | None = None,
         cancel_event: Any = None,
+        request_id: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
         import inspect
@@ -120,6 +163,15 @@ class AssistantPipeline:
 
         is_cloud = config_module.config.runtime_mode == "cloud"
 
+        # Resumable turn: generate request_id if not provided
+        if request_id is None:
+            request_id = f"req_{uuid.uuid4().hex[:12]}"
+        
+        # Cloud mode: check if resuming a suspended turn
+        resuming_turn = False
+        if is_cloud and tool_results:
+            resuming_turn = True
+
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
             uid = user_id or current_user_id_var.get()
@@ -131,7 +183,7 @@ class AssistantPipeline:
             uid = user_id or "default"
             uname = user_name
 
-        yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias..."})
+        yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias...", "request_id": request_id})
 
         # Inicializa memória da conversa isolada para esta requisição/thread
         req_memory = ConversationMemory(max_messages=config_module.config.max_history_messages)
@@ -170,6 +222,10 @@ class AssistantPipeline:
                 t_res = tr.get("result", "")
                 t_cid = tr.get("call_id")
                 req_memory.add_tool_result(t_name, t_res, tool_call_id=t_cid)
+
+        # Cloud mode: if resuming, persist turn state before tool execution
+        if is_cloud and not resuming_turn:
+            await self._persist_turn_state(request_id, uid, thread_id, req_memory, "open")
 
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
         route_decision = self.router.route(user_text or "continuar análise do sistema")
@@ -509,6 +565,42 @@ class AssistantPipeline:
                     name=call.name,
                     arguments=call.arguments,
                 )
+
+                # Cloud mode + DEVICE tool: suspend turn and enqueue for remote execution
+                if is_cloud and scope_enum == ToolScope.DEVICE:
+                    # Update turn state to suspended with pending tool calls
+                    await self._persist_turn_state(
+                        request_id, uid, thread_id, req_memory, "suspended",
+                        pending_tools=[{
+                            "call_id": c_id,
+                            "name": call.name,
+                            "arguments": call.arguments,
+                            "scope": scope_enum.value,
+                        }]
+                    )
+                    # Yield tool_start for UI feedback, then suspend
+                    yield StreamEvent(
+                        type="tool_start",
+                        data={
+                            "name": call.name,
+                            "friendly_name": friendly_label,
+                            "args": call.arguments,
+                            "scope": scope_enum.value,
+                            "call_id": c_id,
+                            "request_id": request_id,
+                        },
+                    )
+                    # Yield suspension event instead of executing
+                    yield StreamEvent(
+                        type="turn_suspended",
+                        data={
+                            "request_id": request_id,
+                            "thread_id": thread_id,
+                            "status": "awaiting_device_execution",
+                            "message": "Aguardando execução no dispositivo remoto...",
+                        },
+                    )
+                    return  # Suspend turn - will resume when tool results arrive
 
                 # Executa via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
                 try:
