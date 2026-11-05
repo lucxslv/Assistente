@@ -6,7 +6,7 @@ import os
 import platform
 from typing import Any, Optional
 
-from config import config
+import config as config_module
 from brain.context.manager import ContextManager
 from brain.planner.planner import IntentPlanner, IntentCategory
 from brain.profile import AssistantProfile
@@ -28,6 +28,12 @@ from brain.prompts.prompts import build_system_prompt
 from tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+# Test override for max steps per turn
+_test_max_steps_per_turn: Optional[int] = None
+
+
+
 
 
 class AssistantPipeline:
@@ -52,18 +58,19 @@ class AssistantPipeline:
         self.retriever = MemoryRetriever()
         
         self.tools = ToolRegistry()
-        self.memory = ConversationMemory(max_messages=config.max_history_messages)
+        self.memory = ConversationMemory(max_messages=config_module.config.max_history_messages)
         self.llm = self._get_llm_provider()
-        self.last_model_used: str = config.gemini_model
-        self.last_provider_used: str = config.llm_provider.lower()
+        self.last_model_used: str = config_module.config.gemini_model
+        self.last_provider_used: str = config_module.config.llm_provider.lower()
         self.last_route_mode: str = "fast"
         self.last_fallback_used: bool = False
         self.last_fallback_reason: Optional[str] = None
         self.last_usage_metadata: Optional[dict[str, Any]] = None
         self.last_error_detail: Optional[str] = None
+        self._max_agent_steps_per_turn: Optional[int] = None
 
     def _get_llm_provider(self, provider_name: Optional[str] = None) -> BaseLLMProvider:
-        provider = (provider_name or config.llm_provider).lower()
+        provider = (provider_name or config_module.config.llm_provider).lower()
         if provider == "openai":
             return OpenAIProvider()
         if provider == "gemini":
@@ -104,18 +111,14 @@ class AssistantPipeline:
         import os
         import uuid
         from tools.registry import ToolScope
+        from core.execution.contracts import ToolCall
 
         def _is_cancelled() -> bool:
             return bool(cancel_event and getattr(cancel_event, "is_set", lambda: False)())
 
         self.last_error_detail = None
 
-        is_cloud = bool(
-            os.getenv("VERCEL")
-            or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
-            or os.getenv("CHARLIE_RUNTIME_MODE") == "cloud"
-            or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
-        )
+        is_cloud = config_module.config.runtime_mode == "cloud"
 
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
@@ -131,7 +134,7 @@ class AssistantPipeline:
         yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias..."})
 
         # Inicializa memória da conversa isolada para esta requisição/thread
-        req_memory = ConversationMemory(max_messages=config.max_history_messages)
+        req_memory = ConversationMemory(max_messages=config_module.config.max_history_messages)
 
         # 1. Hidrata o histórico persistido do banco de dados (ou payload) se fornecido
         if history:
@@ -423,7 +426,7 @@ class AssistantPipeline:
 
                 fallback_candidates = self.router.get_fallback_chain(route_decision)
                 if not fallback_candidates:
-                    fb_default = config.gemini_model
+                    fb_default = config_module.config.gemini_model
                     if fb_default == route_decision.model_name:
                         fb_default = "gemini-2.5-flash-lite" if route_decision.model_name != "gemini-2.5-flash-lite" else "gemini-2.5-flash"
                     if fb_default != route_decision.model_name:
@@ -509,7 +512,6 @@ class AssistantPipeline:
             req_memory.add_assistant_tool_calls(tool_calls)
 
             # Notifica início das ferramentas
-            client_tools_to_exec = []
             for call in tool_calls:
                 if _is_cancelled():
                     break
@@ -526,54 +528,70 @@ class AssistantPipeline:
                         "call_id": c_id,
                     },
                 )
-                if is_cloud and scope_enum == ToolScope.DEVICE:
-                    client_tools_to_exec.append({
-                        "call_id": c_id,
-                        "name": call.name,
-                        "args": call.arguments,
-                    })
 
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
                 break
 
-            # Se estiver na nuvem e houver ferramentas de dispositivo, despacha para execução física no Windows via Desktop
-            if client_tools_to_exec:
-                yield StreamEvent(
-                    type="client_tool_request",
-                    data={
-                        "thread_id": thread_id,
-                        "tools": client_tools_to_exec,
-                    },
-                )
-                cloud_reply = "Comando de dispositivo enviado para execução no seu computador."
-                yield StreamEvent(type="token", data={"token": cloud_reply})
-                yield StreamEvent(type="done", data={"reply": cloud_reply, "thread_id": thread_id, "model": self.last_model_used})
-                return
+            # Step budget: limite de passos por turno
+            max_steps = _test_max_steps_per_turn or getattr(self, "_max_agent_steps_per_turn", None) or config_module.config.max_agent_steps_per_turn
+            steps_this_turn = 0
 
-            # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
+            # Executa ferramentas via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+            from core.execution.transport import get_transport
+            transport = get_transport()
+
             for call in tool_calls:
                 if _is_cancelled():
                     break
+                if steps_this_turn >= max_steps:
+                    # Step budget excedido - injeta tool result sintético
+                    budget_msg = f"Limite de passos do turno atingido ({max_steps}). Conclua com o que já tem."
+                    yield StreamEvent(
+                        type="tool_end",
+                        data={
+                            "name": call.name,
+                            "friendly_name": self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name,
+                            "result": budget_msg,
+                            "status": "step_budget_exceeded",
+                            "duration_ms": 0,
+                            "error_type": "step_budget_exceeded",
+                            "is_recoverable": False,
+                            "scope": self.tools.get_scope(call.name).value,
+                            "call_id": call.id or f"call_{uuid.uuid4().hex[:8]}",
+                        },
+                    )
+                    req_memory.add_tool_result(call.name, budget_msg, tool_call_id=call.id or f"call_{uuid.uuid4().hex[:8]}")
+                    continue
+
                 scope_enum = self.tools.get_scope(call.name)
                 friendly_label = self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
-                if "execute" not in getattr(self.tools, "__dict__", {}) and hasattr(self.tools, "execute_structured"):
-                    structured = await self.tools.execute_structured(
-                        call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid
-                    )
-                    res = structured["output"]
-                    tool_status = structured["status"]
-                    duration_ms = structured["duration_ms"]
-                    error_type = structured["error_type"]
-                    is_recoverable = structured["is_recoverable"]
-                else:
-                    res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
-                    is_err = str(res).lower().startswith("erro")
-                    tool_status = "error" if is_err else "success"
+
+                # Converte call para ToolCall do contrato
+                tool_call = ToolCall(
+                    call_id=c_id,
+                    name=call.name,
+                    arguments=call.arguments,
+                )
+
+                # Executa via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+                try:
+                    result = await transport.execute(tool_call, uid, timeout=15.0)
+                    res = result.output
+                    tool_status = result.status
+                    duration_ms = result.duration_ms
+                    error_type = result.error_type
+                    is_recoverable = result.is_recoverable
+                    host_id = result.host_id
+                except Exception as e:
+                    logger.exception(f"Erro ao executar tool via transport: {e}")
+                    res = f"Erro ao executar '{call.name}': {e}"
+                    tool_status = "error"
                     duration_ms = 0
-                    error_type = "tool_error" if is_err else None
-                    is_recoverable = is_err
+                    error_type = "transport_error"
+                    is_recoverable = True
+                    host_id = None
 
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
                 yield StreamEvent(
@@ -588,6 +606,7 @@ class AssistantPipeline:
                         "is_recoverable": is_recoverable,
                         "scope": scope_enum.value,
                         "call_id": c_id,
+                        "host_id": host_id,
                     },
                 )
                 if call.name == "get_system_status":
@@ -606,6 +625,8 @@ class AssistantPipeline:
                         yield StreamEvent(type="widget", data=health_widget)
                     except Exception as w_err:
                         logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
+
+                steps_this_turn += 1
 
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
