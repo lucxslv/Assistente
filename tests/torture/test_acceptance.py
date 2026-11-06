@@ -29,11 +29,10 @@ def test_acceptance_a_assistant_chat_no_dag():
     router = LLMRouter()
     prompt = "O que é uma função em Python?"
 
-    is_agentic = router.is_agentic_task(prompt)
     decision = router.route(prompt)
 
     duration = (time.time() - start) * 1000
-    passed = (is_agentic is False) and (decision.mode in (RouteMode.FAST, RouteMode.REASONING))
+    passed = decision.mode in (RouteMode.FAST, RouteMode.REASONING)
 
     res = TortureResult(
         test_id="ACCEPT-A",
@@ -53,11 +52,10 @@ def test_acceptance_b_direct_tool_no_dag():
     router = LLMRouter()
     prompt = "Que horas são?"
 
-    is_agentic = router.is_agentic_task(prompt)
     decision = router.route(prompt)
 
     duration = (time.time() - start) * 1000
-    passed = (is_agentic is False) and (decision.mode == RouteMode.FAST)
+    passed = decision.mode == RouteMode.FAST
 
     res = TortureResult(
         test_id="ACCEPT-B",
@@ -78,7 +76,9 @@ def test_acceptance_c_autonomous_agent_dag_execution(temp_workspace: Path):
         router = LLMRouter()
         prompt = "Crie uma pasta chamada teste, coloque um arquivo README nela e escreva 'Olá'."
 
-        assert router.is_agentic_task(prompt) is True
+        # AGENTIC mode removed - this prompt would now route to REASONING
+        decision = router.route(prompt)
+        assert decision.mode == RouteMode.REASONING
 
         rt = AgentRuntime()
         graph = TaskGraph(goal=prompt)
@@ -411,10 +411,10 @@ def test_acceptance_k_ambiguity_no_destructive_action():
     prompt = "Arruma isso."
 
     is_ambiguous = router.is_ambiguous_request(prompt)
-    is_agentic = router.is_agentic_task(prompt)
+    decision = router.route(prompt)
 
     assert is_ambiguous is True
-    assert is_agentic is False
+    assert decision.mode in (RouteMode.FAST, RouteMode.REASONING)
 
     duration = (time.time() - start) * 1000
     res = TortureResult(
