@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { executeDeviceTool } from './deviceExecutor';
+import { startHostService, stopHostService, isHostServiceRunning, getHostConfig } from './hostService';
 
 interface BatteryStats {
   percent: number;
@@ -16,132 +16,106 @@ interface SystemStats {
   battery?: BatteryStats | null;
 }
 
-interface PendingCommand {
-  id: string;
-  action: string;
-  level?: number;
-  key?: string;
-  command?: string;
-  target?: string;
-  params?: Record<string, any>;
-}
-
-interface HeartbeatResponse {
-  status: string;
-  pending_commands?: PendingCommand[];
-}
-
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+let lastTelemetry: SystemStats | null = null;
 
-const HEARTBEAT_TARGETS = [
-  'https://assistente-xi.vercel.app/api/device/heartbeat',
-];
-
-async function handleIncomingRemoteCommand(cmd: PendingCommand): Promise<void> {
+async function collectTelemetry(): Promise<SystemStats> {
   try {
-    const action = cmd.action?.toLowerCase();
-    const params = cmd.params || {};
-    console.log(`[Heartbeat] Executando comando remoto recebido da Nuvem (WAN): ${action}`, cmd);
-
-    if (action === 'lock' || action === 'lock_workstation') {
-      await executeDeviceTool('lock_workstation', {});
-    } else if (action === 'volume' || action === 'set_volume') {
-      const level = typeof cmd.level === 'number' ? cmd.level : (typeof params.level === 'number' ? params.level : 50);
-      await executeDeviceTool('set_system_volume', { level });
-    } else if (action === 'mute' || action === 'toggle_mute') {
-      await executeDeviceTool('toggle_mute', {});
-    } else if (action === 'media' || action === 'send_media_key') {
-      const key = cmd.key || params.key || 'play_pause';
-      await executeDeviceTool('send_media_key', { key });
-    } else if (action === 'minimize_all' || action === 'minimize_all_windows') {
-      await executeDeviceTool('minimize_all_windows', {});
-    } else if (action === 'screenshot' || action === 'take_screenshot') {
-      await executeDeviceTool('take_screenshot', {});
-    } else if (action === 'open' || action === 'open_path_or_app') {
-      const target = cmd.target || params.target || '';
-      await executeDeviceTool('open_path_or_app', { target });
-    } else if (action === 'command' && (cmd.command || params.command)) {
-      await executeDeviceTool('execute_command', { command: cmd.command || params.command });
-    }
-  } catch (err) {
-    console.warn('[Heartbeat] Falha ao processar comando remoto:', err);
-  }
-}
-
-export async function sendHostHeartbeat(): Promise<void> {
-  try {
-    let stats: SystemStats;
-    try {
-      stats = await invoke<SystemStats>('get_system_stats');
-    } catch {
-      // Fallback em caso de execução fora do runtime nativo Tauri
-      stats = {
-        cpu_percent: 8.5,
-        memory_used_mb: 4096,
-        memory_total_mb: 16384,
-        memory_percent: 25.0,
-        computer_name: 'Desktop Charlie',
-        os_name: 'Windows',
-      };
-    }
-
-    const payload = JSON.stringify({
-      device_name: stats.computer_name,
-      cpu_percent: stats.cpu_percent,
-      memory_used_mb: stats.memory_used_mb,
-      memory_total_mb: stats.memory_total_mb,
-      memory_percent: stats.memory_percent,
-      battery: stats.battery,
-      active_tasks: [],
-      runner_status: 'idle',
-    });
-
-    // Envia heartbeat em paralelo para o backend local e para o servidor na nuvem (WAN)
-    const responses = await Promise.allSettled(
-      HEARTBEAT_TARGETS.map(async (url) => {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          signal: AbortSignal.timeout(3000),
-        });
-        if (res.ok) {
-          return (await res.json()) as HeartbeatResponse;
-        }
-        return null;
-      })
-    );
-
-    // Processa comandos pendentes despachados remotamente via Nuvem
-    for (const item of responses) {
-      if (item.status === 'fulfilled' && item.value?.pending_commands) {
-        for (const cmd of item.value.pending_commands) {
-          handleIncomingRemoteCommand(cmd);
-        }
-      }
-    }
+    return await invoke<SystemStats>('get_system_stats');
   } catch {
-    // Ignora erro se backend estiver reiniciando
+    return {
+      cpu_percent: 0,
+      memory_used_mb: 0,
+      memory_total_mb: 0,
+      memory_percent: 0,
+      computer_name: 'Desktop Charlie',
+      os_name: 'Windows',
+      battery: null,
+    };
   }
 }
 
 /**
- * Inicia o daemon de presença do PC que envia telemetria e heartbeat ativo a cada 4s.
- * Permite controle do PC mesmo de fora de casa (WAN / 4G) via Cloud Relay.
+ * Starts the host service (authenticated heartbeat + tool polling).
+ * This replaces the old device heartbeat that used direct API calls.
  */
-export function startDeviceHeartbeat(): () => void {
-  if (heartbeatInterval) return () => {};
+export async function startDeviceHeartbeat(apiBaseUrl: string, token: string, hostName?: string): Promise<() => void> {
+  // Stop any existing heartbeat
+  stopDeviceHeartbeat();
 
-  // Disparo imediato
-  sendHostHeartbeat();
+  // Collect initial telemetry
+  const telemetry = await collectTelemetry();
+  lastTelemetry = telemetry;
 
-  // Ciclo a cada 4 segundos para resposta rápida a comandos externos
-  heartbeatInterval = setInterval(sendHostHeartbeat, 4000);
+  // Start the authenticated host service
+  startHostService({
+    apiBaseUrl: apiBaseUrl,
+    token: token,
+    name: hostName || telemetry.computer_name,
+    capabilities: [
+      "list_directory",
+      "read_file",
+      "write_file",
+      "execute_command",
+      "create_local_directory",
+      "system_power_action",
+      "set_system_volume",
+      "take_screenshot",
+      "get_process_list",
+      "list_local_directory",
+      "read_local_file",
+      "open_path_or_app",
+      "manage_application",
+      "toggle_mute",
+      "send_media_key",
+      "send_media_control",
+      "lock_workstation",
+      "minimize_all_windows",
+      "take_screenshot",
+      "get_local_ip",
+      // Background process family
+      "start_background_process",
+      "get_background_process_logs",
+      "list_background_processes",
+      "kill_background_process",
+    ],
+    pollIntervalMs: 2000,
+  }).catch(err => {
+    console.error('[HostService] Failed to start:', err);
+  });
 
+  // Return cleanup function
   return () => {
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
+    stopDeviceHeartbeat();
+  };
+}
+
+/** Stop the host service heartbeat */
+export function stopDeviceHeartbeat(): void {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  stopHostService();
+}
+
+/** Get current telemetry for UI display */
+export function getLastTelemetry(): SystemStats | null {
+  return lastTelemetry;
+}
+
+/** Check if host service is running */
+export function isHeartbeatRunning(): boolean {
+  return isHostServiceRunning();
+}
+
+/** Get current host config */
+export function getHostInfo(): { hostId?: string; name?: string; capabilities?: string[] } | null {
+  const config = getHostConfig();
+  if (!config) return null;
+  return {
+    hostId: config.hostId,
+    name: config.name,
+    capabilities: config.capabilities,
   };
 }

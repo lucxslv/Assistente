@@ -151,6 +151,11 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
               {tool.duration_ms}ms
             </span>
           )}
+          {tool.host_id && !isExecuting && (
+            <span className="text-[9.5px] font-mono text-[var(--text-muted)] shrink-0">
+              @{tool.host_id.slice(0, 8)}
+            </span>
+          )}
           <span
             className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono font-medium shrink-0 ${
               isExecuting
@@ -197,14 +202,19 @@ const ToolExecutionBadge: React.FC<{ tool: ToolCallInfo }> = ({ tool }) => {
               : raw;
 
             return (
-              <div>
+              <>
+                {tool.host_id && (
+                  <div className="text-[9px] text-[var(--text-muted)] mb-1 font-mono">
+                    Executado no host: {tool.host_id.slice(0, 8)}...
+                  </div>
+                )}
                 <div className="text-[9.5px] uppercase font-bold text-[var(--text-muted)] mb-1">
                   Retorno / Resultado
                 </div>
                 <pre className="p-2 rounded bg-[var(--surface)] text-emerald-300 overflow-x-auto whitespace-pre-wrap">
                   {displayResult}
                 </pre>
-              </div>
+              </>
             );
           })()}
         </div>

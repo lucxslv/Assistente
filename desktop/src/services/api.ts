@@ -571,6 +571,7 @@ export async function sendChatMessageStream(
 
   let clientToolCalls: Array<{ call_id: string; name: string; args: any }> = [];
   let returnedThreadId: string | null = threadId;
+  let eventType: StreamEvent["type"] = "token";
 
   try {
     while (true) {
@@ -583,7 +584,7 @@ export async function sendChatMessageStream(
 
       for (const part of parts) {
         if (!part.trim()) continue;
-        let eventType: StreamEvent["type"] = "token";
+        eventType = "token";
         let eventDataStr = "";
 
         for (const line of part.split("\n")) {
@@ -611,7 +612,7 @@ export async function sendChatMessageStream(
     }
 
     if (buffer.trim()) {
-      let eventType: StreamEvent["type"] = "token";
+      eventType = "token";
       let eventDataStr = "";
       for (const line of buffer.split("\n")) {
         if (line.startsWith("event: ")) eventType = line.substring(7).trim() as StreamEvent["type"];
@@ -635,6 +636,14 @@ export async function sendChatMessageStream(
       return;
     }
     throw streamReadErr;
+  }
+
+  // Handle turn_suspended event (cloud mode waiting for device execution)
+  if (eventType === "turn_suspended") {
+    onEvent({ type: "status", data: { status: "awaiting_device", text: "Aguardando execução no dispositivo remoto..." } });
+    // The turn is suspended - we wait for tool results to come via host service
+    // When host service completes tools, it will call sendChatMessageStream with toolResults
+    return;
   }
 
   // Se o backend solicitou execução física de ferramentas no computador local (Windows)

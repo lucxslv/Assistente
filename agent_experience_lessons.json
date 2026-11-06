@@ -540,5 +540,71 @@
       "filesystem"
     ],
     "createdAt": "2026-11-05T06:24:34.809952+00:00"
+  },
+  {
+    "id": "les_3ec3dc46",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T07:17:58.864164+00:00"
+  },
+  {
+    "id": "les_2354380d",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T07:20:29.603699+00:00"
+  },
+  {
+    "id": "les_9e75adcf",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T01:48:28.468659+00:00"
+  },
+  {
+    "id": "les_b7e08128",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T02:19:25.213330+00:00"
+  },
+  {
+    "id": "les_176c1521",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T03:02:06.440698+00:00"
+  },
+  {
+    "id": "les_21ac4f5e",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T03:14:42.003386+00:00"
   }
 ]
