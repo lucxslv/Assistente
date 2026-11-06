@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("charlie.missions_migration")
 
 SCHEMA = """
--- Tabela de sessões de missões (multi-tenant, persistência de grafo + estado)
+-- Tabela de sessões de missão (grafo de tarefas persistido)
 CREATE TABLE IF NOT EXISTS agent_sessions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -22,12 +22,12 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_id_status ON agent_sessions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_status ON agent_sessions(user_id, status);
 
--- Tabela de permissões pendentes/resolvidas por sessão
+-- Tabela de permissões pendentes por sessão de missão
 CREATE TABLE IF NOT EXISTS agent_permissions (
     id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
+    session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
     task_id TEXT NOT NULL,
     tool TEXT NOT NULL,
     risk_level TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS agent_permissions (
     resolved_by TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_agent_permissions_session_id_status ON agent_permissions(session_id, status);
+CREATE INDEX IF NOT EXISTS idx_agent_permissions_session_status ON agent_permissions(session_id, status);
 """
 
 async def up(pool) -> None:
@@ -47,7 +47,7 @@ async def up(pool) -> None:
             stmt = stmt.strip()
             if stmt:
                 await conn.execute(stmt)
-    logger.info("Migração de missões concluída: 2 tabelas + 2 índices criados/verificados.")
+    logger.info("Migração missions concluída: 2 tabelas + 2 índices criados/verificados.")
 
 
 async def main():

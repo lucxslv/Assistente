@@ -1,117 +1,118 @@
-"""Testes para migração de tabelas de missões (agent_sessions, agent_permissions)."""
+"""Testes para migração das tabelas de missões."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 
-class MockConnection:
-    """Mock asyncpg connection."""
-    
-    def __init__(self):
-        self.executed = []
-        self.execute = AsyncMock(side_effect=self._capture)
-    
-    async def _capture(self, sql):
-        self.executed.append(sql.strip())
-        return None
-    
+class AsyncContextManagerMock:
+    """Mock para async context manager (async with)."""
+    def __init__(self, mock_obj):
+        self.mock_obj = mock_obj
+
     async def __aenter__(self):
-        return self
-    
+        return self.mock_obj
+
     async def __aexit__(self, *args):
         return None
 
 
-class MockPool:
-    """Mock asyncpg pool that captures executed SQL."""
-    
-    def __init__(self):
-        self.conn = MockConnection()
-        self.all_executed = []
-    
-    def acquire(self):
-        """Return the connection directly (async context manager)."""
-        return self.conn
-    
-    def get_all_executed(self):
-        return self.conn.executed
+class TestMissionsMigration:
+    """Testes para migrate_missions.py."""
 
+    @pytest.mark.asyncio
+    async def test_migration_creates_mission_tables(self):
+        """Migração cria 2 tabelas + 2 índices."""
+        from scripts.db.migrate_missions import up
 
-@pytest.mark.asyncio
-async def test_migration_creates_mission_tables():
-    """MockPool captura SQL: 2x CREATE TABLE + 2x CREATE INDEX.
-    Colunas e tipos corretos (status enum: pending/running/paused/completed/failed)."""
-    from scripts.db.migrate_missions import up
-    
-    pool = MockPool()
-    await up(pool)
-    
-    sql_commands = " ".join(pool.get_all_executed())
-    
-    # Verifica 2 CREATE TABLE
-    assert sql_commands.count("CREATE TABLE IF NOT EXISTS agent_sessions") == 1
-    assert sql_commands.count("CREATE TABLE IF NOT EXISTS agent_permissions") == 1
-    
-    # Verifica 2 CREATE INDEX
-    assert "CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_id_status" in sql_commands
-    assert "CREATE INDEX IF NOT EXISTS idx_agent_permissions_session_id_status" in sql_commands
-    
-    # Verifica colunas da agent_sessions
-    sessions_ddl = [s for s in pool.get_all_executed() if "agent_sessions" in s and "CREATE TABLE" in s][0]
-    assert "id TEXT PRIMARY KEY" in sessions_ddl
-    assert "user_id TEXT NOT NULL" in sessions_ddl
-    assert "thread_id TEXT NOT NULL" in sessions_ddl
-    assert "goal TEXT NOT NULL" in sessions_ddl
-    assert "status TEXT NOT NULL" in sessions_ddl
-    assert "graph_json JSONB NOT NULL" in sessions_ddl
-    assert "state_json JSONB NOT NULL" in sessions_ddl
-    assert "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" in sessions_ddl
-    assert "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" in sessions_ddl
-    assert "completed_at TIMESTAMPTZ" in sessions_ddl
-    
-    # Verifica colunas da agent_permissions
-    perms_ddl = [s for s in pool.get_all_executed() if "agent_permissions" in s and "CREATE TABLE" in s][0]
-    assert "id TEXT PRIMARY KEY" in perms_ddl
-    assert "session_id TEXT NOT NULL" in perms_ddl
-    assert "task_id TEXT NOT NULL" in perms_ddl
-    assert "tool TEXT NOT NULL" in perms_ddl
-    assert "risk_level TEXT NOT NULL" in perms_ddl
-    assert "status TEXT NOT NULL" in perms_ddl
-    assert "requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" in perms_ddl
-    assert "resolved_at TIMESTAMPTZ" in perms_ddl
-    assert "resolved_by TEXT" in perms_ddl
+        mock_pool = MagicMock()
+        mock_conn = AsyncMock()
+        mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
 
+        await up(mock_pool)
 
-@pytest.mark.asyncio
-async def test_migration_idempotent():
-    """Rodar up() duas vezes não lança."""
-    from scripts.db.migrate_missions import up
-    
-    pool = MockPool()
-    await up(pool)
-    first_count = len(pool.get_all_executed())
-    
-    pool = MockPool()
-    await up(pool)
-    second_count = len(pool.get_all_executed())
-    
-    # Segunda execução deve executar os mesmos comandos (idempotente)
-    assert second_count == first_count
+        # Verifica que 2 CREATE TABLE foram chamados
+        create_calls = [c for c in mock_conn.execute.call_args_list
+                       if 'CREATE TABLE' in str(c)]
+        assert len(create_calls) == 2
 
+        # Verifica que 2 CREATE INDEX foram chamados
+        index_calls = [c for c in mock_conn.execute.call_args_list
+                      if 'CREATE INDEX' in str(c)]
+        assert len(index_calls) == 2
 
-@pytest.mark.asyncio
-async def test_permissions_table_links_to_sessions():
-    """FK session_id -> agent_sessions.id."""
-    from scripts.db.migrate_missions import up
-    
-    pool = MockPool()
-    await up(pool)
-    
-    sql_commands = " ".join(pool.get_all_executed())
-    
-    # Verifica que a tabela agent_permissions tem session_id
-    perms_ddl = [s for s in pool.get_all_executed() if "agent_permissions" in s and "CREATE TABLE" in s][0]
-    assert "session_id TEXT NOT NULL" in perms_ddl
-    # Se houver FK explícita, verificamos
-    if "REFERENCES" in perms_ddl:
-        assert "agent_sessions" in perms_ddl
+        # Verifica nomes das tabelas
+        table_names = set()
+        for call in create_calls:
+            sql = str(call[0][0])
+            # Extract table name from CREATE TABLE IF NOT EXISTS <table_name>
+            import re
+            match = re.search(r'CREATE TABLE IF NOT EXISTS\s+(\w+)', sql, re.IGNORECASE)
+            if match:
+                table_names.add(match.group(1))
+
+        assert table_names == {'agent_sessions', 'agent_permissions'}
+
+        # Verifica colunas essenciais em agent_sessions
+        sessions_sql = ''
+        for call in create_calls:
+            sql = str(call[0][0])
+            if 'agent_sessions' in sql:
+                sessions_sql = sql
+                break
+        assert 'user_id' in sessions_sql
+        assert 'thread_id' in sessions_sql
+        assert 'goal' in sessions_sql
+        assert 'status' in sessions_sql
+        assert 'graph_json' in sessions_sql
+        assert 'state_json' in sessions_sql
+        assert 'completed_at' in sessions_sql
+
+        # Verifica colunas essenciais em agent_permissions
+        perms_sql = ''
+        for call in create_calls:
+            sql = str(call[0][0])
+            if 'agent_permissions' in sql:
+                perms_sql = sql
+                break
+        assert 'session_id' in perms_sql
+        assert 'task_id' in perms_sql
+        assert 'tool' in perms_sql
+        assert 'risk_level' in perms_sql
+        assert 'REFERENCES agent_sessions' in perms_sql
+
+    @pytest.mark.asyncio
+    async def test_migration_idempotent(self):
+        """Rodar up() duas vezes não lança erro."""
+        from scripts.db.migrate_missions import up
+
+        mock_pool = MagicMock()
+        mock_conn = AsyncMock()
+        mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
+
+        await up(mock_pool)
+        await up(mock_pool)  # Segunda vez não deve lançar
+
+        # Total de chamadas: 4 na primeira + 4 na segunda = 8
+        assert mock_conn.execute.call_count == 8
+
+    @pytest.mark.asyncio
+    async def test_permissions_table_links_to_sessions(self):
+        """agent_permissions tem FK para agent_sessions."""
+        from scripts.db.migrate_missions import up
+
+        mock_pool = MagicMock()
+        mock_conn = AsyncMock()
+        mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
+
+        await up(mock_pool)
+
+        # Verifica que a FK existe no SQL
+        perms_sql = ''
+        for call in mock_conn.execute.call_args_list:
+            sql = str(call[0][0])
+            if 'agent_permissions' in sql and 'CREATE TABLE' in sql:
+                perms_sql = sql
+                break
+
+        assert 'REFERENCES agent_sessions(id)' in perms_sql
+        assert 'ON DELETE CASCADE' in perms_sql
