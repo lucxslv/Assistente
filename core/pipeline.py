@@ -137,6 +137,25 @@ class AssistantPipeline:
         except Exception as e:
             logger.debug(f"Falha ao persistir turn state: {e}")
 
+    async def _load_turn_state(self, request_id: str) -> dict | None:
+        """Carrega o estado do turno do banco para retomada (modo cloud)."""
+        try:
+            from api.db import get_or_init_db_pool
+            pool = await get_or_init_db_pool()
+            if not pool:
+                return None
+            async with pool.acquire() as conn:
+                import json
+                row = await conn.fetchrow(
+                    "SELECT state, status FROM chat_turn_state WHERE request_id = $1",
+                    request_id,
+                )
+                if row:
+                    return {"state": json.loads(row["state"]), "status": row["status"]}
+        except Exception as e:
+            logger.debug(f"Falha ao carregar turn state: {e}")
+        return None
+
     async def run_pipeline_stream(
         self,
         user_text: str,
@@ -169,8 +188,15 @@ class AssistantPipeline:
         
         # Cloud mode: check if resuming a suspended turn
         resuming_turn = False
+        completed_call_ids = set()
         if is_cloud and tool_results:
             resuming_turn = True
+            # Load turn state to get completed call IDs
+            turn_state = await self._load_turn_state(request_id)
+            if turn_state and turn_state.get("state"):
+                state_data = turn_state["state"]
+                # Restore completed call IDs to avoid re-execution
+                completed_call_ids = set(state_data.get("completed_call_ids", []))
 
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
@@ -535,6 +561,9 @@ class AssistantPipeline:
             for call in tool_calls:
                 if _is_cancelled():
                     break
+                # Skip already completed calls when resuming
+                if resuming_turn and call.id in completed_call_ids:
+                    continue
                 if steps_this_turn >= max_steps:
                     # Step budget excedido - injeta tool result sintético
                     budget_msg = f"Limite de passos do turno atingido ({max_steps}). Conclua com o que já tem."
@@ -621,6 +650,14 @@ class AssistantPipeline:
                     host_id = None
 
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
+                # Track completed call for resumability
+                if is_cloud:
+                    completed_call_ids.add(c_id)
+                    await self._persist_turn_state(
+                        request_id, uid, thread_id, req_memory, "open",
+                        pending_tools=[{"call_id": cid, "name": call.name, "arguments": call.arguments, "scope": scope_enum.value} 
+                                       for cid, call in zip(completed_call_ids, tool_calls) if cid in completed_call_ids]
+                    )
                 yield StreamEvent(
                     type="tool_end",
                     data={
@@ -709,6 +746,9 @@ class AssistantPipeline:
         except Exception as e:
             logger.debug("Falha ao disparar memory_extractor em background: %s", e)
 
+        # Mark turn as completed
+        if is_cloud:
+            await self._persist_turn_state(request_id, uid, thread_id, req_memory, "completed")
         yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id, "model": self.last_model_used})
 
     async def run_pipeline(
