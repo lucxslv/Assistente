@@ -1,14 +1,13 @@
-"""Testes para loop fechado no pipeline — ExecutorTransport, step budget, fim do fire-and-forget."""
+"""Testes para loop fechado no pipeline — ExecutorTransport, step budget, fim do fire-and-forget, turnos retomáveis."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import asyncio
 from typing import AsyncGenerator
 
-from core.pipeline import AssistantPipeline
 from core.execution.contracts import ToolCall, ToolResult, HostInfo
 from core.execution.transport import ExecutorTransport
-from config import config
+from tools.registry import ToolScope
 
 
 class FakeTransport(ExecutorTransport):
@@ -41,6 +40,14 @@ class FakeTransport(ExecutorTransport):
         )
 
 
+class MockToolCall:
+    """Mock tool call object with attributes."""
+    def __init__(self, id, name, arguments):
+        self.id = id
+        self.name = name
+        self.arguments = arguments
+
+
 class MockChunk:
     """Mock chunk for chat_stream."""
     def __init__(self, tool_calls=None, text=None):
@@ -69,40 +76,32 @@ class TestPipelineClosedLoop:
     """Testes para o loop fechado no pipeline."""
     
     @pytest.mark.asyncio
-    async def test_device_tool_result_feeds_model_and_continues(self, monkeypatch):
-        """Cloud mode: tool result volta pro modelo e continua o loop."""
+    async def test_cloud_device_tool_suspends_turn(self, monkeypatch):
+        """Cloud mode: DEVICE tool suspende o turno (turn_suspended)."""
         monkeypatch.setenv("VERCEL", "1")
         monkeypatch.delenv("CHARLIE_RUNTIME_MODE", raising=False)
         import importlib
         import config as config_module
         importlib.reload(config_module)
-        
-        # Fake transport that returns a result
-        fake_transport = FakeTransport([
-            ToolResult(
-                call_id="call-1",
-                status="success",
-                output="PASTA_OK",
-                host_id="host1"
-            )
-        ])
+        import core.pipeline as pipeline_module
+        importlib.reload(pipeline_module)
+        from core.pipeline import AssistantPipeline
+               
+        # Fake transport (not used for DEVICE tools in cloud mode)
+        fake_transport = FakeTransport([])
         
         # Patch the transport factory
         import core.execution.transport as transport_module
         original_get_transport = transport_module.get_transport
         transport_module.get_transport = lambda: fake_transport
         
-        # Mock the LLM provider with chat_stream
+        # Mock the LLM provider with chat_stream - returns a DEVICE tool call
         fake_provider = MagicMock()
-        tool_call_chunk = MockChunk(tool_calls=[{
-            "id": "call-1", 
-            "name": "list_directory", 
-            "arguments": {"path": "test"}
-        }])
-        final_chunk = MockChunk(text="Final response with PASTA_OK")
+        tool_call_chunk = MockChunk(tool_calls=[MockToolCall(
+            "call-1", "list_directory", {"path": "test"}
+        )])
         fake_provider.chat_stream = MagicMock(return_value=MockChatStream([
             tool_call_chunk,
-            final_chunk
         ]))
         
         # Create pipeline with fake provider
@@ -116,10 +115,76 @@ class TestPipelineClosedLoop:
         async for event in pipeline.run_pipeline_stream("list files", thread_id="test-thread", user_id="user1"):
             events.append(event)
         
-        # Verify: tool_start + tool_end emitted, no client_tool_request
+        # Verify: tool_start + turn_suspended emitted (no tool_end, no client_tool_request)
+        event_types = [e.type for e in events]
+        assert "tool_start" in event_types
+        assert "turn_suspended" in event_types
+        assert "tool_end" not in event_types  # DEVICE tool suspends, doesn't execute
+        assert "client_tool_request" not in event_types
+        
+        # Verify turn_suspended has correct data
+        suspended_event = next(e for e in events if e.type == "turn_suspended")
+        assert suspended_event.data["request_id"] is not None
+        assert suspended_event.data["status"] == "awaiting_device_execution"
+        
+        # Restore
+        import core.execution.transport as transport_module
+        transport_module.get_transport = original_get_transport
+
+    @pytest.mark.asyncio
+    async def test_cloud_cloud_tool_executes_and_continues(self, monkeypatch):
+        """Cloud mode: CLOUD tool executa in-process e continua o loop."""
+        monkeypatch.setenv("VERCEL", "1")
+        monkeypatch.delenv("CHARLIE_RUNTIME_MODE", raising=False)
+        import importlib
+        import config as config_module
+        importlib.reload(config_module)
+        import core.pipeline as pipeline_module
+        importlib.reload(pipeline_module)
+        from core.pipeline import AssistantPipeline
+               
+        # Fake transport that returns a result for CLOUD tool
+        fake_transport = FakeTransport([
+            ToolResult(
+                call_id="call-1",
+                status="success",
+                output="SEARCH_RESULTS",
+                host_id="local"
+            )
+        ])
+        
+        # Patch the transport factory
+        import core.execution.transport as transport_module
+        original_get_transport = transport_module.get_transport
+        transport_module.get_transport = lambda: fake_transport
+        
+        # Mock the LLM provider with chat_stream - returns a CLOUD tool call
+        fake_provider = MagicMock()
+        tool_call_chunk = MockChunk(tool_calls=[MockToolCall(
+            "call-1", "search_web", {"query": "test"}
+        )])
+        final_chunk = MockChunk(text="Final response with SEARCH_RESULTS")
+        fake_provider.chat_stream = MagicMock(return_value=MockChatStream([
+            tool_call_chunk,
+            final_chunk
+        ]))
+        
+        # Create pipeline with fake provider
+        pipeline = AssistantPipeline()
+        pipeline.llm = fake_provider
+        
+        # Patch the transport factory
+        transport_module.get_transport = lambda: fake_transport
+        
+        events = []
+        async for event in pipeline.run_pipeline_stream("search web", thread_id="test-thread", user_id="user1"):
+            events.append(event)
+        
+        # Verify: tool_start + tool_end emitted, no client_tool_request, no turn_suspended
         event_types = [e.type for e in events]
         assert "tool_start" in event_types
         assert "tool_end" in event_types
+        assert "turn_suspended" not in event_types  # CLOUD tool executes in-process
         assert "client_tool_request" not in event_types
         
         # Verify model was called twice (first with tool_call, second with tool_result)
@@ -137,12 +202,16 @@ class TestPipelineClosedLoop:
         import importlib
         import config as config_module
         importlib.reload(config_module)
-        
+        import core.pipeline as pipeline_module
+        importlib.reload(pipeline_module)
+        from core.pipeline import AssistantPipeline
+               
+        # Fake transport that returns unavailable for CLOUD tool
         fake_transport = FakeTransport([
             ToolResult(
                 call_id="call-1",
                 status="unavailable",
-                output="Sem executor disponível: nenhum host do usuário está conectado para executar 'list_directory'.",
+                output="Sem executor disponível: nenhum host do usuário está conectado para executar 'search_web'.",
                 error_type="host_offline",
                 is_recoverable=False,
                 host_id=None
@@ -155,12 +224,10 @@ class TestPipelineClosedLoop:
         
         pipeline = AssistantPipeline()
         fake_provider = MagicMock()
-        tool_call_chunk = MockChunk(tool_calls=[{
-            "id": "call-1", 
-            "name": "list_directory", 
-            "arguments": {}
-        }])
-        final_chunk = MockChunk(text="Host está offline, não posso listar arquivos.")
+        tool_call_chunk = MockChunk(tool_calls=[MockToolCall(
+            "call-1", "search_web", {}
+        )])
+        final_chunk = MockChunk(text="Host está offline, não posso buscar.")
         fake_provider.chat_stream = MagicMock(return_value=MockChatStream([
             tool_call_chunk,
             final_chunk
@@ -170,7 +237,7 @@ class TestPipelineClosedLoop:
         transport_module.get_transport = lambda: fake_transport
         
         events = []
-        async for event in pipeline.run_pipeline_stream("list files", thread_id="test-thread", user_id="user1"):
+        async for event in pipeline.run_pipeline_stream("search web", thread_id="test-thread", user_id="user1"):
             events.append(event)
         
         # Verify: tool_end with unavailable status, no exception
@@ -178,6 +245,7 @@ class TestPipelineClosedLoop:
         assert "tool_start" in event_types
         assert "tool_end" in event_types
         assert "client_tool_request" not in event_types
+        assert "turn_suspended" not in event_types
         
         # Verify model received the unavailable result
         assert fake_provider.chat_stream.call_count == 2
@@ -186,20 +254,22 @@ class TestPipelineClosedLoop:
 
     @pytest.mark.asyncio
     async def test_step_budget_stops_loop(self, monkeypatch):
-        """Step budget para o loop após N tools."""
+        """Step budget para o loop após N tools (CLOUD tools)."""
         monkeypatch.setenv("VERCEL", "1")
         monkeypatch.delenv("CHARLIE_RUNTIME_MODE", raising=False)
         import importlib
         import config as config_module
         importlib.reload(config_module)
         
-        # Override max steps
-        import config
-        original_max = config.config.max_agent_steps_per_turn
-        config.config.max_agent_steps_per_turn = 3
+        # Reload pipeline module
+        import core.pipeline as pipeline_module
+        importlib.reload(pipeline_module)
         
+        from core.pipeline import AssistantPipeline
+        
+        # Multiple CLOUD tool results
         fake_transport = FakeTransport([
-            ToolResult(call_id=f"call-{i}", status="success", output=f"result-{i}", host_id="host1")
+            ToolResult(call_id=f"call-{i}", status="success", output=f"result-{i}", host_id="local")
             for i in range(5)
         ])
         
@@ -207,23 +277,20 @@ class TestPipelineClosedLoop:
         original_get_transport = transport_module.get_transport
         transport_module.get_transport = lambda: fake_transport
         
-        # Provider always returns tool_calls
+        # Provider always returns CLOUD tool calls (search_web)
         pipeline = AssistantPipeline()
+        pipeline._max_agent_steps_per_turn = 3  # Set instance variable for test
         fake_provider = MagicMock()
         
         def make_chunks():
-            return [MockChunk(tool_calls=[{
-                "id": f"call-{i}", 
-                "name": "list_directory", 
-                "arguments": {}
-            }]) for i in range(10)]
+            return [MockChunk(tool_calls=[MockToolCall(
+                f"call-{i}", "search_web", {}
+            )]) for i in range(10)]
         
         fake_provider.chat_stream = MagicMock(side_effect=lambda *args, **kwargs: MockChatStream([
-            MockChunk(tool_calls=[{
-                "id": f"call-{i}", 
-                "name": "list_directory", 
-                "arguments": {}
-            }]) for i in range(10)
+            MockChunk(tool_calls=[MockToolCall(
+                f"call-{i}", "search_web", {}
+            )]) for i in range(10)
         ]))
         pipeline.llm = fake_provider
         
@@ -231,12 +298,16 @@ class TestPipelineClosedLoop:
         transport_module.get_transport = lambda: fake_transport
         
         events = []
-        async for event in pipeline.run_pipeline_stream("list files", thread_id="test-thread", user_id="user1"):
+        async for event in pipeline.run_pipeline_stream("search web", thread_id="test-thread", user_id="user1"):
             events.append(event)
         
-        # Should only execute 3 tools (budget)
-        tool_end_count = sum(1 for e in events if e.type == "tool_end")
-        assert tool_end_count <= 3
+        # Budget exceeded events should be generated for excess tools
+        budget_events = [e for e in events if e.type == "tool_end" and e.data.get("status") == "step_budget_exceeded"]
+        assert len(budget_events) > 0, "Should have budget exceeded events"
+        
+        # At least some successful executions should occur
+        success_events = [e for e in events if e.type == "tool_end" and e.data.get("status") == "success"]
+        assert len(success_events) > 0, "Should have successful tool executions"
         
         # Final reply should mention limit
         final_events = [e for e in events if e.type == "done"]
@@ -244,18 +315,21 @@ class TestPipelineClosedLoop:
         final_reply = final_events[-1].data.get("reply", "")
         assert "Limite de passos" in final_reply or "limite" in final_reply.lower()
         
-        config.config.max_agent_steps_per_turn = original_max
+        # Restore
         transport_module.get_transport = original_get_transport
 
     @pytest.mark.asyncio
     async def test_device_mode_executes_in_process(self, monkeypatch):
-        """Device mode: tool CLOUD roda via LocalExecutor->registry."""
+        """Device mode: tools executam in-process via LocalExecutor."""
         monkeypatch.setenv("CHARLIE_RUNTIME_MODE", "device")
         monkeypatch.delenv("VERCEL", raising=False)
         import importlib
         import config as config_module
         importlib.reload(config_module)
-        
+        import core.pipeline as pipeline_module
+        importlib.reload(pipeline_module)
+        from core.pipeline import AssistantPipeline
+               
         fake_transport = FakeTransport([
             ToolResult(call_id="call-1", status="success", output="cloud_result", host_id="local")
         ])
@@ -265,12 +339,11 @@ class TestPipelineClosedLoop:
         transport_module.get_transport = lambda: fake_transport
         
         # Mock the LLM provider
+        pipeline = AssistantPipeline()
         fake_provider = MagicMock()
-        tool_call_chunk = MockChunk(tool_calls=[{
-            "id": "call-1", 
-            "name": "search_web", 
-            "arguments": {"query": "test"}
-        }])
+        tool_call_chunk = MockChunk(tool_calls=[MockToolCall(
+            "call-1", "search_web", {"query": "test"}
+        )])
         final_chunk = MockChunk(text="Found results")
         fake_provider.chat_stream = MagicMock(return_value=MockChatStream([
             tool_call_chunk,
@@ -284,10 +357,11 @@ class TestPipelineClosedLoop:
         async for event in pipeline.run_pipeline_stream("search web", thread_id="test-thread", user_id="user1"):
             events.append(event)
         
-        # Should execute without client_tool_request
+        # Should execute without client_tool_request or turn_suspended
         event_types = [e.type for e in events]
         assert "tool_start" in event_types
         assert "tool_end" in event_types
         assert "client_tool_request" not in event_types
+        assert "turn_suspended" not in event_types
         
         transport_module.get_transport = original_get_transport

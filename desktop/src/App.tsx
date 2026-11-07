@@ -18,6 +18,8 @@ import {
   fetchSystemStatus,
   fetchThreads,
   fetchThreadSteps,
+  getStoredToken,
+  getApiBase,
   sendChatMessageStream,
   cancelChatStream,
   SystemStatus,
@@ -98,9 +100,15 @@ export function App() {
 
   // Daemon de presença ativa do PC físico (Heartbeat a cada 10s)
   useEffect(() => {
-    const stopHeartbeat = startDeviceHeartbeat();
+    let stopHeartbeat: (() => void) | null = null;
+    // Get auth token and API base URL
+    const token = getStoredToken() || "charlie_guest_token";
+    const apiBase = getApiBase();
+    startDeviceHeartbeat(apiBase, token).then(stopFn => {
+      stopHeartbeat = stopFn;
+    });
     return () => {
-      stopHeartbeat();
+      stopHeartbeat?.();
     };
   }, []);
 

@@ -6,7 +6,7 @@ import os
 import platform
 from typing import Any, Optional
 
-from config import config
+import config as config_module
 from brain.context.manager import ContextManager
 from brain.planner.planner import IntentPlanner, IntentCategory
 from brain.profile import AssistantProfile
@@ -28,6 +28,12 @@ from brain.prompts.prompts import build_system_prompt
 from tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+# Test override for max steps per turn
+_test_max_steps_per_turn: Optional[int] = None
+
+
+
 
 
 class AssistantPipeline:
@@ -52,18 +58,19 @@ class AssistantPipeline:
         self.retriever = MemoryRetriever()
         
         self.tools = ToolRegistry()
-        self.memory = ConversationMemory(max_messages=config.max_history_messages)
+        self.memory = ConversationMemory(max_messages=config_module.config.max_history_messages)
         self.llm = self._get_llm_provider()
-        self.last_model_used: str = config.gemini_model
-        self.last_provider_used: str = config.llm_provider.lower()
+        self.last_model_used: str = config_module.config.gemini_model
+        self.last_provider_used: str = config_module.config.llm_provider.lower()
         self.last_route_mode: str = "fast"
         self.last_fallback_used: bool = False
         self.last_fallback_reason: Optional[str] = None
         self.last_usage_metadata: Optional[dict[str, Any]] = None
         self.last_error_detail: Optional[str] = None
+        self._max_agent_steps_per_turn: Optional[int] = None
 
     def _get_llm_provider(self, provider_name: Optional[str] = None) -> BaseLLMProvider:
-        provider = (provider_name or config.llm_provider).lower()
+        provider = (provider_name or config_module.config.llm_provider).lower()
         if provider == "openai":
             return OpenAIProvider()
         if provider == "gemini":
@@ -88,6 +95,67 @@ class AssistantPipeline:
             logger.exception("Erro na transcrição (STT)")
             return None
 
+    async def _persist_turn_state(
+        self,
+        request_id: str,
+        user_id: str,
+        thread_id: str | None,
+        memory: ConversationMemory,
+        status: str,
+        pending_tools: list[dict] | None = None,
+    ) -> None:
+        """Persiste o estado do turno no banco para retomada posterior (modo cloud)."""
+        if not thread_id or user_id == "default":
+            return
+        try:
+            from api.db import get_or_init_db_pool
+            pool = await get_or_init_db_pool()
+            if not pool:
+                return
+            async with pool.acquire() as conn:
+                import json
+                state_data = {
+                    "memory": memory.get_messages(),
+                    "pending_tools": pending_tools or [],
+                }
+                await conn.execute(
+                    """
+                    INSERT INTO chat_turn_state (turn_id, user_id, thread_id, request_id, state, status, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    ON CONFLICT (request_id) DO UPDATE SET
+                        state = EXCLUDED.state,
+                        status = EXCLUDED.status,
+                        updated_at = NOW()
+                    """,
+                    request_id,
+                    user_id,
+                    thread_id,
+                    request_id,
+                    json.dumps(state_data),
+                    status,
+                )
+        except Exception as e:
+            logger.debug(f"Falha ao persistir turn state: {e}")
+
+    async def _load_turn_state(self, request_id: str) -> dict | None:
+        """Carrega o estado do turno do banco para retomada (modo cloud)."""
+        try:
+            from api.db import get_or_init_db_pool
+            pool = await get_or_init_db_pool()
+            if not pool:
+                return None
+            async with pool.acquire() as conn:
+                import json
+                row = await conn.fetchrow(
+                    "SELECT state, status FROM chat_turn_state WHERE request_id = $1",
+                    request_id,
+                )
+                if row:
+                    return {"state": json.loads(row["state"]), "status": row["status"]}
+        except Exception as e:
+            logger.debug(f"Falha ao carregar turn state: {e}")
+        return None
+
     async def run_pipeline_stream(
         self,
         user_text: str,
@@ -98,24 +166,37 @@ class AssistantPipeline:
         history: list[dict] | None = None,
         images: list[dict] | None = None,
         cancel_event: Any = None,
+        request_id: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Executa o pipeline em modo streaming, emitindo tokens e eventos em tempo real."""
         import inspect
         import os
         import uuid
         from tools.registry import ToolScope
+        from core.execution.contracts import ToolCall
 
         def _is_cancelled() -> bool:
             return bool(cancel_event and getattr(cancel_event, "is_set", lambda: False)())
 
         self.last_error_detail = None
 
-        is_cloud = bool(
-            os.getenv("VERCEL")
-            or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
-            or os.getenv("CHARLIE_RUNTIME_MODE") == "cloud"
-            or (platform.system() != "Windows" and os.getenv("CHARLIE_ENV") != "local_dev")
-        )
+        is_cloud = config_module.config.runtime_mode == "cloud"
+
+        # Resumable turn: generate request_id if not provided
+        if request_id is None:
+            request_id = f"req_{uuid.uuid4().hex[:12]}"
+        
+        # Cloud mode: check if resuming a suspended turn
+        resuming_turn = False
+        completed_call_ids = set()
+        if is_cloud and tool_results:
+            resuming_turn = True
+            # Load turn state to get completed call IDs
+            turn_state = await self._load_turn_state(request_id)
+            if turn_state and turn_state.get("state"):
+                state_data = turn_state["state"]
+                # Restore completed call IDs to avoid re-execution
+                completed_call_ids = set(state_data.get("completed_call_ids", []))
 
         try:
             from api.routes.auth import current_user_id_var, current_user_name_var
@@ -128,10 +209,10 @@ class AssistantPipeline:
             uid = user_id or "default"
             uname = user_name
 
-        yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias..."})
+        yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias...", "request_id": request_id})
 
         # Inicializa memória da conversa isolada para esta requisição/thread
-        req_memory = ConversationMemory(max_messages=config.max_history_messages)
+        req_memory = ConversationMemory(max_messages=config_module.config.max_history_messages)
 
         # 1. Hidrata o histórico persistido do banco de dados (ou payload) se fornecido
         if history:
@@ -167,6 +248,10 @@ class AssistantPipeline:
                 t_res = tr.get("result", "")
                 t_cid = tr.get("call_id")
                 req_memory.add_tool_result(t_name, t_res, tool_call_id=t_cid)
+
+        # Cloud mode: if resuming, persist turn state before tool execution
+        if is_cloud and not resuming_turn:
+            await self._persist_turn_state(request_id, uid, thread_id, req_memory, "open")
 
         # Etapa 3: Roteador Híbrido de Modelos (Fast LLM vs. Reasoning LLM)
         route_decision = self.router.route(user_text or "continuar análise do sistema")
@@ -238,71 +323,6 @@ class AssistantPipeline:
         )
 
         active_tools = self.tools.get_schemas()
-
-        # Etapa 6.1: Transição Fluida para o Modo Agêntico (Chat-to-Agent Seamless Flow)
-        if False:  # AGENTIC mode removed
-            from brain.agent.runtime import agent_runtime
-            yield StreamEvent(type="status", data={"status": "thinking", "text": "Iniciando Agent Runtime: planejando grafo de tarefas (DAG)..."})
-
-            listener_queue: asyncio.Queue = asyncio.Queue()
-            agent_runtime.register_listener(listener_queue)
-
-            try:
-                graph = await agent_runtime.start_session(goal=user_text, project="Charlie")
-                yield StreamEvent(type="agent_plan", data=graph.to_dict())
-
-                loop_timeout = 600.0
-                start_time = asyncio.get_event_loop().time()
-
-                while not agent_runtime.is_cancelled:
-                    if asyncio.get_event_loop().time() - start_time > loop_timeout:
-                        yield StreamEvent(type="error", data={"error": "Tempo limite de execução da meta excedido."})
-                        break
-
-                    try:
-                        ev = await asyncio.wait_for(listener_queue.get(), timeout=1.0)
-                    except asyncio.TimeoutError:
-                        continue
-
-                    ev_type = ev.get("type", "")
-                    ev_data = ev.get("data", {})
-
-                    if ev_type == "agent.started":
-                        yield StreamEvent(type="status", data={"status": "thinking", "text": f"Agente iniciado para meta: {user_text}"})
-                    elif ev_type == "agent.perception_parsed":
-                        yield StreamEvent(type="agent_plan", data={"parsedGoal": ev_data.get("parsedGoal")})
-                    elif ev_type == "task.created":
-                        yield StreamEvent(type="agent_plan", data=ev_data)
-                    elif ev_type == "thought.generated":
-                        yield StreamEvent(type="thought", data={"thought": ev_data.get("thought"), "role": ev_data.get("role")})
-                    elif ev_type in ("task.started", "task.completed"):
-                        yield StreamEvent(type="task_step", data=ev_data)
-                    elif ev_type == "tool.started":
-                        yield StreamEvent(type="tool_start", data={"name": ev_data.get("tool"), "args": ev_data.get("arguments"), "taskId": ev_data.get("taskId")})
-                    elif ev_type in ("tool.completed", "tool.failed"):
-                        yield StreamEvent(type="tool_end", data={"name": ev_data.get("tool"), "result": ev_data.get("result") or ev_data.get("error"), "taskId": ev_data.get("taskId")})
-                    elif ev_type == "verification.completed":
-                        yield StreamEvent(type="evidence", data=ev_data)
-                    elif ev_type == "reflection.diagnosed":
-                        yield StreamEvent(type="reflection", data=ev_data)
-                    elif ev_type == "agent.permission_requested":
-                        yield StreamEvent(type="permission_requested", data=ev_data)
-                    elif ev_type == "task.recovered":
-                        yield StreamEvent(type="status", data={"status": "thinking", "text": f"Auto-correção aplicada: {ev_data.get('reason')}"})
-                    elif ev_type == "agent.completed":
-                        agent_summary = ev_data.get("summary", "Meta concluída com sucesso.")
-                        yield StreamEvent(type="token", data={"token": f"\n\n### Relatório da Execução Agêntica\n{agent_summary}"})
-                        yield StreamEvent(type="done", data={"reply": agent_summary, "thread_id": thread_id, "model": route_decision.model_name})
-                        return
-                    elif ev_type == "agent.failed":
-                        reason = ev_data.get("reason", "Falha definitiva após auto-correções.")
-                        err_msg = f"A execução da meta agêntica não pôde ser concluída: {reason}"
-                        yield StreamEvent(type="error", data={"error": err_msg})
-                        yield StreamEvent(type="done", data={"reply": err_msg, "thread_id": thread_id, "model": route_decision.model_name})
-                        return
-
-            finally:
-                agent_runtime.unregister_listener(listener_queue)
 
         # Detecção proativa de telemetria / hardware para emissão de Widgets Generativos
         u_lower = (user_text or "").lower()
@@ -423,7 +443,7 @@ class AssistantPipeline:
 
                 fallback_candidates = self.router.get_fallback_chain(route_decision)
                 if not fallback_candidates:
-                    fb_default = config.gemini_model
+                    fb_default = config_module.config.gemini_model
                     if fb_default == route_decision.model_name:
                         fb_default = "gemini-2.5-flash-lite" if route_decision.model_name != "gemini-2.5-flash-lite" else "gemini-2.5-flash"
                     if fb_default != route_decision.model_name:
@@ -509,7 +529,6 @@ class AssistantPipeline:
             req_memory.add_assistant_tool_calls(tool_calls)
 
             # Notifica início das ferramentas
-            client_tools_to_exec = []
             for call in tool_calls:
                 if _is_cancelled():
                     break
@@ -526,56 +545,119 @@ class AssistantPipeline:
                         "call_id": c_id,
                     },
                 )
-                if is_cloud and scope_enum == ToolScope.DEVICE:
-                    client_tools_to_exec.append({
-                        "call_id": c_id,
-                        "name": call.name,
-                        "args": call.arguments,
-                    })
 
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
                 break
 
-            # Se estiver na nuvem e houver ferramentas de dispositivo, despacha para execução física no Windows via Desktop
-            if client_tools_to_exec:
-                yield StreamEvent(
-                    type="client_tool_request",
-                    data={
-                        "thread_id": thread_id,
-                        "tools": client_tools_to_exec,
-                    },
-                )
-                cloud_reply = "Comando de dispositivo enviado para execução no seu computador."
-                yield StreamEvent(type="token", data={"token": cloud_reply})
-                yield StreamEvent(type="done", data={"reply": cloud_reply, "thread_id": thread_id, "model": self.last_model_used})
-                return
+            # Step budget: limite de passos por turno
+            max_steps = _test_max_steps_per_turn or getattr(self, "_max_agent_steps_per_turn", None) or config_module.config.max_agent_steps_per_turn
+            steps_this_turn = 0
 
-            # Executa ferramentas no servidor (ambiente local ou ferramentas cloud/web)
+            # Executa ferramentas via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+            from core.execution.transport import get_transport
+            transport = get_transport()
+
             for call in tool_calls:
                 if _is_cancelled():
                     break
+                # Skip already completed calls when resuming
+                if resuming_turn and call.id in completed_call_ids:
+                    continue
+                if steps_this_turn >= max_steps:
+                    # Step budget excedido - injeta tool result sintético
+                    budget_msg = f"Limite de passos do turno atingido ({max_steps}). Conclua com o que já tem."
+                    yield StreamEvent(
+                        type="tool_end",
+                        data={
+                            "name": call.name,
+                            "friendly_name": self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name,
+                            "result": budget_msg,
+                            "status": "step_budget_exceeded",
+                            "duration_ms": 0,
+                            "error_type": "step_budget_exceeded",
+                            "is_recoverable": False,
+                            "scope": self.tools.get_scope(call.name).value,
+                            "call_id": call.id or f"call_{uuid.uuid4().hex[:8]}",
+                        },
+                    )
+                    req_memory.add_tool_result(call.name, budget_msg, tool_call_id=call.id or f"call_{uuid.uuid4().hex[:8]}")
+                    continue
+
                 scope_enum = self.tools.get_scope(call.name)
                 friendly_label = self.tools.get_friendly_name(call.name) if hasattr(self.tools, "get_friendly_name") else call.name
                 c_id = call.id or f"call_{uuid.uuid4().hex[:8]}"
-                if "execute" not in getattr(self.tools, "__dict__", {}) and hasattr(self.tools, "execute_structured"):
-                    structured = await self.tools.execute_structured(
-                        call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid
+
+                # Converte call para ToolCall do contrato
+                tool_call = ToolCall(
+                    call_id=c_id,
+                    name=call.name,
+                    arguments=call.arguments,
+                )
+
+                # Cloud mode + DEVICE tool: suspend turn and enqueue for remote execution
+                if is_cloud and scope_enum == ToolScope.DEVICE:
+                    # Update turn state to suspended with pending tool calls
+                    await self._persist_turn_state(
+                        request_id, uid, thread_id, req_memory, "suspended",
+                        pending_tools=[{
+                            "call_id": c_id,
+                            "name": call.name,
+                            "arguments": call.arguments,
+                            "scope": scope_enum.value,
+                        }]
                     )
-                    res = structured["output"]
-                    tool_status = structured["status"]
-                    duration_ms = structured["duration_ms"]
-                    error_type = structured["error_type"]
-                    is_recoverable = structured["is_recoverable"]
-                else:
-                    res = await self.tools.execute(call.name, call.arguments, prefer_remote=True, call_id=c_id, user_id=uid)
-                    is_err = str(res).lower().startswith("erro")
-                    tool_status = "error" if is_err else "success"
+                    # Yield tool_start for UI feedback, then suspend
+                    yield StreamEvent(
+                        type="tool_start",
+                        data={
+                            "name": call.name,
+                            "friendly_name": friendly_label,
+                            "args": call.arguments,
+                            "scope": scope_enum.value,
+                            "call_id": c_id,
+                            "request_id": request_id,
+                        },
+                    )
+                    # Yield suspension event instead of executing
+                    yield StreamEvent(
+                        type="turn_suspended",
+                        data={
+                            "request_id": request_id,
+                            "thread_id": thread_id,
+                            "status": "awaiting_device_execution",
+                            "message": "Aguardando execução no dispositivo remoto...",
+                        },
+                    )
+                    return  # Suspend turn - will resume when tool results arrive
+
+                # Executa via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+                try:
+                    result = await transport.execute(tool_call, uid, timeout=15.0)
+                    res = result.output
+                    tool_status = result.status
+                    duration_ms = result.duration_ms
+                    error_type = result.error_type
+                    is_recoverable = result.is_recoverable
+                    host_id = result.host_id
+                except Exception as e:
+                    logger.exception(f"Erro ao executar tool via transport: {e}")
+                    res = f"Erro ao executar '{call.name}': {e}"
+                    tool_status = "error"
                     duration_ms = 0
-                    error_type = "tool_error" if is_err else None
-                    is_recoverable = is_err
+                    error_type = "transport_error"
+                    is_recoverable = True
+                    host_id = None
 
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
+                # Track completed call for resumability
+                if is_cloud:
+                    completed_call_ids.add(c_id)
+                    await self._persist_turn_state(
+                        request_id, uid, thread_id, req_memory, "open",
+                        pending_tools=[{"call_id": cid, "name": call.name, "arguments": call.arguments, "scope": scope_enum.value} 
+                                       for cid, call in zip(completed_call_ids, tool_calls) if cid in completed_call_ids]
+                    )
                 yield StreamEvent(
                     type="tool_end",
                     data={
@@ -588,6 +670,7 @@ class AssistantPipeline:
                         "is_recoverable": is_recoverable,
                         "scope": scope_enum.value,
                         "call_id": c_id,
+                        "host_id": host_id,
                     },
                 )
                 if call.name == "get_system_status":
@@ -606,6 +689,8 @@ class AssistantPipeline:
                         yield StreamEvent(type="widget", data=health_widget)
                     except Exception as w_err:
                         logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
+
+                steps_this_turn += 1
 
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
@@ -661,6 +746,9 @@ class AssistantPipeline:
         except Exception as e:
             logger.debug("Falha ao disparar memory_extractor em background: %s", e)
 
+        # Mark turn as completed
+        if is_cloud:
+            await self._persist_turn_state(request_id, uid, thread_id, req_memory, "completed")
         yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id, "model": self.last_model_used})
 
     async def run_pipeline(

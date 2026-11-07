@@ -15,6 +15,7 @@ export interface ToolCallInfo {
   duration_ms?: number;
   error_category?: string | null;
   status: "executing" | "completed" | "error";
+  host_id?: string; // Host ID where tool executed (for cloud mode)
 }
 
 export interface ServerHealthWidgetData {
@@ -89,7 +90,8 @@ export interface StreamEvent {
     | "error"
     | "reset_and_fallback"
     | "client_tool_request"
-    | "client_tool_call";
+    | "client_tool_call"
+    | "turn_suspended";
   data: any;
 }
 

@@ -91,4 +91,5 @@ class Config:
     admin_password: str = os.getenv("ADMIN_PASSWORD", "admin")
     admin_email: str = os.getenv("ADMIN_EMAIL", "lucassilvacosta060@gmail.com")
 
+
 config = Config()

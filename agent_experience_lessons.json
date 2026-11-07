@@ -430,5 +430,181 @@
       "filesystem"
     ],
     "createdAt": "2026-10-14T08:35:54.491268+00:00"
+  },
+  {
+    "id": "les_4b15086f",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-10-29T00:57:16.925673+00:00"
+  },
+  {
+    "id": "les_b41a8c3d",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T04:30:27.877108+00:00"
+  },
+  {
+    "id": "les_e9b4c5e0",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T05:50:29.201186+00:00"
+  },
+  {
+    "id": "les_0043c172",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T05:51:15.952105+00:00"
+  },
+  {
+    "id": "les_af448528",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T05:54:43.718705+00:00"
+  },
+  {
+    "id": "les_621ce1a0",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T06:05:23.675194+00:00"
+  },
+  {
+    "id": "les_1e758786",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T06:16:58.770081+00:00"
+  },
+  {
+    "id": "les_4d9ad580",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T06:18:42.319149+00:00"
+  },
+  {
+    "id": "les_93c0d497",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T06:22:50.027623+00:00"
+  },
+  {
+    "id": "les_dd8a3e55",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T06:24:34.809952+00:00"
+  },
+  {
+    "id": "les_3ec3dc46",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T07:17:58.864164+00:00"
+  },
+  {
+    "id": "les_2354380d",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-05T07:20:29.603699+00:00"
+  },
+  {
+    "id": "les_9e75adcf",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T01:48:28.468659+00:00"
+  },
+  {
+    "id": "les_b7e08128",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T02:19:25.213330+00:00"
+  },
+  {
+    "id": "les_176c1521",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T03:02:06.440698+00:00"
+  },
+  {
+    "id": "les_21ac4f5e",
+    "intentPattern": "criar arquivo no Windows",
+    "rootCauseError": "touch falha no Windows",
+    "successfulCorrection": "Usar write_file ou New-Item no PowerShell",
+    "tags": [
+      "windows",
+      "filesystem"
+    ],
+    "createdAt": "2026-11-06T03:14:42.003386+00:00"
   }
 ]
