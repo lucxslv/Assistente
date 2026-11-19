@@ -132,6 +132,10 @@ class TestDeviceCommandIntegration:
             execute_calls = [c for c in mock_conn.execute.call_args_list 
                            if 'INSERT INTO agent_tool_calls' in str(c)]
             assert len(execute_calls) > 0
+            from datetime import datetime
+            insert_args = execute_calls[0].args
+            assert isinstance(insert_args[5], datetime)
+            assert isinstance(insert_args[6], datetime)
             
             # Verify it's NOT using device_pending_commands
             legacy_calls = [c for c in mock_conn.execute.call_args_list 

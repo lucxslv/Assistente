@@ -2,6 +2,7 @@
 
 import ctypes
 import json
+from datetime import datetime, timezone
 import logging
 import os
 import platform
@@ -669,7 +670,7 @@ async def device_command(
                     await conn.execute("""
                         INSERT INTO agent_tool_calls (call_id, user_id, tool, args, status, created_at, updated_at)
                         VALUES ($1, $2, $3, $4::jsonb, 'queued', $5, $6);
-                    """, cmd_id, caller_uid, tool_name, json.dumps(args), time.time(), time.time())
+                    """, cmd_id, caller_uid, tool_name, json.dumps(args), datetime.now(timezone.utc), datetime.now(timezone.utc))
             except Exception as e:
                 logger.error(f"Erro ao enfileirar comando na fila unificada: {e}")
                 # Fallback in-memory

@@ -24,6 +24,16 @@ async def _serialize_for_json(obj: Any) -> Any:
     return obj
 
 
+def _json_object(value: Any) -> Dict[str, Any]:
+    """Converte JSONB do asyncpg (str ou dict) para objeto sem mascarar corrupção."""
+    if value is None:
+        return {}
+    parsed = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(parsed, dict):
+        raise TypeError("JSONB de missão deve conter um objeto")
+    return parsed
+
+
 async def save_session(pool: asyncpg.Pool, session: AgentSession) -> None:
     """Upsert de sessão de missão."""
     graph_json = await _serialize_for_json(session.graph_json)
@@ -35,9 +45,9 @@ async def save_session(pool: asyncpg.Pool, session: AgentSession) -> None:
         )
         if existing and str(existing["user_id"]) != str(session.user_id):
             raise PermissionError("Esta missão pertence a outro usuário.")
-        await conn.execute("""
+        result = await conn.execute("""
             INSERT INTO agent_sessions (id, user_id, thread_id, goal, status, graph_json, state_json, created_at, updated_at, completed_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10)
             ON CONFLICT (id) DO UPDATE SET
                 thread_id = EXCLUDED.thread_id,
                 goal = EXCLUDED.goal,
@@ -46,9 +56,12 @@ async def save_session(pool: asyncpg.Pool, session: AgentSession) -> None:
                 state_json = EXCLUDED.state_json,
                 updated_at = EXCLUDED.updated_at,
                 completed_at = EXCLUDED.completed_at
+            WHERE agent_sessions.user_id = EXCLUDED.user_id
         """, session.id, session.user_id, session.thread_id, session.goal, session.status,
            json.dumps(graph_json), json.dumps(state_json),
            session.created_at, session.updated_at, session.completed_at)
+        if isinstance(result, str) and result.split() and result.split()[-1] == "0":
+            raise PermissionError("Esta missão pertence a outro usuário.")
     logger.debug(f"Sessão salva: {session.id} ({session.status})")
 
 
@@ -67,8 +80,8 @@ async def load_session(pool: asyncpg.Pool, session_id: str, user_id: str) -> Opt
             thread_id=row['thread_id'],
             goal=row['goal'],
             status=row['status'],
-            graph_json=row['graph_json'] or {},
-            state_json=row['state_json'] or {},
+            graph_json=_json_object(row['graph_json']),
+            state_json=_json_object(row['state_json']),
             created_at=row['created_at'],
             updated_at=row['updated_at'],
             completed_at=row['completed_at']
@@ -98,8 +111,8 @@ async def list_user_sessions(pool: asyncpg.Pool, user_id: str, status: Optional[
                 thread_id=row['thread_id'],
                 goal=row['goal'],
                 status=row['status'],
-                graph_json=row['graph_json'] or {},
-                state_json=row['state_json'] or {},
+                graph_json=_json_object(row['graph_json']),
+                state_json=_json_object(row['state_json']),
                 created_at=row['created_at'],
                 updated_at=row['updated_at'],
                 completed_at=row['completed_at']

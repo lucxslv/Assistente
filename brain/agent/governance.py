@@ -226,6 +226,26 @@ class PermissionGate:
         event.set()
         return True
 
+    def clear_for_user(self, user_id: Optional[str]) -> None:
+        """Cancela somente as permissões do usuário dono do runtime."""
+        uid = str(user_id or "default")
+        for perm_id, req in list(self._pending.items()):
+            owns = (
+                req.user_id in (None, "", "default")
+                if uid == "default"
+                else str(req.user_id) == uid
+            )
+            if not owns:
+                continue
+            req.resolved = True
+            req.approved = False
+            req.reason = "Operação cancelada pelo usuário."
+            event = self._events.get(perm_id)
+            if event:
+                event.set()
+            self._pending.pop(perm_id, None)
+            self._events.pop(perm_id, None)
+
     def clear(self) -> None:
         """Limpa todas as permissões pendentes (útil para teardown de testes)."""
         for event in self._events.values():

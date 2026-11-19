@@ -3,12 +3,25 @@
 from __future__ import annotations
 import asyncio
 import inspect
+import json
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from core.execution.contracts import ToolCall, ToolResult, HostInfo
 from api.db import get_or_init_db_pool
+
+
+def _json_value(value, default):
+    if value is None:
+        return default
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            return default
+    return value
 
 
 class RemoteHostExecutor:
@@ -44,7 +57,7 @@ class RemoteHostExecutor:
             HostInfo(
                 host_id=row["id"],
                 name=row["name"],
-                capabilities=row["capabilities"],
+                capabilities=_json_value(row["capabilities"], []),
                 last_seen_at=row["last_seen_at"],
                 online=True
             )
@@ -83,12 +96,13 @@ class RemoteHostExecutor:
         
         # 3. Insere call na fila com status queued
         call_id = call.call_id or f"call_{uuid.uuid4().hex[:8]}"
+        now_dt = datetime.now(timezone.utc)
         try:
             async with pool.acquire() as conn:
                 await conn.execute("""
                     INSERT INTO agent_tool_calls (call_id, user_id, host_id, tool, args, status, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)
-                """, call_id, user_id, host_id, call.name, call.arguments, time.time(), time.time())
+                    VALUES ($1, $2, $3, $4, $5::jsonb, 'queued', $6, $7)
+                """, call_id, user_id, host_id, call.name, json.dumps(call.arguments), now_dt, now_dt)
         except Exception as e:
             return ToolResult(
                 call_id=call_id,
@@ -120,7 +134,7 @@ class RemoteHostExecutor:
             
             status = row["status"]
             if status in ("done", "success"):
-                result_data = row["result"] or {}
+                result_data = _json_value(row["result"], {})
                 return ToolResult(
                     call_id=call_id,
                     status="success",
@@ -131,7 +145,7 @@ class RemoteHostExecutor:
                     is_recoverable=result_data.get("is_recoverable", False)
                 )
             elif status in ("failed", "error"):
-                result_data = row["result"] or {}
+                result_data = _json_value(row["result"], {})
                 return ToolResult(
                     call_id=call_id,
                     status="error",
@@ -160,7 +174,7 @@ class RemoteHostExecutor:
                     UPDATE agent_tool_calls
                     SET status = 'timeout', updated_at = $1
                     WHERE call_id = $2 AND user_id = $3
-                """, time.time(), call_id, user_id)
+                """, datetime.now(timezone.utc), call_id, user_id)
         except Exception:
             pass
         

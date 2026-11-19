@@ -526,7 +526,9 @@ class AgentRuntime:
                 if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.WAITING_PERMISSION):
                     t.status = TaskStatus.SKIPPED
                     t.error = "Operação cancelada pelo usuário."
-        permission_gate.clear()
+        permission_gate.clear_for_user(
+            self.working_memory.get_variable("user_id") or "default"
+        )
         try:
             asyncio.create_task(self.emit_event("agent.cancelled", {
                 "sessionId": self.active_graph.id if self.active_graph else None,

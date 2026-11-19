@@ -267,9 +267,72 @@ class Verifier:
                     details=tool_result,
                     passed=False,
                 )
+            expected_substring = criteria.get("contains")
+            tool_name = task.tool or ""
+
+            # Escrita/edição remota: o sucesso veio da tool real no host e o
+            # conteúdo enviado é conhecido deterministicamente.
+            if tool_name in ("write_file", "replace_in_file", "create_folder") and tool_result.startswith("Sucesso:"):
+                sent_content = (
+                    task.arguments.get("content")
+                    or task.arguments.get("replacement_text")
+                    or ""
+                )
+                if expected_substring and expected_substring not in sent_content:
+                    return False, TaskEvidence(
+                        type="file",
+                        summary="Falha: o conteúdo enviado ao host não contém o texto esperado.",
+                        details=tool_result,
+                        passed=False,
+                    )
+                return True, TaskEvidence(
+                    type="file",
+                    summary=f"Evidência remota confirmada para '{target_path_str or tool_name}'.",
+                    details=tool_result,
+                    passed=True,
+                )
+
+            # Leitura/listagem remota: a própria saída do host é a evidência.
+            if tool_name == "read_file" and tool_result.startswith("--- Arquivo:"):
+                if expected_substring and expected_substring not in tool_result:
+                    return False, TaskEvidence(
+                        type="file",
+                        summary="Falha: conteúdo esperado ausente na leitura remota.",
+                        details=tool_result,
+                        passed=False,
+                    )
+                return True, TaskEvidence(type="file", summary="Leitura remota confirmada.", details=tool_result, passed=True)
+
+            if tool_name == "list_directory" and (
+                tool_result.startswith("Conteúdo da pasta") or "está vazio" in tool_result
+            ):
+                if expected_substring and expected_substring not in tool_result:
+                    return False, TaskEvidence(
+                        type="file",
+                        summary="Falha: item esperado ausente na listagem remota.",
+                        details=tool_result,
+                        passed=False,
+                    )
+                return True, TaskEvidence(type="file", summary="Diretório remoto confirmado.", details=tool_result, passed=True)
+
+            # Contrato estruturado opcional para verificações remotas dedicadas.
+            try:
+                import json
+                remote_evidence = json.loads(tool_result)
+            except (TypeError, ValueError):
+                remote_evidence = None
+            if isinstance(remote_evidence, dict) and remote_evidence.get("exists") is True:
+                remote_path = remote_evidence.get("path")
+                remote_content = remote_evidence.get("content") or ""
+                if target_path_str and remote_path and str(remote_path) != str(target_path_str):
+                    return False, TaskEvidence(type="file", summary="Falha: path da evidência remota diverge.", details=tool_result, passed=False)
+                if expected_substring and expected_substring not in remote_content:
+                    return False, TaskEvidence(type="file", summary="Falha: conteúdo esperado ausente na evidência remota.", details=tool_result, passed=False)
+                return True, TaskEvidence(type="file", summary="Evidência remota estruturada confirmada.", details=tool_result, passed=True)
+
             return False, TaskEvidence(
                 type="file",
-                summary=f"Verificação de arquivo não executada em modo cloud (sem executor): {target_path_str or 'operação em arquivo'}",
+                summary=f"Evidência remota insuficiente para '{target_path_str or 'operação em arquivo'}'.",
                 details=tool_result,
                 passed=False,
             )

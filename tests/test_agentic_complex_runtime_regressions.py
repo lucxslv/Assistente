@@ -465,9 +465,10 @@ async def test_pipeline_resume_restores_exhausted_budget_without_new_llm_call(mo
     pipeline._load_turn_state = AsyncMock(return_value={
         "status": "suspended",
         "state": {
+            "pending_tools": [{"call_id": "call-1", "name": "get_datetime"}],
             "steps_this_turn": 2,
             "iterations": 2,
-            "completed_call_ids": ["call-1"],
+            "completed_call_ids": [],
         },
     })
 

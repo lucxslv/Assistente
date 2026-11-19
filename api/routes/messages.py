@@ -290,6 +290,7 @@ async def submit_message_feedback(
             user_id=str(user["id"]),
             rating=norm_rating,
             comment=payload.comment,
+            user_email=user.get("email"),
         )
     except PermissionError as pe:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))

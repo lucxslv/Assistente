@@ -1,8 +1,10 @@
 """Rotas do host executor — heartbeat autenticado, claim de calls e post de resultados."""
 
+import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Header, Request, status
@@ -81,23 +83,23 @@ async def heartbeat(
     
     host_id = req.host_id or f"host_{uuid.uuid4().hex[:8]}"
     now_ts = time.time()
-    now_dt = time.strftime("%Y-%m-%d %H:%M:%S")
+    now_dt = datetime.now(timezone.utc)
     
     async with pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO agent_hosts (id, user_id, name, capabilities, telemetry, last_seen_at, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7)
             ON CONFLICT (id) DO UPDATE SET
                 user_id = EXCLUDED.user_id,
                 name = EXCLUDED.name,
                 capabilities = EXCLUDED.capabilities,
                 telemetry = EXCLUDED.telemetry,
                 last_seen_at = EXCLUDED.last_seen_at
-        """, host_id, user_id, req.name, req.capabilities, req.telemetry or {}, now_ts, now_dt)
+        """, host_id, user_id, req.name, json.dumps(req.capabilities), json.dumps(req.telemetry or {}), now_ts, now_dt)
     
     return {
         "host_id": host_id,
-        "server_time": now_dt,
+        "server_time": now_dt.isoformat(),
         "poll_interval_ms": 2000
     }
 
@@ -134,7 +136,11 @@ async def pending_calls(
         """, f"host_{uuid.uuid4().hex[:8]}", user_id, limit)
         
         calls = [
-            {"call_id": row["call_id"], "tool": row["tool"], "args": row["args"]}
+            {
+                "call_id": row["call_id"],
+                "tool": row["tool"],
+                "args": json.loads(row["args"]) if isinstance(row["args"], str) else (row["args"] or {}),
+            }
             for row in rows
         ]
     
@@ -162,9 +168,9 @@ async def tool_results(
     async with pool.acquire() as conn:
         result = await conn.execute("""
             UPDATE agent_tool_calls
-            SET status = $1, result = $2, updated_at = $3
+            SET status = $1, result = $2::jsonb, updated_at = $3
             WHERE call_id = $4 AND user_id = $5
-        """, req.status, {"output": req.output, "error_type": req.error_type, "duration_ms": req.duration_ms}, time.time(), req.call_id, user_id)
+        """, req.status, json.dumps({"output": req.output, "error_type": req.error_type, "duration_ms": req.duration_ms}), datetime.now(timezone.utc), req.call_id, user_id)
     
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Call não encontrado ou não pertence ao usuário.")

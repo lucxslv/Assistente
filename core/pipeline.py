@@ -136,7 +136,7 @@ class AssistantPipeline:
                     "steps_this_turn": int(steps_this_turn),
                     "iterations": int(iterations),
                 }
-                await conn.execute(
+                result = await conn.execute(
                     """
                     INSERT INTO chat_turn_state (turn_id, user_id, thread_id, request_id, state, status, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -144,6 +144,8 @@ class AssistantPipeline:
                         state = EXCLUDED.state,
                         status = EXCLUDED.status,
                         updated_at = NOW()
+                    WHERE chat_turn_state.user_id = EXCLUDED.user_id
+                      AND chat_turn_state.thread_id = EXCLUDED.thread_id
                     """,
                     request_id,
                     user_id,
@@ -152,6 +154,9 @@ class AssistantPipeline:
                     json.dumps(state_data),
                     status,
                 )
+                if isinstance(result, str) and result.split() and result.split()[-1] == "0":
+                    logger.warning("Turn state cross-tenant bloqueado no upsert para request_id=%s", request_id)
+                    return
         except Exception as e:
             logger.debug(f"Falha ao persistir turn state: {e}")
 
@@ -171,7 +176,9 @@ class AssistantPipeline:
                     thread_id,
                 )
                 if row:
-                    return {"state": json.loads(row["state"]), "status": row["status"]}
+                    raw_state = row["state"]
+                    state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
+                    return {"state": state, "status": row["status"]}
         except Exception as e:
             logger.debug(f"Falha ao carregar turn state: {e}")
         return None
@@ -220,21 +227,37 @@ class AssistantPipeline:
         if request_id is None:
             request_id = f"req_{uuid.uuid4().hex[:12]}"
         
-        # Cloud mode: check if resuming a suspended turn
+        # Cloud mode: valida o estado autorizado antes de aceitar qualquer resultado.
         resuming_turn = False
         completed_call_ids = set()
         resumed_steps = 0
         resumed_iterations = 0
+        restored_memory = []
         if is_cloud and tool_results:
-            resuming_turn = True
-            # Load turn state to get completed call IDs
             turn_state = await self._load_turn_state(request_id, uid, thread_id)
-            if turn_state and turn_state.get("state"):
-                state_data = turn_state["state"]
-                # Restaura IDs e orçamento acumulativo do turno lógico.
-                completed_call_ids = set(state_data.get("completed_call_ids", []))
-                resumed_steps = int(state_data.get("steps_this_turn", 0) or 0)
-                resumed_iterations = int(state_data.get("iterations", 0) or 0)
+            state_data = (turn_state or {}).get("state") or {}
+            completed_call_ids = set(state_data.get("completed_call_ids", []))
+            pending_tools = state_data.get("pending_tools") or []
+            allowed_result_ids = {
+                str(tool.get("call_id"))
+                for tool in pending_tools
+                if tool.get("call_id")
+            } - completed_call_ids
+            valid_results = [
+                result for result in tool_results
+                if str(result.get("call_id") or "") in allowed_result_ids
+            ]
+            if not state_data or not valid_results:
+                error_msg = "Não foi possível validar os resultados para retomar este turno. Execute a ação novamente."
+                yield StreamEvent(type="error", data={"error": error_msg})
+                yield StreamEvent(type="done", data={"reply": error_msg, "thread_id": thread_id})
+                return
+
+            tool_results = valid_results
+            resuming_turn = True
+            restored_memory = list(state_data.get("memory") or [])
+            resumed_steps = int(state_data.get("steps_this_turn", 0) or 0)
+            resumed_iterations = int(state_data.get("iterations", 0) or 0)
 
         new_result_ids = {
             str(tr.get("call_id"))
@@ -249,8 +272,12 @@ class AssistantPipeline:
         # Inicializa memória da conversa isolada para esta requisição/thread
         req_memory = ConversationMemory(max_messages=config_module.config.max_history_messages)
 
-        # 1. Hidrata o histórico persistido do banco de dados (ou payload) se fornecido
-        if history:
+        # 1. Na retomada, restaura inclusive as tool_calls originais do turno.
+        if restored_memory:
+            for item in restored_memory:
+                if isinstance(item, dict) and item.get("role"):
+                    req_memory._append(dict(item))
+        elif history:
             for item in history:
                 role = item.get("role", "")
                 content = item.get("content", "")

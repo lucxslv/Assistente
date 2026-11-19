@@ -1411,13 +1411,15 @@ async def save_message_feedback_record(
     user_id: str,
     rating: int,
     comment: Optional[str] = None,
+    user_email: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Registra ou atualiza avaliação positiva (+1) ou negativa (-1) de uma resposta do assistente."""
+    """Registra avaliação com UUID canônico e alias de leitura legada por e-mail."""
     norm_rating = 1 if int(rating) > 0 else -1
     u_id_str = str(user_id)
     now = datetime.datetime.now(datetime.timezone.utc)
     now_iso = now.isoformat()
     clean_comment = (comment or "").strip()[:1000] or None
+    owner_ids = list(dict.fromkeys([u_id_str, str(user_email or "")]))
 
     # Valida mensagem ↔ sessão ↔ usuário antes de qualquer escrita ou cache.
     if pool:
@@ -1433,22 +1435,22 @@ async def save_message_feedback_record(
                 FROM public.chat_messages m
                 JOIN public.chat_sessions s ON s.id = m.session_id
                 WHERE m.id = $1 AND m.session_id = $2
-                  AND (m.user_id = $3 OR s.user_id = $3)
+                  AND (m.user_id = ANY($3) OR s.user_id = ANY($3))
                 LIMIT 1
                 """,
                 m_uuid,
                 s_uuid,
-                u_id_str,
+                owner_ids,
             )
         if not owns_message:
             raise PermissionError("Você não tem permissão para avaliar esta mensagem.")
     else:
         session = _in_memory_sessions.get(session_id)
         message_exists = any(
-            str(m.get("id")) == str(message_id) and str(m.get("user_id")) == u_id_str
+            str(m.get("id")) == str(message_id) and str(m.get("user_id")) in owner_ids
             for m in _in_memory_messages.get(session_id, [])
         )
-        if not session or str(session.get("user_id")) != u_id_str or not message_exists:
+        if not session or str(session.get("user_id")) not in owner_ids or not message_exists:
             raise PermissionError("Você não tem permissão para avaliar esta mensagem.")
 
     key = f"{message_id}:{u_id_str}"
