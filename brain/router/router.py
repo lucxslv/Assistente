@@ -32,12 +32,15 @@ class LLMRouter:
     # Novos modelos Google (2.5 series deprecados, usar 3.x series)
     FAST_GEMINI_MODEL = "gemini-3.5-flash-lite"
     REASONING_GEMINI_MODEL = "gemini-3.5-flash"
+    AGENTIC_GEMINI_MODEL = "gemini-3.5-flash"
 
     FAST_OPENAI_MODEL = "gpt-4o-mini"
     REASONING_OPENAI_MODEL = "gpt-4o"
+    AGENTIC_OPENAI_MODEL = "gpt-4o"
 
     FAST_GROQ_MODEL = "llama-3.3-70b-versatile"
     REASONING_GROQ_MODEL = "llama-3.3-70b-versatile"
+    AGENTIC_GROQ_MODEL = "llama-3.3-70b-versatile"
 
     REASONING_KEYWORDS = [
         "analise", "analisar", "análise profunda", "explique detalhadamente",

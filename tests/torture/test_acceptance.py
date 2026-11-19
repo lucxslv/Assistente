@@ -76,9 +76,9 @@ def test_acceptance_c_autonomous_agent_dag_execution(temp_workspace: Path):
         router = LLMRouter()
         prompt = "Crie uma pasta chamada teste, coloque um arquivo README nela e escreva 'Olá'."
 
-        # AGENTIC mode removed - this prompt would now route to REASONING
+        # Objetivos multi-etapas usam a rota agêntica e exigem um modelo válido.
         decision = router.route(prompt)
-        assert decision.mode == RouteMode.REASONING
+        assert decision.mode == RouteMode.AGENTIC
 
         rt = AgentRuntime()
         graph = TaskGraph(goal=prompt)
