@@ -280,6 +280,14 @@ class TestPipelineClosedLoop:
         # Provider always returns CLOUD tool calls (search_web)
         pipeline = AssistantPipeline()
         pipeline._max_agent_steps_per_turn = 3  # Set instance variable for test
+        pipeline.tools.execute_structured = AsyncMock(return_value={
+            "status": "success",
+            "output": "resultado web",
+            "friendly_name": "Pesquisando na Web",
+            "duration_ms": 1,
+            "error_type": None,
+            "is_recoverable": False,
+        })
         fake_provider = MagicMock()
         
         def make_chunks():

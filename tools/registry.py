@@ -856,6 +856,16 @@ class ToolRegistry:
         if not uid or uid.lower() in {"default", "none", "null"}:
             return "Erro: usuário autenticado é obrigatório para memorizar um fato."
 
+        # Rejeição de negócio acontece antes de qualquer fallback de infraestrutura.
+        from brain.personality.canonical_identity import sanitize_memory_candidate
+        allowed, sanitized_fact, reason = sanitize_memory_candidate(
+            clean_fact, category, user_id=uid
+        )
+        if not allowed:
+            logger.warning("[SEGURANÇA] Memória rejeitada pela validação comum: %s", reason)
+            return "Segurança: o fato viola a proteção de identidade e não foi memorizado."
+        clean_fact = sanitized_fact
+
         saved_via_pool = False
         saved_via_fallback = False
         try:

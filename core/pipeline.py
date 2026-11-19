@@ -103,6 +103,9 @@ class AssistantPipeline:
         memory: ConversationMemory,
         status: str,
         pending_tools: list[dict] | None = None,
+        steps_this_turn: int = 0,
+        iterations: int = 0,
+        completed_call_ids: set[str] | None = None,
     ) -> None:
         """Persiste o estado do turno no banco para retomada posterior (modo cloud)."""
         if not thread_id or user_id == "default":
@@ -129,6 +132,9 @@ class AssistantPipeline:
                 state_data = {
                     "memory": memory.get_messages(),
                     "pending_tools": pending_tools or [],
+                    "completed_call_ids": sorted(completed_call_ids or set()),
+                    "steps_this_turn": int(steps_this_turn),
+                    "iterations": int(iterations),
                 }
                 await conn.execute(
                     """
@@ -217,14 +223,26 @@ class AssistantPipeline:
         # Cloud mode: check if resuming a suspended turn
         resuming_turn = False
         completed_call_ids = set()
+        resumed_steps = 0
+        resumed_iterations = 0
         if is_cloud and tool_results:
             resuming_turn = True
             # Load turn state to get completed call IDs
             turn_state = await self._load_turn_state(request_id, uid, thread_id)
             if turn_state and turn_state.get("state"):
                 state_data = turn_state["state"]
-                # Restore completed call IDs to avoid re-execution
+                # Restaura IDs e orçamento acumulativo do turno lógico.
                 completed_call_ids = set(state_data.get("completed_call_ids", []))
+                resumed_steps = int(state_data.get("steps_this_turn", 0) or 0)
+                resumed_iterations = int(state_data.get("iterations", 0) or 0)
+
+        new_result_ids = {
+            str(tr.get("call_id"))
+            for tr in (tool_results or [])
+            if tr.get("call_id")
+        } - completed_call_ids
+        completed_call_ids.update(new_result_ids)
+        resumed_steps += len(new_result_ids)
 
         yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias...", "request_id": request_id})
 
@@ -393,9 +411,15 @@ class AssistantPipeline:
             or config_module.config.max_agent_steps_per_turn
         ))
         max_iterations = max_steps
-        steps_this_turn = 0
-        iterations = 0
-        final_reply = ""
+        steps_this_turn = resumed_steps
+        iterations = resumed_iterations
+        budget_reply = (
+            f"Limite de passos do turno atingido ({max_steps}). "
+            "Não foi possível concluir todas as ações com evidências."
+        )
+        final_reply = budget_reply if (
+            steps_this_turn >= max_steps or iterations >= max_iterations
+        ) else ""
         emitted_any_token = False
 
         active_llm_instance = self.llm
@@ -626,7 +650,10 @@ class AssistantPipeline:
                             "name": call.name,
                             "arguments": call.arguments,
                             "scope": scope_enum.value,
-                        }]
+                        }],
+                        steps_this_turn=steps_this_turn,
+                        iterations=iterations,
+                        completed_call_ids=completed_call_ids,
                     )
                     # Yield tool_start for UI feedback, then suspend
                     yield StreamEvent(
@@ -652,15 +679,31 @@ class AssistantPipeline:
                     )
                     return  # Suspend turn - will resume when tool results arrive
 
-                # Executa via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
+                # DEVICE usa o transporte; CLOUD/HOME executam no registry.
                 try:
-                    result = await transport.execute(tool_call, uid, timeout=15.0)
-                    res = result.output
-                    tool_status = result.status
-                    duration_ms = result.duration_ms
-                    error_type = result.error_type
-                    is_recoverable = result.is_recoverable
-                    host_id = result.host_id
+                    if scope_enum == ToolScope.DEVICE:
+                        result = await transport.execute(tool_call, uid, timeout=15.0)
+                        res = result.output
+                        tool_status = result.status
+                        duration_ms = result.duration_ms
+                        error_type = result.error_type
+                        is_recoverable = result.is_recoverable
+                        host_id = result.host_id
+                    else:
+                        cloud_result = await self.tools.execute_structured(
+                            call.name,
+                            call.arguments,
+                            prefer_remote=False,
+                            call_id=c_id,
+                            user_id=uid,
+                            timeout=15.0,
+                        )
+                        res = cloud_result["output"]
+                        tool_status = cloud_result["status"]
+                        duration_ms = cloud_result.get("duration_ms", 0)
+                        error_type = cloud_result.get("error_type")
+                        is_recoverable = cloud_result.get("is_recoverable", False)
+                        host_id = None
                 except Exception as e:
                     logger.exception(f"Erro ao executar tool via transport: {e}")
                     res = f"Erro ao executar '{call.name}': {e}"
@@ -671,13 +714,21 @@ class AssistantPipeline:
                     host_id = None
 
                 req_memory.add_tool_result(call.name, res, tool_call_id=c_id)
+                steps_this_turn += 1
                 # Track completed call for resumability
                 if is_cloud:
                     completed_call_ids.add(c_id)
                     await self._persist_turn_state(
                         request_id, uid, thread_id, req_memory, "open",
-                        pending_tools=[{"call_id": cid, "name": call.name, "arguments": call.arguments, "scope": scope_enum.value} 
-                                       for cid, call in zip(completed_call_ids, tool_calls) if cid in completed_call_ids]
+                        pending_tools=[{
+                            "call_id": pending_call.id,
+                            "name": pending_call.name,
+                            "arguments": pending_call.arguments,
+                            "scope": self.tools.get_scope(pending_call.name).value,
+                        } for pending_call in tool_calls if pending_call.id not in completed_call_ids],
+                        steps_this_turn=steps_this_turn,
+                        iterations=iterations,
+                        completed_call_ids=completed_call_ids,
                     )
                 yield StreamEvent(
                     type="tool_end",
@@ -711,8 +762,6 @@ class AssistantPipeline:
                     except Exception as w_err:
                         logger.warning(f"Aviso ao emitir ServerHealthWidget da tool: {w_err}")
 
-                steps_this_turn += 1
-
             if _is_cancelled():
                 final_reply = iteration_reply or final_reply
                 break
@@ -720,10 +769,7 @@ class AssistantPipeline:
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 
             if steps_this_turn >= max_steps or iterations >= max_iterations:
-                final_reply = iteration_reply or (
-                    f"Limite de passos do turno atingido ({max_steps}). "
-                    "Não foi possível concluir todas as ações com evidências."
-                )
+                final_reply = budget_reply
                 break
 
         from core.message_parser import parse_assistant_message_content
@@ -772,7 +818,16 @@ class AssistantPipeline:
 
         # Mark turn as completed
         if is_cloud:
-            await self._persist_turn_state(request_id, uid, thread_id, req_memory, "completed")
+            await self._persist_turn_state(
+                request_id,
+                uid,
+                thread_id,
+                req_memory,
+                "completed",
+                steps_this_turn=steps_this_turn,
+                iterations=iterations,
+                completed_call_ids=completed_call_ids,
+            )
         yield StreamEvent(type="done", data={"reply": final_reply, "thread_id": thread_id, "model": self.last_model_used})
 
     async def run_pipeline(

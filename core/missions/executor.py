@@ -15,7 +15,7 @@ from core.execution.transport import get_transport
 from brain.agent.task_graph import TaskGraph, TaskNode, TaskStatus
 from brain.agent.planner import AgentPlanner
 from brain.agent.verifier import Verifier
-from brain.agent.governance import PermissionGate, RiskLevel
+from brain.agent.governance import permission_gate, RiskLevel
 from tools.registry import ToolScope, ToolRegistry
 from tools.registry import registry as default_registry
 
@@ -86,12 +86,10 @@ async def _execution_loop(
     else:
         graph = TaskGraph(goal=session.goal)
     
-    # Cria permission gate local para esta sessão
-    permission_gate = PermissionGate()
-    
-    # Atualiza completed_call_ids do state
+    # Atualiza completed_call_ids e chamadas realmente emitidas do state.
     state = session.state_json or {}
     completed_call_ids = set(state.get("completed_call_ids", []))
+    pending_call_ids = dict(state.get("pending_call_ids") or {})
     step = state.get("step", 1)
     
     # Processa tool_results recebidos
@@ -99,9 +97,24 @@ async def _execution_loop(
         for result in tool_results:
             if result.call_id in completed_call_ids:
                 continue
+            pending_meta = pending_call_ids.get(result.call_id)
+            if not pending_meta:
+                # Resultado sem uma chamada pendente correspondente: fail closed.
+                continue
+            result_task_id = (
+                pending_meta.get("task_id")
+                if isinstance(pending_meta, dict)
+                else str(pending_meta)
+            )
+            expected_host = (
+                pending_meta.get("host_id")
+                if isinstance(pending_meta, dict)
+                else None
+            )
+            if expected_host and result.host_id != expected_host:
+                continue
+            pending_call_ids.pop(result.call_id, None)
             completed_call_ids.add(result.call_id)
-            # Encontra a task pelo task.id embutido no call_id.
-            result_task_id = _task_id_from_call_id(result.call_id)
             for task in graph.nodes.values():
                 if task.status != TaskStatus.RUNNING or task.id != result_task_id:
                     continue
@@ -160,21 +173,32 @@ async def _execution_loop(
             if _tool_requires_permission(task.tool):
                 task.status = TaskStatus.WAITING_PERMISSION
                 # Solicita permissão
-                perm_id = await permission_gate.request_permission(
+                approved, perm_reason = await permission_gate.request_permission(
                     task_id=task.id,
                     tool=task.tool,
                     arguments=task.arguments,
                     description=f"Missão: {task.title}",
                     user_id=user_id,
                 )
-                # Marca task como waiting_permission e sai do loop
-                # A retomada virá via permission_resolved no próximo advance_session
-                break
+                if not approved:
+                    task.status = TaskStatus.FAILURE
+                    task.attempts = task.max_attempts
+                    task.error = perm_reason or "Permissão rejeitada pelo usuário."
+                    break
+                # A decisão aprovada libera a mesma task para execução imediata.
+                task.status = TaskStatus.RUNNING
             
             # Executa via transport com o usuário que iniciou a sessão
             call_id = f"call_{task.id}_{uuid4().hex[:8]}"
+            pending_call_ids[call_id] = {"task_id": task.id}
+            session.state_json = {
+                **session.state_json,
+                "pending_call_ids": pending_call_ids,
+            }
             try:
                 result = await _execute_tool_via_transport(task.tool, task.arguments, user_id, call_id)
+                pending_call_ids.pop(call_id, None)
+                completed_call_ids.add(call_id)
                 if result.status == "success":
                     task.status = TaskStatus.SUCCESS
                     task.observation = result.output
@@ -190,6 +214,8 @@ async def _execution_loop(
                     task.error = result.output
                     task.attempts = task.max_attempts
             except Exception as exc:
+                pending_call_ids.pop(call_id, None)
+                completed_call_ids.add(call_id)
                 task.status = TaskStatus.FAILURE
                 task.error = str(exc)
                 task.attempts = task.max_attempts
@@ -217,6 +243,7 @@ async def _execution_loop(
         session.state_json = {
             **session.state_json,
             "completed_call_ids": list(completed_call_ids),
+            "pending_call_ids": pending_call_ids,
             "step": step,
             "paused": session.state_json.get("paused", False),
             "cancel_requested": session.state_json.get("cancel_requested", False),
@@ -224,7 +251,12 @@ async def _execution_loop(
         
         # Serializa graph e state
         session.graph_json = graph.to_json()
-        session.state_json = {**session.state_json, "completed_call_ids": list(completed_call_ids), "step": step}
+        session.state_json = {
+            **session.state_json,
+            "completed_call_ids": list(completed_call_ids),
+            "pending_call_ids": pending_call_ids,
+            "step": step,
+        }
         session.updated_at = datetime.now(timezone.utc)
         
         # Se task ficou waiting_permission ou completed/failed, sai do loop
@@ -241,6 +273,7 @@ async def _execution_loop(
     session.state_json = {
         **session.state_json,
         "completed_call_ids": list(completed_call_ids),
+        "pending_call_ids": pending_call_ids,
         "step": step,
     }
     session.updated_at = datetime.now(timezone.utc)

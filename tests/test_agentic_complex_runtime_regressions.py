@@ -118,6 +118,9 @@ async def test_mission_result_matches_task_id_inside_call_id():
         )
     )
     session = _session_for(graph)
+    session.state_json["pending_call_ids"] = {
+        "call_task_01_abcd1234": {"task_id": "task_01", "host_id": "host-1"}
+    }
     result = ToolResult(
         call_id="call_task_01_abcd1234",
         status="success",
@@ -254,8 +257,8 @@ async def test_pipeline_processes_more_than_five_tool_iterations(monkeypatch):
                 _Chunk(tool_calls=[
                     ProviderToolCall(
                         id=f"call-{calls['count']}",
-                        name="get_datetime",
-                        arguments={},
+                        name="list_directory",
+                        arguments={"path": "Documentos"},
                     )
                 ])
             ])
@@ -282,3 +285,202 @@ async def test_pipeline_processes_more_than_five_tool_iterations(monkeypatch):
     assert transport.execute.await_count == 6
     assert done.data["reply"] == "Tarefa complexa concluída com evidências."
     assert done.data["reply"] != "Ação concluída com sucesso."
+
+
+@pytest.mark.asyncio
+async def test_mission_rejects_result_with_unknown_call_id():
+    """Um call_id inventado não pode concluir uma task sem despacho correspondente."""
+    graph = TaskGraph(goal="Retomar missão")
+    graph.add_task(TaskNode(
+        id="task_01",
+        title="Listar Documentos",
+        tool="list_directory",
+        status=TaskStatus.RUNNING,
+    ))
+    session = _session_for(graph)
+    forged = ToolResult(
+        call_id="call_task_01_falso123",
+        status="success",
+        output="resultado inventado",
+        host_id="host-1",
+    )
+
+    updated = await _execution_loop(
+        session,
+        graph=None,
+        user_id=session.user_id,
+        tool_results=[forged],
+    )
+
+    assert updated.status == "running"
+    assert updated.graph_json["tasks"][0]["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_mission_permission_can_be_approved_through_shared_gate(monkeypatch):
+    """A aprovação da rota precisa alcançar o gate usado pela missão e liberar a tool."""
+    import asyncio
+    from brain.agent.governance import permission_gate
+    from brain.agent.verifier import TaskEvidence
+
+    permission_gate.clear()
+    graph = TaskGraph(goal="Executar comando aprovado")
+    graph.add_task(TaskNode(
+        id="task_01",
+        title="Executar comando",
+        tool="execute_command",
+        arguments={"command": "echo ok"},
+    ))
+    session = _session_for(graph)
+    transport = AsyncMock(return_value=ToolResult(
+        call_id="call-task",
+        status="success",
+        output="ok",
+        host_id="host-1",
+    ))
+    monkeypatch.setattr("core.missions.executor._execute_tool_via_transport", transport)
+    monkeypatch.setattr(
+        "core.missions.executor.Verifier.verify_task",
+        AsyncMock(return_value=(True, TaskEvidence(type="system", summary="ok"))),
+    )
+
+    loop_task = asyncio.create_task(
+        _execution_loop(session, graph=None, user_id=session.user_id)
+    )
+    try:
+        pending = []
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+            pending = permission_gate.get_pending_requests(user_id=session.user_id)
+            if pending:
+                break
+
+        assert pending, "A solicitação não ficou visível para a rota de permissões"
+        assert permission_gate.resolve_permission(
+            pending[0].get("id") or pending[0].get("permission_id"),
+            approved=True,
+            user_id=session.user_id,
+        )
+        updated = await asyncio.wait_for(loop_task, timeout=1.0)
+    finally:
+        if not loop_task.done():
+            loop_task.cancel()
+        permission_gate.clear()
+
+    assert transport.await_count == 1
+    assert updated.status == "completed"
+    assert updated.graph_json["tasks"][0]["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_legacy_runtime_keeps_cloud_tools_in_process(monkeypatch):
+    """search_web/save_user_memory não podem depender de um host Windows online."""
+    from brain.agent.verifier import TaskEvidence
+
+    runtime = AgentRuntime()
+    runtime.working_memory = AgentWorkingMemory(
+        initial_variables={"user_id": "user-real-123"}
+    )
+    graph = TaskGraph(goal="Pesquisar")
+    task = TaskNode(id="task_01", title="Pesquisar", tool="search_web", arguments={"query": "teste"})
+    graph.add_task(task)
+    runtime.active_graph = graph
+
+    transport = MagicMock()
+    transport.execute = AsyncMock(return_value=ToolResult(
+        call_id="call-1", status="success", output="remoto", host_id="host-1"
+    ))
+    cloud_execute = AsyncMock(return_value={
+        "status": "success",
+        "output": "resultado web",
+        "friendly_name": "Pesquisando na Web",
+        "duration_ms": 1,
+        "error_type": None,
+        "is_recoverable": False,
+    })
+    monkeypatch.setattr("core.execution.transport.get_transport", lambda: transport)
+    monkeypatch.setattr(runtime.tools, "execute_structured", cloud_execute)
+    monkeypatch.setattr(
+        "brain.agent.runtime.Verifier.verify_task",
+        AsyncMock(return_value=(True, TaskEvidence(type="system", summary="ok"))),
+    )
+
+    await runtime._execute_task(task)
+
+    assert cloud_execute.await_count == 1
+    assert transport.execute.await_count == 0
+    assert task.observation == "resultado web"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_budget_message_overrides_model_completion_claim(monkeypatch):
+    """Texto do modelo junto à tool call não pode esconder orçamento esgotado."""
+    import core.pipeline as pipeline_module
+
+    monkeypatch.setenv("CHARLIE_RUNTIME_MODE", "device")
+    monkeypatch.delenv("VERCEL", raising=False)
+    transport = MagicMock()
+    transport.execute = AsyncMock(return_value=ToolResult(
+        call_id="call-1", status="success", output="ok", host_id="local"
+    ))
+    monkeypatch.setattr("core.execution.transport.get_transport", lambda: transport)
+
+    provider = MagicMock()
+    provider.chat_stream = MagicMock(return_value=_Stream([
+        _Chunk(
+            text="Tarefa concluída",
+            tool_calls=[ProviderToolCall(id="call-1", name="get_datetime", arguments={})],
+        )
+    ]))
+    pipeline = pipeline_module.AssistantPipeline()
+    pipeline.llm = provider
+    pipeline._max_agent_steps_per_turn = 1
+
+    events = []
+    async for event in pipeline.run_pipeline_stream(
+        "modo agente: execute",
+        thread_id="thread-budget",
+        user_id="user-real-123",
+    ):
+        events.append(event)
+
+    done = next(event for event in events if event.type == "done")
+    assert "Limite de passos" in done.data["reply"]
+    assert done.data["reply"] != "Tarefa concluída"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_resume_restores_exhausted_budget_without_new_llm_call(monkeypatch):
+    """Uma retomada com orçamento já esgotado não pode abrir outro ciclo."""
+    import core.pipeline as pipeline_module
+
+    monkeypatch.setenv("CHARLIE_RUNTIME_MODE", "cloud")
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setattr("api.db.get_or_init_db_pool", AsyncMock(return_value=None))
+    provider = MagicMock()
+    provider.chat_stream = MagicMock(side_effect=AssertionError("LLM não deveria ser chamada"))
+    pipeline = pipeline_module.AssistantPipeline()
+    pipeline.llm = provider
+    pipeline._max_agent_steps_per_turn = 2
+    pipeline._load_turn_state = AsyncMock(return_value={
+        "status": "suspended",
+        "state": {
+            "steps_this_turn": 2,
+            "iterations": 2,
+            "completed_call_ids": ["call-1"],
+        },
+    })
+
+    events = []
+    async for event in pipeline.run_pipeline_stream(
+        "",
+        thread_id="thread-resume",
+        user_id="user-real-123",
+        tool_results=[{"call_id": "call-1", "name": "get_datetime", "result": "ok"}],
+        request_id="req-resume",
+    ):
+        events.append(event)
+
+    done = next(event for event in events if event.type == "done")
+    assert provider.chat_stream.call_count == 0
+    assert "Limite de passos" in done.data["reply"]

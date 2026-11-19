@@ -333,20 +333,37 @@ class AgentRuntime:
 
                 from core.execution.contracts import ToolCall
                 from core.execution.transport import get_transport
+                from tools.registry import ToolScope
 
                 user_id = self.working_memory.get_variable("user_id") or "default"
-                result = await get_transport().execute(
-                    ToolCall(
-                        call_id=f"call_{task.id}_{uuid.uuid4().hex[:8]}",
-                        name=task.tool,
-                        arguments=resolved_args,
-                    ),
-                    user_id=user_id,
-                    timeout=15.0,
-                )
-                tool_result = result.output
-                if result.status != "success":
-                    tool_result = f"Erro ({result.status}): {result.output}"
+                call_id = f"call_{task.id}_{uuid.uuid4().hex[:8]}"
+                if self.tools.get_scope(task.tool) == ToolScope.DEVICE:
+                    result = await get_transport().execute(
+                        ToolCall(
+                            call_id=call_id,
+                            name=task.tool,
+                            arguments=resolved_args,
+                        ),
+                        user_id=user_id,
+                        timeout=15.0,
+                    )
+                    result_status = result.status
+                    tool_result = result.output
+                else:
+                    # Tools CLOUD/HOME não dependem do host Windows do usuário.
+                    result = await self.tools.execute_structured(
+                        task.tool,
+                        resolved_args,
+                        prefer_remote=False,
+                        call_id=call_id,
+                        user_id=user_id,
+                        timeout=15.0,
+                    )
+                    result_status = result["status"]
+                    tool_result = result["output"]
+
+                if result_status != "success":
+                    tool_result = f"Erro ({result_status}): {tool_result}"
 
                 if self.multi_agent_coordinator:
                     self.multi_agent_coordinator.record_tool_used(AgentRole.EXECUTOR, task.tool)

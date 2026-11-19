@@ -181,3 +181,105 @@ async def test_turn_state_cannot_overwrite_other_tenant():
         )
 
     assert conn.execute.await_count == 0
+
+
+def test_sse_propagates_external_request_id_to_pipeline():
+    """O SSE e a retomada precisam usar o mesmo request_id persistido."""
+    from core.streaming import StreamEvent
+
+    captured = {}
+
+    class FakePipeline:
+        last_model_used = "gemini-test"
+        last_provider_used = "gemini"
+        last_fallback_used = False
+        last_fallback_reason = None
+        last_route_mode = "fast"
+        last_usage_metadata = {}
+        last_error_detail = None
+
+        async def run_pipeline_stream(self, user_text, **kwargs):
+            captured.update(kwargs)
+            yield StreamEvent(type="done", data={"reply": "ok"})
+
+    _reset_stores()
+    user_id = str(uuid.uuid4())
+    client = TestClient(app)
+    with (
+        patch("api.routes.chat.get_pipeline", return_value=FakePipeline()),
+        patch("api.routes.chat.get_or_init_db_pool", return_value=None),
+        patch("api.security.rate_limiter.rate_limiter.enforce", AsyncMock()),
+    ):
+        response = client.post(
+            "/api/chat/stream",
+            headers=_headers(user_id, "owner@example.com"),
+            json={"message": "Continuar", "request_id": "req-external"},
+        )
+
+    assert response.status_code == 200
+    assert captured["request_id"] == "req-external"
+
+
+@pytest.mark.asyncio
+async def test_foreign_thread_is_rejected_before_any_write_or_cache():
+    """Thread estrangeira não pode gerar INSERT/cache do invasor antes do 403."""
+    from api.services.chat_persistence import ensure_session_record
+
+    session_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    intruder_id = str(uuid.uuid4())
+    conn = AsyncMock()
+
+    async def fetchrow(query, *args):
+        if 'FROM "Thread"' in query:
+            return {
+                "userId": owner_id,
+                "userIdentifier": "owner@example.com",
+                "name": "Privado",
+            }
+        return None
+
+    conn.fetchrow.side_effect = fetchrow
+    conn.execute = AsyncMock()
+    _in_memory_sessions.pop(session_id, None)
+
+    with pytest.raises(PermissionError):
+        await ensure_session_record(
+            _pool_for(conn),
+            session_id=session_id,
+            user_id=intruder_id,
+            user_email="intruder@example.com",
+            prompt="Tentativa de acesso",
+        )
+
+    assert conn.execute.await_count == 0
+    assert session_id not in _in_memory_sessions
+
+
+@pytest.mark.asyncio
+async def test_turn_state_persists_budget_and_completed_call_ids():
+    """O estado salvo precisa permitir retomar sem reiniciar o orçamento."""
+    import json
+
+    pipeline = AssistantPipeline()
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=None)
+    pool = _pool_for(conn)
+
+    with patch("api.db.get_or_init_db_pool", AsyncMock(return_value=pool)):
+        await pipeline._persist_turn_state(
+            request_id="req-budget",
+            user_id=str(uuid.uuid4()),
+            thread_id=str(uuid.uuid4()),
+            memory=pipeline.memory,
+            status="suspended",
+            steps_this_turn=4,
+            iterations=3,
+            completed_call_ids={"call-b", "call-a"},
+        )
+
+    state_json = conn.execute.await_args.args[5]
+    state = json.loads(state_json)
+    assert state["steps_this_turn"] == 4
+    assert state["iterations"] == 3
+    assert state["completed_call_ids"] == ["call-a", "call-b"]

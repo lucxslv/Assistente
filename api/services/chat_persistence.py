@@ -204,6 +204,34 @@ async def ensure_session_record(
 
     try:
         async with _db_connection_scope(pool) as conn:
+            u_uuid = None
+            try:
+                u_uuid = uuid.UUID(u_id_str)
+            except (ValueError, TypeError):
+                pass
+
+            # 0. Valida Thread antes de qualquer escrita ou cache do chamador.
+            thread_row = None
+            try:
+                thread_row = await conn.fetchrow(
+                    'SELECT id, name, "userId", "userIdentifier" FROM "Thread" WHERE id = $1',
+                    s_uuid,
+                )
+                if thread_row:
+                    t_uid = str(thread_row.get("userId") or "").strip()
+                    t_uident = str(thread_row.get("userIdentifier") or "").strip()
+                    uid_mismatch = bool(t_uid and t_uid != u_id_str and (not u_uuid or t_uid != str(u_uuid)))
+                    uident_mismatch = bool(t_uident and t_uident != (user_email or "") and t_uident != u_id_str)
+                    if (t_uid and uid_mismatch) or (not t_uid and t_uident and uident_mismatch):
+                        logger.warning(
+                            f"[chat_persistence] Violação de titularidade em Thread: req={user_id}, owner={t_uid}/{t_uident}"
+                        )
+                        raise PermissionError("Acesso negado: esta conversa pertence a outro usuário.")
+            except PermissionError:
+                raise
+            except Exception as th_err:
+                logger.debug("Aviso não-crítico ao validar Thread: %s", th_err)
+
             # 1. chat_sessions
             existing = await conn.fetchrow("SELECT id, title, user_id FROM public.chat_sessions WHERE id = $1", s_uuid)
             if not existing:
@@ -234,27 +262,8 @@ async def ensure_session_record(
                         now, u_id_str, s_uuid
                     )
 
-            # Sincroniza espelho em memória após validação no banco
-            _in_memory_sessions[session_id] = {
-                "id": session_id,
-                "title": title,
-                "user_id": u_id_str,
-                "user_email": user_email,
-                "is_pinned": False,
-                "is_archived": False,
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-            }
-
             # 2. Sincroniza Thread para manter total compatibilidade com UI do Web Chat e Desktop
             try:
-                u_uuid = None
-                try:
-                    u_uuid = uuid.UUID(u_id_str)
-                except (ValueError, TypeError):
-                    pass
-
-                thread_row = await conn.fetchrow('SELECT id, name, "userId", "userIdentifier" FROM "Thread" WHERE id = $1', s_uuid)
                 if not thread_row:
                     await conn.execute(
                         """
@@ -265,19 +274,6 @@ async def ensure_session_record(
                         s_uuid, title, now, u_uuid, user_email
                     )
                 else:
-                    t_uid = str(thread_row.get("userId") or "").strip()
-                    t_uident = str(thread_row.get("userIdentifier") or "").strip()
-                    uid_mismatch = bool(t_uid and t_uid != u_id_str and (not u_uuid or t_uid != str(u_uuid)))
-                    uident_mismatch = bool(t_uident and t_uident != (user_email or "") and t_uident != u_id_str)
-                    # Se qualquer identificador de proprietário estiver preenchido e pertencer a outro usuário, bloqueia!
-                    # userId é o identificador canônico quando presente. Um userIdentifier
-                    # divergente/antigo não pode autorizar acesso ao Thread de outro UUID.
-                    if (t_uid and uid_mismatch) or (not t_uid and t_uident and uident_mismatch):
-                        logger.warning(
-                            f"[chat_persistence] Violação de titularidade em Thread: req={user_id}, owner={t_uid}/{t_uident}"
-                        )
-                        raise PermissionError("Acesso negado: esta conversa pertence a outro usuário.")
-
                     if thread_row["name"] in ("Nova Conversa", "Novo Chat", "Conversa sem título", None, "") and prompt and prompt.strip():
                         await conn.execute(
                             'UPDATE "Thread" SET name = $1, "updatedAt" = $2 WHERE id = $3',
@@ -292,6 +288,18 @@ async def ensure_session_record(
                 raise
             except Exception as th_err:
                 logger.debug("Aviso não-crítico ao sincronizar Thread: %s", th_err)
+
+            # Cache somente após todas as validações e a sincronização de Thread.
+            _in_memory_sessions[session_id] = {
+                "id": session_id,
+                "title": title,
+                "user_id": u_id_str,
+                "user_email": user_email,
+                "is_pinned": False,
+                "is_archived": False,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            }
 
     except PermissionError:
         raise

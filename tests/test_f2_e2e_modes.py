@@ -73,7 +73,7 @@ class MockChatStream:
 
 @pytest.mark.asyncio
 async def test_e2e_device_mode_turn_with_tool(monkeypatch):
-    """Device mode: full turn with CLOUD tool via LocalExecutor, emits tool_start/tool_end/done."""
+    """Device mode: CLOUD tool via registry, sem host remoto."""
     monkeypatch.setenv("CHARLIE_RUNTIME_MODE", "device")
     monkeypatch.delenv("VERCEL", raising=False)
     import importlib
@@ -119,11 +119,19 @@ async def test_e2e_device_mode_turn_with_tool(monkeypatch):
                 return MockChatStream([final_chunk])
         
         fake_provider.chat_stream = make_chat_stream
-        
+
         # Create pipeline with fake provider
         pipeline = AssistantPipeline()
         pipeline.llm = fake_provider
-        
+        pipeline.tools.execute_structured = AsyncMock(return_value={
+            "status": "success",
+            "output": "14:30:00",
+            "friendly_name": "Consultando data e hora",
+            "duration_ms": 10,
+            "error_type": None,
+            "is_recoverable": False,
+        })
+
         events = []
         events = []
         async for event in pipeline.run_pipeline_stream(
@@ -140,10 +148,11 @@ async def test_e2e_device_mode_turn_with_tool(monkeypatch):
         assert "done" in event_types
         assert "client_tool_request" not in event_types
         
-        # Verify tool_end has host_id
+        # CLOUD não depende de host; DEVICE é quem carrega host_id.
         tool_end_events = [e for e in events if e.type == "tool_end"]
         assert len(tool_end_events) == 1
-        assert tool_end_events[0].data.get("host_id") == "local"
+        assert tool_end_events[0].data.get("host_id") is None
+        assert pipeline.tools.execute_structured.await_count == 1
         
         # Verify final reply
         done_events = [e for e in events if e.type == "done"]
