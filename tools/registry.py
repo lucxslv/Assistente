@@ -845,16 +845,19 @@ class ToolRegistry:
         ]
         for pat in sensitive_patterns:
             if re.search(pat, clean_fact, re.IGNORECASE):
-                logger.warning(f"[SEGURANÇA] Bloqueada tentativa de memorizar credencial/segredo sensível.")
+                logger.warning("[SEGURANÇA] Bloqueada tentativa de memorizar credencial/segredo sensível.")
                 return "Segurança: O fato contém padrões de chaves, segredos ou senhas confidenciais e foi bloqueado para evitar vazamento em memória permanente."
 
         try:
             from api.routes.auth import current_user_id_var
-            uid = current_user_id_var.get()
+            uid = str(current_user_id_var.get() or "").strip()
         except Exception:
-            uid = "default"
+            uid = ""
+        if not uid or uid.lower() in {"default", "none", "null"}:
+            return "Erro: usuário autenticado é obrigatório para memorizar um fato."
 
         saved_via_pool = False
+        saved_via_fallback = False
         try:
             from api.db import get_or_init_db_pool
             from api.services.chat_persistence import save_user_memory_entry
@@ -867,11 +870,16 @@ class ToolRegistry:
 
         if not saved_via_pool:
             try:
-                db.add_memory(clean_fact, category=category, user_id=uid)
+                result = db.add_memory(clean_fact, category=category, user_id=uid)
+                saved_via_fallback = isinstance(result, dict) and result.get("action") in {
+                    "created", "reinforced", "superseded"
+                }
             except Exception as e:
                 logger.debug(f"Aviso sync db.add_memory: {e}")
 
-        return f"Fato memorizado com sucesso: {clean_fact}"
+        if saved_via_pool or saved_via_fallback:
+            return f"Fato memorizado com sucesso: {clean_fact}"
+        return "Erro: não foi possível memorizar o fato no banco de dados."
 
     async def _wrap_save_user_preference(self, key: str, value: str) -> str:
         clean_k = (key or "").strip().lower().replace(" ", "_")
@@ -881,25 +889,33 @@ class ToolRegistry:
 
         try:
             from api.routes.auth import current_user_id_var
-            uid = current_user_id_var.get()
+            uid = str(current_user_id_var.get() or "").strip()
         except Exception:
-            uid = "default"
+            uid = ""
+        if not uid or uid.lower() in {"default", "none", "null"}:
+            return "Erro: usuário autenticado é obrigatório para salvar uma preferência."
 
+        saved_via_pool = False
+        saved_via_fallback = False
         try:
             from api.db import get_or_init_db_pool
             from api.services.chat_persistence import save_user_preference_entry
             pool = await get_or_init_db_pool()
             if pool:
-                await save_user_preference_entry(pool, user_id=uid, key=clean_k, value=clean_v)
+                res_id = await save_user_preference_entry(pool, user_id=uid, key=clean_k, value=clean_v)
+                saved_via_pool = bool(res_id)
         except Exception as e:
             logger.warning(f"Erro ao salvar preferência assíncrona: {e}")
 
-        try:
-            db.set_preference(clean_k, clean_v, user_id=uid)
-        except Exception as e:
-            logger.debug(f"Aviso sync db.set_preference: {e}")
+        if not saved_via_pool:
+            try:
+                saved_via_fallback = bool(db.set_preference(clean_k, clean_v, user_id=uid))
+            except Exception as e:
+                logger.debug(f"Aviso sync db.set_preference: {e}")
 
-        return f"Preferência salva com sucesso: {clean_k} = {clean_v}"
+        if saved_via_pool or saved_via_fallback:
+            return f"Preferência salva com sucesso: {clean_k} = {clean_v}"
+        return "Erro: não foi possível salvar a preferência no banco de dados."
 
     async def _wrap_memorize_fact(self, fact: str) -> str:
         return await self._wrap_save_user_memory(fact=fact, category="general")

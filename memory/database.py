@@ -50,6 +50,9 @@ class MemoryDatabase:
         content = content.strip()
         if not content:
             return {"action": "ignored", "reason": "empty_content"}
+        if not str(user_id or "").strip() or str(user_id).strip().lower() in {"default", "none", "null"}:
+            logger.warning("[MemoryDB] Escrita bloqueada: user_id real obrigatório.")
+            return {"action": "error", "error": "user_id_required"}
 
         meta = metadata or {}
         embedding = generate_embedding(content)
@@ -149,9 +152,9 @@ class MemoryDatabase:
             logger.error(f"[MemoryDB] Erro ao salvar/reforçar memória: {e}")
             return {"action": "error", "error": str(e)}
 
-    def add_fact(self, fact: str, user_id: str = "default") -> None:
+    def add_fact(self, fact: str, user_id: str = "default") -> Dict[str, Any]:
         """Compatibilidade reversa: adiciona fato genérico."""
-        self.add_or_reinforce_memory(
+        return self.add_or_reinforce_memory(
             content=fact,
             memory_type="semantic_fact",
             importance=0.6,
@@ -159,10 +162,10 @@ class MemoryDatabase:
             user_id=user_id,
         )
 
-    def add_memory(self, content: str, category: str = "fact", user_id: str = "default") -> None:
+    def add_memory(self, content: str, category: str = "fact", user_id: str = "default") -> Dict[str, Any]:
         """Compatibilidade reversa: adiciona memória por categoria."""
         m_type = "episodic_event" if category == "event" else f"semantic_{category}"
-        self.add_or_reinforce_memory(
+        return self.add_or_reinforce_memory(
             content=content,
             memory_type=m_type,
             importance=0.65,
@@ -243,8 +246,11 @@ class MemoryDatabase:
 
     # ================= Preferências Chave-Valor =================
 
-    def set_preference(self, key: str, value: str, user_id: str = "default") -> None:
+    def set_preference(self, key: str, value: str, user_id: str = "default") -> bool:
         """Salva ou atualiza uma preferência rápida do usuário."""
+        if not str(user_id or "").strip() or str(user_id).strip().lower() in {"default", "none", "null"}:
+            logger.warning("[MemoryDB] Preferência bloqueada: user_id real obrigatório.")
+            return False
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
@@ -258,8 +264,10 @@ class MemoryDatabase:
                         (user_id, key, value),
                     )
                     logger.info("Preferência atualizada: %s = %s", key, value)
+                    return True
         except Exception as e:
             logger.error("Erro ao salvar preferência no Supabase: %s", e)
+            return False
 
     def get_all_preferences(self, user_id: str = "default") -> Dict[str, str]:
         """Retorna todas as preferências salvas do usuário."""

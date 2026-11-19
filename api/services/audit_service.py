@@ -823,7 +823,7 @@ async def get_audit_users_summary() -> List[Dict[str, Any]]:
                         SELECT
                             COALESCE(p.user_id, u.id::text) as user_id,
                             COALESCE(p.email, u.email) as user_email,
-                            COALESCE(p.name, '') as name,
+                            COALESCE(p.display_name, '') as name,
                             COALESCE(p.username, '') as username,
                             COALESCE(p.is_suspended, FALSE) as is_suspended,
                             p.suspended_reason,

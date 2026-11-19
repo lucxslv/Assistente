@@ -264,7 +264,9 @@ async def ensure_session_record(
                     uid_mismatch = bool(t_uid and t_uid != u_id_str and (not u_uuid or t_uid != str(u_uuid)))
                     uident_mismatch = bool(t_uident and t_uident != (user_email or "") and t_uident != u_id_str)
                     # Se qualquer identificador de proprietário estiver preenchido e pertencer a outro usuário, bloqueia!
-                    if (t_uid and uid_mismatch and (not t_uident or uident_mismatch)) or (not t_uid and t_uident and uident_mismatch):
+                    # userId é o identificador canônico quando presente. Um userIdentifier
+                    # divergente/antigo não pode autorizar acesso ao Thread de outro UUID.
+                    if (t_uid and uid_mismatch) or (not t_uid and t_uident and uident_mismatch):
                         logger.warning(
                             f"[chat_persistence] Violação de titularidade em Thread: req={user_id}, owner={t_uid}/{t_uident}"
                         )
@@ -673,6 +675,9 @@ async def save_user_memory_entry(
     """Salva um fato ou conhecimento duradouro sobre o usuário na tabela UserMemory com deduplicação semântica e filtro estrito de relevância."""
     if not pool or not fact or not fact.strip():
         return ""
+    if not str(user_id or "").strip() or str(user_id).strip().lower() in {"default", "none", "null"}:
+        logger.warning("[chat_persistence] Gravação de memória bloqueada: user_id real obrigatório.")
+        return ""
 
     clean_fact = fact.strip()
     cat = (category or "general").strip()
@@ -810,6 +815,9 @@ async def save_user_preference_entry(
 ) -> str:
     """Salva ou atualiza uma preferência do usuário na tabela UserPreference."""
     if not pool or not key or not value:
+        return ""
+    if not str(user_id or "").strip() or str(user_id).strip().lower() in {"default", "none", "null"}:
+        logger.warning("[chat_persistence] Gravação de preferência bloqueada: user_id real obrigatório.")
         return ""
 
     k = key.strip().lower().replace(" ", "_")
