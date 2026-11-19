@@ -151,13 +151,24 @@ def _split_message_and_embedded_attachments(
     return clean_msg, all_attachments, llm_prompt
 
 
-async def _load_thread_history(thread_id: str, limit: int = 30, user_id: Optional[str] = None) -> list[dict]:
+async def _load_thread_history(
+    thread_id: str,
+    limit: int = 30,
+    user_id: Optional[str] = None,
+    user_email: Optional[str] = None,
+) -> list[dict]:
     """Carrega o histórico real de mensagens da conversa (chat_messages com validação de titularidade)."""
     if not thread_id:
         return []
     pool = await get_or_init_db_pool()
     from api.services.chat_persistence import load_chat_history
-    return await load_chat_history(pool, thread_id, limit=limit, user_id=user_id)
+    return await load_chat_history(
+        pool,
+        thread_id,
+        limit=limit,
+        user_id=user_id,
+        user_email=user_email,
+    )
 
 
 def _dispatch_save_message(
@@ -396,7 +407,9 @@ async def chat_post(
         skip_user_message_save=req.skip_user_message_save,
     )
 
-    thread_history = await _load_thread_history(thread_id, user_id=uid)
+    thread_history = await _load_thread_history(
+        thread_id, user_id=uid, user_email=user.get("email")
+    )
     if not thread_history and req.history:
         thread_history = req.history
 
@@ -514,7 +527,9 @@ async def chat_stream_sse(
         skip_user_message_save=req.skip_user_message_save,
     )
 
-    thread_history = await _load_thread_history(thread_id, user_id=uid)
+    thread_history = await _load_thread_history(
+        thread_id, user_id=uid, user_email=user.get("email")
+    )
     if not thread_history and req.history:
         thread_history = req.history
 
@@ -572,6 +587,7 @@ async def chat_stream_sse(
                 "tool_results": req.tool_results,
                 "history": thread_history,
                 "images": req.images,
+                "request_id": req_id,
             }
             try:
                 sig = inspect.signature(pipeline.run_pipeline_stream)
@@ -819,7 +835,9 @@ async def chat_ws(websocket: WebSocket):
                     continue
                 presence_manager.register_or_heartbeat(client_id=client_id, active_thread_id=thread_id)
 
-                thread_history = await _load_thread_history(thread_id, user_id=uid)
+                thread_history = await _load_thread_history(
+                    thread_id, user_id=uid, user_email=ws_user.get("email")
+                )
                 if not thread_history and data.get("history"):
                     thread_history = data.get("history")
 

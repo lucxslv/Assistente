@@ -130,9 +130,15 @@ async def ensure_chat_persistence_schema(pool: asyncpg.Pool) -> None:
                 CREATE INDEX IF NOT EXISTS idx_message_feedback_rating ON public.message_feedback(rating, created_at DESC);
             """)
 
-            # 4. Garante colunas e índices de UserMemory e UserPreference
+            # 4. Garante colunas e índices usados pelas consultas de memória.
             await conn.execute("""
                 ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS fact TEXT;
+                ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS memory_type TEXT NOT NULL DEFAULT 'semantic_fact';
+                ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS confidence FLOAT NOT NULL DEFAULT 0.8;
+                ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS importance FLOAT NOT NULL DEFAULT 0.5;
+                ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS last_confirmed_at TIMESTAMPTZ;
+                ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+                ALTER TABLE public."UserMemory" ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
                 CREATE INDEX IF NOT EXISTS idx_usermemory_user_id_created ON public."UserMemory"(user_id, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_userpreference_user_id ON public."UserPreference"(user_id);
             """)
@@ -915,6 +921,7 @@ async def load_chat_history(
     session_id: str,
     limit: int = 30,
     user_id: Optional[str] = None,
+    user_email: Optional[str] = None,
 ) -> list[dict]:
     """Carrega o histórico real de mensagens com validação de titularidade do usuário."""
     if not session_id:
@@ -927,7 +934,7 @@ async def load_chat_history(
 
     if not pool:
         mem_sess = _in_memory_sessions.get(session_id)
-        if user_id and mem_sess and mem_sess.get("user_id") and mem_sess["user_id"] != str(user_id):
+        if user_id and mem_sess and mem_sess.get("user_id") and str(mem_sess["user_id"]) not in {str(user_id), str(user_email or "")}:
             logger.warning(
                 f"[chat_persistence] Tentativa de ler histórico em memória de outro usuário: sess={session_id}, req_user={user_id}, owner={mem_sess['user_id']}"
             )
@@ -954,7 +961,7 @@ async def load_chat_history(
                     "SELECT user_id FROM public.chat_sessions WHERE id = $1",
                     s_uuid
                 )
-                if sess_owner and sess_owner["user_id"] and sess_owner["user_id"] != str(user_id):
+                if sess_owner and sess_owner["user_id"] and str(sess_owner["user_id"]) not in {str(user_id), str(user_email or "")}:
                     logger.warning(
                         f"[chat_persistence] Tentativa de ler histórico de outro usuário: sess={session_id}, req_user={user_id}, owner={sess_owner['user_id']}"
                     )
@@ -1007,6 +1014,7 @@ async def search_user_chat_history(
     query: str,
     exclude_session_id: Optional[str] = None,
     limit: int = 5,
+    user_email: Optional[str] = None,
 ) -> list[dict]:
     """Busca mensagens e conversas passadas do usuário em outros chats.
     Filtra estritamente por user_id garantindo isolamento total multi-tenant.
@@ -1020,6 +1028,7 @@ async def search_user_chat_history(
         limit = 5
 
     clean_q = query.strip()
+    owner_ids = list(dict.fromkeys([str(user_id), str(user_email or "")]))
     exc_uuid = None
     if exclude_session_id:
         try:
@@ -1041,14 +1050,14 @@ async def search_user_chat_history(
                     m.created_at
                 FROM public.chat_messages m
                 LEFT JOIN public.chat_sessions s ON m.session_id = s.id
-                WHERE (m.user_id = $1 OR s.user_id = $1)
+                WHERE (m.user_id = ANY($1) OR s.user_id = ANY($1))
                   AND ($2::uuid IS NULL OR m.session_id != $2::uuid)
                   AND (m.content ILIKE $3 OR s.title ILIKE $3)
                   AND m.role IN ('user', 'assistant')
                 ORDER BY m.created_at DESC
                 LIMIT $4
                 """,
-                str(user_id), exc_uuid, pattern, limit
+                owner_ids, exc_uuid, pattern, limit
             )
 
             # Se não encontrou por frase exata, tenta buscar por palavras-chave principais
@@ -1069,14 +1078,14 @@ async def search_user_chat_history(
                             m.created_at
                         FROM public.chat_messages m
                         LEFT JOIN public.chat_sessions s ON m.session_id = s.id
-                        WHERE (m.user_id = $1 OR s.user_id = $1)
+                        WHERE (m.user_id = ANY($1) OR s.user_id = ANY($1))
                           AND ($2::uuid IS NULL OR m.session_id != $2::uuid)
                           AND (m.content ILIKE ANY($3) OR s.title ILIKE ANY($3))
                           AND m.role IN ('user', 'assistant')
                         ORDER BY m.created_at DESC
                         LIMIT $4
                         """,
-                        str(user_id), exc_uuid, kw_patterns, limit
+                        owner_ids, exc_uuid, kw_patterns, limit
                     )
 
             results = []
@@ -1106,14 +1115,14 @@ async def search_user_chat_history(
                             st."createdAt" as created_at
                         FROM "Step" st
                         JOIN "Thread" th ON st."threadId" = th.id
-                        WHERE (th."userId"::text = $1 OR th."userIdentifier" = $1)
+                        WHERE (th."userId"::text = ANY($1) OR th."userIdentifier" = ANY($1))
                           AND ($2::uuid IS NULL OR st."threadId" != $2::uuid)
                           AND (st.output ILIKE $3 OR th.name ILIKE $3)
                           AND st.type IN ('user_message', 'assistant_message')
                         ORDER BY st."createdAt" DESC
                         LIMIT $4
                         """,
-                        str(user_id), exc_uuid, pattern, needed
+                        owner_ids, exc_uuid, pattern, needed
                     )
                     for r in s_rows:
                         c = (r["content"] or "").strip()
@@ -1141,6 +1150,7 @@ async def get_chat_session_details(
     session_id: Optional[str] = None,
     session_title: Optional[str] = None,
     limit: int = 15,
+    user_email: Optional[str] = None,
 ) -> dict:
     """Recupera mensagens de uma sessão/chat específico do usuário por ID ou por busca no título."""
     if not pool or not user_id:
@@ -1153,6 +1163,7 @@ async def get_chat_session_details(
 
     target_sid = None
     target_title = None
+    owner_ids = list(dict.fromkeys([str(user_id), str(user_email or "")]))
 
     try:
         async with _db_connection_scope(pool) as conn:
@@ -1160,8 +1171,8 @@ async def get_chat_session_details(
                 try:
                     s_uuid = uuid.UUID(str(session_id).strip())
                     s_row = await conn.fetchrow(
-                        "SELECT id, title, created_at FROM public.chat_sessions WHERE id = $1 AND user_id = $2",
-                        s_uuid, str(user_id)
+                        "SELECT id, title, created_at FROM public.chat_sessions WHERE id = $1 AND user_id = ANY($2)",
+                        s_uuid, owner_ids
                     )
                     if s_row:
                         target_sid = s_row["id"]
@@ -1175,10 +1186,10 @@ async def get_chat_session_details(
                     """
                     SELECT id, title, created_at 
                     FROM public.chat_sessions 
-                    WHERE user_id = $1 AND title ILIKE $2 
+                    WHERE user_id = ANY($1) AND title ILIKE $2
                     ORDER BY updated_at DESC LIMIT 1
                     """,
-                    str(user_id), t_pat
+                    owner_ids, t_pat
                 )
                 if s_row:
                     target_sid = s_row["id"]
@@ -1188,7 +1199,13 @@ async def get_chat_session_details(
                 return {}
 
             # Carrega mensagens
-            msgs = await load_chat_history(pool, str(target_sid), limit=limit)
+            msgs = await load_chat_history(
+                pool,
+                str(target_sid),
+                limit=limit,
+                user_id=user_id,
+                user_email=user_email,
+            )
             return {
                 "session_id": str(target_sid),
                 "title": target_title or "Conversa",
@@ -1393,6 +1410,38 @@ async def save_message_feedback_record(
     now = datetime.datetime.now(datetime.timezone.utc)
     now_iso = now.isoformat()
     clean_comment = (comment or "").strip()[:1000] or None
+
+    # Valida mensagem ↔ sessão ↔ usuário antes de qualquer escrita ou cache.
+    if pool:
+        try:
+            m_uuid = uuid.UUID(str(message_id))
+            s_uuid = uuid.UUID(str(session_id))
+        except (ValueError, TypeError):
+            raise PermissionError("Mensagem ou conversa inválida para feedback.")
+        async with _db_connection_scope(pool) as conn:
+            owns_message = await conn.fetchval(
+                """
+                SELECT 1
+                FROM public.chat_messages m
+                JOIN public.chat_sessions s ON s.id = m.session_id
+                WHERE m.id = $1 AND m.session_id = $2
+                  AND (m.user_id = $3 OR s.user_id = $3)
+                LIMIT 1
+                """,
+                m_uuid,
+                s_uuid,
+                u_id_str,
+            )
+        if not owns_message:
+            raise PermissionError("Você não tem permissão para avaliar esta mensagem.")
+    else:
+        session = _in_memory_sessions.get(session_id)
+        message_exists = any(
+            str(m.get("id")) == str(message_id) and str(m.get("user_id")) == u_id_str
+            for m in _in_memory_messages.get(session_id, [])
+        )
+        if not session or str(session.get("user_id")) != u_id_str or not message_exists:
+            raise PermissionError("Você não tem permissão para avaliar esta mensagem.")
 
     key = f"{message_id}:{u_id_str}"
     entry = {

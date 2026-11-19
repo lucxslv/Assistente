@@ -928,10 +928,12 @@ class ToolRegistry:
         if not clean_q:
             return "Erro: O termo de busca não pode ser vazio."
         try:
-            from api.routes.auth import current_user_id_var
+            from api.routes.auth import current_user_email_var, current_user_id_var
             uid = current_user_id_var.get()
+            uemail = current_user_email_var.get()
         except Exception:
             uid = "default"
+            uemail = ""
 
         current_sid = None
         try:
@@ -956,6 +958,7 @@ class ToolRegistry:
                     query=clean_q,
                     exclude_session_id=current_sid,
                     limit=int_limit,
+                    user_email=uemail,
                 )
                 if not results:
                     return f"Nenhuma mensagem encontrada nos outros chats para a busca '{clean_q}'."
@@ -985,10 +988,12 @@ class ToolRegistry:
             int_limit = 12
 
         try:
-            from api.routes.auth import current_user_id_var
+            from api.routes.auth import current_user_email_var, current_user_id_var
             uid = current_user_id_var.get()
+            uemail = current_user_email_var.get()
         except Exception:
             uid = "default"
+            uemail = ""
 
         try:
             from api.db import get_or_init_db_pool
@@ -1001,6 +1006,7 @@ class ToolRegistry:
                     session_id=session_id,
                     session_title=session_title,
                     limit=int_limit,
+                    user_email=uemail,
                 )
                 if not res or not res.get("messages"):
                     return f"Não foi possível encontrar mensagens para a sessão indicada."

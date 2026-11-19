@@ -696,7 +696,7 @@ async def register(data: RegisterRequest, request: Request, response: Response):
             detail="Serviço de autenticação temporariamente indisponível. Tente novamente em instantes.",
         )
 
-    user_id = signup_res.get("id") or signup_res.get("user", {}).get("id") or str(uuid.uuid4())
+    user_id = signup_res.get("id") or signup_res.get("user", {}).get("id")
 
     # 2. Obtém o token de sessão
     token = signup_res.get("access_token")
@@ -722,6 +722,12 @@ async def register(data: RegisterRequest, request: Request, response: Response):
         except Exception as e:
             logger.warning(f"Aviso ao autenticar após registro ({type(e).__name__}); emitindo sessão local.")
             token = None
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível confirmar a identidade da conta. Tente novamente.",
+        )
 
     from api.routes.admin import is_admin_email
     is_adm = is_admin_email(clean_email)
@@ -1065,9 +1071,22 @@ async def forgot_password(data: ForgotPasswordRequest, request: Request):
     expires_at_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=15)
     client_ip = rate_limiter._get_client_ip(request)
 
-    # Identifica user_id se já conhecido
+    # Resolve o UUID canônico; e-mail nunca deve virar user_id.
     prof = _in_memory_profiles.get(clean_email)
-    user_id = str(prof["user_id"]) if prof and prof.get("user_id") else clean_email
+    pool = await get_or_init_db_pool()
+    user_id = str(prof["user_id"]) if prof and prof.get("user_id") else None
+    if not user_id and pool:
+        async with pool.acquire() as conn:
+            profile_row = await conn.fetchrow(
+                "SELECT user_id FROM public.user_profiles WHERE LOWER(email) = $1 LIMIT 1",
+                clean_email,
+            )
+        if profile_row and profile_row.get("user_id"):
+            user_id = str(profile_row["user_id"])
+
+    if not user_id:
+        logger.info("Recuperação solicitada sem identidade canônica resolvida.")
+        return generic_response
 
     # Invalida tokens anteriores não utilizados do mesmo e-mail em memória
     for old_hash, rec in list(_in_memory_reset_tokens.items()):
@@ -1083,7 +1102,6 @@ async def forgot_password(data: ForgotPasswordRequest, request: Request):
         "request_ip": client_ip,
     }
 
-    pool = await get_or_init_db_pool()
     if pool:
         try:
             async with pool.acquire() as conn:
@@ -1199,7 +1217,12 @@ async def reset_password(data: ResetPasswordRequest, request: Request):
     assert target_email is not None
     pw_hash = _hash_password(new_password)
     existing_prof = _in_memory_profiles.get(target_email) or {}
-    uid = existing_prof.get("user_id") or target_user_id or str(uuid.uuid4())
+    uid = existing_prof.get("user_id") or target_user_id
+    if not uid or "@" in str(uid):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não foi possível vincular a recuperação à identidade da conta.",
+        )
     display_name = existing_prof.get("display_name") or target_email.split("@")[0]
     role = existing_prof.get("role") or "user"
 

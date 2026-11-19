@@ -14,10 +14,7 @@ DROP TABLE IF EXISTS device_pending_commands;
 DROP TABLE IF EXISTS device_pairing_sessions;
 DROP TABLE IF EXISTS device_authorized_devices;
 
--- Remove colunas user_id legadas (default hardcoded) que migrações anteriores adicionaram
-ALTER TABLE "Thread" DROP COLUMN IF EXISTS "userId";
-ALTER TABLE "UserMemory" DROP COLUMN IF EXISTS user_id;
-ALTER TABLE "UserPreference" DROP COLUMN IF EXISTS user_id;
+-- Colunas de tenant de Thread/UserMemory/UserPreference são preservadas.
 
 -- Remove índices legados
 DROP INDEX IF EXISTS idx_device_cmd_pending;

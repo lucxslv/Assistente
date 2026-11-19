@@ -22,12 +22,27 @@ CREATE TABLE IF NOT EXISTS "UserMemory" (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL DEFAULT 'default',
     content TEXT NOT NULL,
+    fact TEXT,
     category TEXT NOT NULL DEFAULT 'fact',
+    memory_type TEXT NOT NULL DEFAULT 'semantic_fact',
+    confidence FLOAT NOT NULL DEFAULT 0.8,
+    importance FLOAT NOT NULL DEFAULT 0.5,
     embedding vector(768),
     metadata JSONB DEFAULT '{}'::jsonb,
+    last_confirmed_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Completa instalações antigas sem apagar dados existentes.
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS fact TEXT;
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS memory_type TEXT NOT NULL DEFAULT 'semantic_fact';
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS confidence FLOAT NOT NULL DEFAULT 0.8;
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS importance FLOAT NOT NULL DEFAULT 0.5;
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS last_confirmed_at TIMESTAMPTZ;
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+ALTER TABLE "UserMemory" ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
 -- Índice HNSW para busca semântica ultrarrápida
 CREATE INDEX IF NOT EXISTS "idx_user_memory_embedding" 
@@ -48,18 +63,25 @@ CREATE TABLE IF NOT EXISTS "UserPreference" (
     CONSTRAINT "uq_user_preference_key" UNIQUE (user_id, key)
 );
 
--- 4. Função RPC para busca semântica por similaridade de cosseno
+-- 4. RPC alinhada aos consumidores Python. O DROP é necessário porque o
+-- Postgres não permite CREATE OR REPLACE mudando o tipo de retorno.
+DROP FUNCTION IF EXISTS match_memories(vector, double precision, integer, text);
 CREATE OR REPLACE FUNCTION match_memories(
     query_embedding vector(768),
-    match_threshold float DEFAULT 0.3,
-    match_count int DEFAULT 5,
-    p_user_id text DEFAULT 'default'
+    match_threshold FLOAT DEFAULT 0.3,
+    match_count INT DEFAULT 5,
+    p_user_id TEXT DEFAULT 'default'
 )
 RETURNS TABLE (
-    id uuid,
-    content text,
-    category text,
-    similarity float
+    id UUID,
+    content TEXT,
+    category TEXT,
+    similarity FLOAT,
+    memory_type TEXT,
+    confidence FLOAT,
+    importance FLOAT,
+    metadata JSONB,
+    created_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
 AS $$
@@ -69,7 +91,12 @@ BEGIN
         m.id,
         m.content,
         m.category,
-        (1 - (m.embedding <=> query_embedding))::float AS similarity
+        (1 - (m.embedding <=> query_embedding))::FLOAT AS similarity,
+        m.memory_type,
+        m.confidence,
+        m.importance,
+        m.metadata,
+        m.created_at
     FROM "UserMemory" m
     WHERE m.user_id = p_user_id
       AND m.embedding IS NOT NULL

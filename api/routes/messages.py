@@ -51,14 +51,7 @@ async def list_messages(
     except Exception:
         pass
 
-    await recover_stale_in_progress_messages(
-        pool,
-        session_id=thread_id,
-        active_request_ids=active_req_ids,
-        stale_after_seconds=0.0,
-    )
-
-    feedback_map = await get_message_feedback_map(pool, thread_id, u_id_str)
+    feedback_map = {}
 
     if not pool:
         mem_sess = _in_memory_sessions.get(thread_id)
@@ -69,6 +62,13 @@ async def list_messages(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversa não encontrada ou acesso negado.",
             )
+        await recover_stale_in_progress_messages(
+            pool,
+            session_id=thread_id,
+            active_request_ids=active_req_ids,
+            stale_after_seconds=0.0,
+        )
+        feedback_map = await get_message_feedback_map(pool, thread_id, u_id_str)
         mem_msgs = _in_memory_messages.get(thread_id, [])
         return [
             {
@@ -122,6 +122,15 @@ async def list_messages(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Conversa não encontrada ou acesso negado.",
                 )
+
+        # Recuperação e feedback só acontecem depois de validar a titularidade.
+        await recover_stale_in_progress_messages(
+            pool,
+            session_id=thread_id,
+            active_request_ids=active_req_ids,
+            stale_after_seconds=0.0,
+        )
+        feedback_map = await get_message_feedback_map(pool, thread_id, u_id_str)
 
         # 1. Prioriza leitura completa das mensagens em chat_messages
         try:
@@ -273,12 +282,15 @@ async def submit_message_feedback(
         raise HTTPException(status_code=400, detail="O campo 'rating' deve ser 1/'up' (positivo) ou -1/'down' (negativo).")
 
     pool = await get_or_init_db_pool()
-    entry = await save_message_feedback_record(
-        pool=pool,
-        message_id=message_id,
-        session_id=payload.thread_id,
-        user_id=str(user["id"]),
-        rating=norm_rating,
-        comment=payload.comment,
-    )
+    try:
+        entry = await save_message_feedback_record(
+            pool=pool,
+            message_id=message_id,
+            session_id=payload.thread_id,
+            user_id=str(user["id"]),
+            rating=norm_rating,
+            comment=payload.comment,
+        )
+    except PermissionError as pe:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(pe))
     return {**entry, "status": "ok", "feedback": entry}

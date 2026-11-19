@@ -293,6 +293,7 @@ async def start_mission(
     updated = await advance_session(
         pool=pool,
         session_id=session.id,
+        user_id=user_id,
         tool_results=None,
         permission_resolved=None,
     )
@@ -303,6 +304,7 @@ async def start_mission(
 async def advance_session(
     pool,
     session_id: str,
+    user_id: str,
     tool_results: Optional[List] = None,
     permission_resolved: Optional[dict] = None,
 ) -> AgentSession:
@@ -318,7 +320,7 @@ async def advance_session(
         AgentSession atualizada
     """
     # Carrega sessão
-    session = await load_session(pool, session_id)
+    session = await load_session(pool, session_id, user_id)
     if not session:
         raise ValueError(f"Session {session_id} not found")
     

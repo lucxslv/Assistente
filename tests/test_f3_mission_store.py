@@ -44,6 +44,7 @@ class TestMissionStore:
             completed_at=None
         )
 
+        mock_conn.fetchrow = AsyncMock(return_value=None)
         await save_session(mock_pool, session)
 
         # Mock fetchrow for load_session
@@ -61,7 +62,7 @@ class TestMissionStore:
         }
         mock_conn.fetchrow = AsyncMock(return_value=mock_row)
 
-        loaded = await load_session(mock_pool, "test-session-1")
+        loaded = await load_session(mock_pool, "test-session-1", "user-123")
 
         assert loaded is not None
         assert loaded.id == session.id
@@ -112,7 +113,7 @@ class TestMissionStore:
         mock_conn = AsyncMock()
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
 
-        await update_session_state(mock_pool, "test-session", {"step": 2}, {"nodes": ["t1"]})
+        await update_session_state(mock_pool, "test-session", "user-123", {"step": 2}, {"nodes": ["t1"]})
 
         # Verifica que ambos foram passados no execute
         call_args = mock_conn.execute.call_args
@@ -131,7 +132,7 @@ class TestMissionStore:
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
-        loaded = await load_session(mock_pool, "nonexistent")
+        loaded = await load_session(mock_pool, "nonexistent", "user-123")
         assert loaded is None
 
     @pytest.mark.asyncio
@@ -143,7 +144,7 @@ class TestMissionStore:
         mock_conn = AsyncMock()
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
 
-        await mark_session_status(mock_pool, "test-session", "completed")
+        await mark_session_status(mock_pool, "test-session", "user-123", "completed")
 
         call_args = mock_conn.execute.call_args
         args = call_args[0]
@@ -160,7 +161,7 @@ class TestMissionStore:
         mock_conn = AsyncMock()
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
 
-        await mark_session_status(mock_pool, "test-session", "running")
+        await mark_session_status(mock_pool, "test-session", "user-123", "running")
 
         call_args = mock_conn.execute.call_args
         args = call_args[0]
@@ -198,7 +199,7 @@ class TestMissionStore:
         }
         mock_conn.fetch = AsyncMock(return_value=[mock_row])
 
-        perms = await get_pending_permissions(mock_pool, "session-1")
+        perms = await get_pending_permissions(mock_pool, "session-1", "user-123")
         assert len(perms) == 1
         assert perms[0].id == "perm-1"
         assert perms[0].tool == "execute_command"
@@ -213,7 +214,7 @@ class TestMissionStore:
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
         mock_conn.execute = AsyncMock(return_value="UPDATE 1")
 
-        result = await resolve_permission(mock_pool, "perm-1", True, "user-123")
+        result = await resolve_permission(mock_pool, "perm-1", True, "user-123", "user-123")
         assert result is True
 
     @pytest.mark.asyncio
@@ -226,5 +227,5 @@ class TestMissionStore:
         mock_pool.acquire = MagicMock(return_value=AsyncContextManagerMock(mock_conn))
         mock_conn.execute = AsyncMock(return_value="UPDATE 0")
 
-        result = await resolve_permission(mock_pool, "perm-1", True, "user-123")
+        result = await resolve_permission(mock_pool, "perm-1", True, "user-123", "user-123")
         assert result is False

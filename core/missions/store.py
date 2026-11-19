@@ -28,13 +28,17 @@ async def save_session(pool: asyncpg.Pool, session: AgentSession) -> None:
     """Upsert de sessão de missão."""
     graph_json = await _serialize_for_json(session.graph_json)
     state_json = await _serialize_for_json(session.state_json)
-    
+
     async with pool.acquire() as conn:
+        existing = await conn.fetchrow(
+            "SELECT user_id FROM agent_sessions WHERE id = $1", session.id
+        )
+        if existing and str(existing["user_id"]) != str(session.user_id):
+            raise PermissionError("Esta missão pertence a outro usuário.")
         await conn.execute("""
             INSERT INTO agent_sessions (id, user_id, thread_id, goal, status, graph_json, state_json, created_at, updated_at, completed_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (id) DO UPDATE SET
-                user_id = EXCLUDED.user_id,
                 thread_id = EXCLUDED.thread_id,
                 goal = EXCLUDED.goal,
                 status = EXCLUDED.status,
@@ -48,13 +52,13 @@ async def save_session(pool: asyncpg.Pool, session: AgentSession) -> None:
     logger.debug(f"Sessão salva: {session.id} ({session.status})")
 
 
-async def load_session(pool: asyncpg.Pool, session_id: str) -> Optional[AgentSession]:
-    """Carrega sessão de missão por ID."""
+async def load_session(pool: asyncpg.Pool, session_id: str, user_id: str) -> Optional[AgentSession]:
+    """Carrega sessão somente quando o dono autenticado coincide."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             SELECT id, user_id, thread_id, goal, status, graph_json, state_json, created_at, updated_at, completed_at
-            FROM agent_sessions WHERE id = $1
-        """, session_id)
+            FROM agent_sessions WHERE id = $1 AND user_id = $2
+        """, session_id, user_id)
         if not row:
             return None
         return AgentSession(
@@ -104,7 +108,7 @@ async def list_user_sessions(pool: asyncpg.Pool, user_id: str, status: Optional[
         ]
 
 
-async def update_session_state(pool: asyncpg.Pool, session_id: str, state_json: Dict[str, Any], graph_json: Optional[Dict[str, Any]] = None) -> None:
+async def update_session_state(pool: asyncpg.Pool, session_id: str, user_id: str, state_json: Dict[str, Any], graph_json: Optional[Dict[str, Any]] = None) -> None:
     """Atualiza estado (e opcionalmente grafo) da sessão."""
     state_json_serialized = await _serialize_for_json(state_json)
     
@@ -113,25 +117,25 @@ async def update_session_state(pool: asyncpg.Pool, session_id: str, state_json: 
             graph_json_serialized = await _serialize_for_json(graph_json)
             await conn.execute("""
                 UPDATE agent_sessions SET state_json = $1, graph_json = $2, updated_at = NOW()
-                WHERE id = $3
-            """, json.dumps(state_json_serialized), json.dumps(graph_json_serialized), session_id)
+                WHERE id = $3 AND user_id = $4
+            """, json.dumps(state_json_serialized), json.dumps(graph_json_serialized), session_id, user_id)
         else:
             await conn.execute("""
                 UPDATE agent_sessions SET state_json = $1, updated_at = NOW()
-                WHERE id = $2
-            """, json.dumps(state_json_serialized), session_id)
+                WHERE id = $2 AND user_id = $3
+            """, json.dumps(state_json_serialized), session_id, user_id)
     logger.debug(f"Estado da sessão atualizado: {session_id}")
 
 
-async def mark_session_status(pool: asyncpg.Pool, session_id: str, status: str) -> None:
+async def mark_session_status(pool: asyncpg.Pool, session_id: str, user_id: str, status: str) -> None:
     """Marca status da sessão (running, paused, completed, failed)."""
     completed_at = datetime.now() if status in ("completed", "failed") else None
     
     async with pool.acquire() as conn:
         await conn.execute("""
             UPDATE agent_sessions SET status = $1, completed_at = $2, updated_at = NOW()
-            WHERE id = $3
-        """, status, completed_at, session_id)
+            WHERE id = $3 AND user_id = $4
+        """, status, completed_at, session_id, user_id)
     logger.info(f"Status da sessão {session_id} alterado para {status}")
 
 
@@ -151,14 +155,16 @@ async def save_permission(pool: asyncpg.Pool, permission: AgentPermission) -> No
     logger.debug(f"Permissão salva: {permission.id} ({permission.status})")
 
 
-async def get_pending_permissions(pool: asyncpg.Pool, session_id: str) -> List[AgentPermission]:
+async def get_pending_permissions(pool: asyncpg.Pool, session_id: str, user_id: str) -> List[AgentPermission]:
     """Lista permissões pendentes de uma sessão."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT id, session_id, task_id, tool, risk_level, status, requested_at, resolved_at, resolved_by
-            FROM agent_permissions WHERE session_id = $1 AND status = 'pending'
-            ORDER BY requested_at
-        """, session_id)
+            SELECT p.id, p.session_id, p.task_id, p.tool, p.risk_level, p.status, p.requested_at, p.resolved_at, p.resolved_by
+            FROM agent_permissions p
+            JOIN agent_sessions s ON s.id = p.session_id
+            WHERE p.session_id = $1 AND s.user_id = $2 AND p.status = 'pending'
+            ORDER BY p.requested_at
+        """, session_id, user_id)
         
         return [
             AgentPermission(
@@ -176,12 +182,14 @@ async def get_pending_permissions(pool: asyncpg.Pool, session_id: str) -> List[A
         ]
 
 
-async def resolve_permission(pool: asyncpg.Pool, permission_id: str, approved: bool, resolved_by: str) -> bool:
+async def resolve_permission(pool: asyncpg.Pool, permission_id: str, approved: bool, resolved_by: str, user_id: str) -> bool:
     """Resolve uma permissão (approve/reject)."""
     status = "approved" if approved else "rejected"
     async with pool.acquire() as conn:
         result = await conn.execute("""
-            UPDATE agent_permissions SET status = $1, resolved_at = NOW(), resolved_by = $2
-            WHERE id = $3 AND status = 'pending'
-        """, status, resolved_by, permission_id)
+            UPDATE agent_permissions p SET status = $1, resolved_at = NOW(), resolved_by = $2
+            FROM agent_sessions s
+            WHERE p.id = $3 AND p.session_id = s.id
+              AND s.user_id = $4 AND p.status = 'pending'
+        """, status, resolved_by, permission_id, user_id)
         return result == "UPDATE 1"

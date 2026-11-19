@@ -114,6 +114,18 @@ class AssistantPipeline:
                 return
             async with pool.acquire() as conn:
                 import json
+                existing = await conn.fetchrow(
+                    "SELECT user_id, thread_id FROM chat_turn_state WHERE request_id = $1",
+                    request_id,
+                )
+                if existing and (
+                    str(existing.get("user_id") or "") != str(user_id)
+                    or str(existing.get("thread_id") or "") != str(thread_id)
+                ):
+                    logger.warning(
+                        "Turn state cross-tenant bloqueado para request_id=%s", request_id
+                    )
+                    return
                 state_data = {
                     "memory": memory.get_messages(),
                     "pending_tools": pending_tools or [],
@@ -137,18 +149,20 @@ class AssistantPipeline:
         except Exception as e:
             logger.debug(f"Falha ao persistir turn state: {e}")
 
-    async def _load_turn_state(self, request_id: str) -> dict | None:
-        """Carrega o estado do turno do banco para retomada (modo cloud)."""
+    async def _load_turn_state(self, request_id: str, user_id: str, thread_id: str | None) -> dict | None:
+        """Carrega o estado somente se request, usuário e thread coincidirem."""
         try:
             from api.db import get_or_init_db_pool
             pool = await get_or_init_db_pool()
-            if not pool:
+            if not pool or not thread_id:
                 return None
             async with pool.acquire() as conn:
                 import json
                 row = await conn.fetchrow(
-                    "SELECT state, status FROM chat_turn_state WHERE request_id = $1",
+                    "SELECT state, status FROM chat_turn_state WHERE request_id = $1 AND user_id = $2 AND thread_id = $3",
                     request_id,
+                    user_id,
+                    thread_id,
                 )
                 if row:
                     return {"state": json.loads(row["state"]), "status": row["status"]}
@@ -182,6 +196,20 @@ class AssistantPipeline:
 
         is_cloud = config_module.config.runtime_mode == "cloud"
 
+        # Resolve identidade antes de qualquer leitura de estado retomável.
+        try:
+            from api.routes.auth import current_user_id_var, current_user_email_var, current_user_name_var
+            uid = user_id or current_user_id_var.get()
+            uname = user_name or current_user_name_var.get()
+            uemail = current_user_email_var.get()
+            current_user_id_var.set(uid)
+            if uname:
+                current_user_name_var.set(uname)
+        except Exception:
+            uid = user_id or "default"
+            uname = user_name
+            uemail = ""
+
         # Resumable turn: generate request_id if not provided
         if request_id is None:
             request_id = f"req_{uuid.uuid4().hex[:12]}"
@@ -192,22 +220,11 @@ class AssistantPipeline:
         if is_cloud and tool_results:
             resuming_turn = True
             # Load turn state to get completed call IDs
-            turn_state = await self._load_turn_state(request_id)
+            turn_state = await self._load_turn_state(request_id, uid, thread_id)
             if turn_state and turn_state.get("state"):
                 state_data = turn_state["state"]
                 # Restore completed call IDs to avoid re-execution
                 completed_call_ids = set(state_data.get("completed_call_ids", []))
-
-        try:
-            from api.routes.auth import current_user_id_var, current_user_name_var
-            uid = user_id or current_user_id_var.get()
-            uname = user_name or current_user_name_var.get()
-            current_user_id_var.set(uid)
-            if uname:
-                current_user_name_var.set(uname)
-        except Exception:
-            uid = user_id or "default"
-            uname = user_name
 
         yield StreamEvent(type="status", data={"status": "thinking", "text": "Consultando contexto e memórias...", "request_id": request_id})
 
@@ -293,6 +310,7 @@ class AssistantPipeline:
                             query=user_text,
                             exclude_session_id=thread_id,
                             limit=4,
+                            user_email=uemail,
                         )
                         if past_matches:
                             lines = []

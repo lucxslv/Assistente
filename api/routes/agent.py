@@ -7,11 +7,26 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.routes.auth import require_local_or_authenticated
-from brain.agent.runtime import agent_runtime
+from brain.agent.runtime import AgentRuntime, agent_runtime
 from brain.agent.persistence import agent_persistence
 
 logger = logging.getLogger("charlie.api.agent")
 router = APIRouter(prefix="/agent", tags=["Agent Runtime"])
+
+
+# Cada usuário autenticado tem seu próprio grafo ativo e fila de eventos.
+_agent_runtimes: dict[str, AgentRuntime] = {}
+
+
+def _runtime_for_user(user_id: str) -> AgentRuntime:
+    uid = str(user_id or "default")
+    if uid == "default":
+        return agent_runtime
+    runtime = _agent_runtimes.get(uid)
+    if runtime is None:
+        runtime = AgentRuntime()
+        _agent_runtimes[uid] = runtime
+    return runtime
 
 
 class GoalRequest(BaseModel):
@@ -27,7 +42,8 @@ class SessionSaveRequest(BaseModel):
 async def start_goal(req: GoalRequest, user: dict = Depends(require_local_or_authenticated)):
     """Inicia um novo objetivo para o Charlie Agent Runtime."""
     uid = str(user.get("id", "default"))
-    graph = await agent_runtime.start_session(
+    runtime = _runtime_for_user(uid)
+    graph = await runtime.start_session(
         goal=req.goal,
         project=req.project or "Charlie",
         user_id=uid,
@@ -51,14 +67,15 @@ async def start_goal(req: GoalRequest, user: dict = Depends(require_local_or_aut
 @router.get("/session")
 async def get_active_session(user: dict = Depends(require_local_or_authenticated)):
     """Retorna o estado do Grafo de Tarefas e da sessão ativa."""
-    if not agent_runtime.active_graph:
+    runtime = _runtime_for_user(str(user.get("id", "default")))
+    if not runtime.active_graph:
         return {"active": False, "session": None}
 
     return {
         "active": True,
-        "session": agent_runtime.active_graph.to_dict(),
-        "is_paused": agent_runtime.is_paused,
-        "is_cancelled": agent_runtime.is_cancelled,
+        "session": runtime.active_graph.to_dict(),
+        "is_paused": runtime.is_paused,
+        "is_cancelled": runtime.is_cancelled,
     }
 
 
@@ -122,30 +139,34 @@ async def get_agent_metrics(user: dict = Depends(require_local_or_authenticated)
 
 @router.post("/pause")
 async def pause_agent(user: dict = Depends(require_local_or_authenticated)):
-    agent_runtime.pause()
-    await agent_runtime.emit_event("agent.paused", {})
+    runtime = _runtime_for_user(str(user.get("id", "default")))
+    runtime.pause()
+    await runtime.emit_event("agent.paused", {})
     return {"status": "paused"}
 
 
 @router.post("/resume")
 async def resume_agent(user: dict = Depends(require_local_or_authenticated)):
-    agent_runtime.resume()
-    await agent_runtime.emit_event("agent.resumed", {})
+    runtime = _runtime_for_user(str(user.get("id", "default")))
+    runtime.resume()
+    await runtime.emit_event("agent.resumed", {})
     return {"status": "resumed"}
 
 
 @router.post("/cancel")
 async def cancel_agent(user: dict = Depends(require_local_or_authenticated)):
-    agent_runtime.cancel()
-    await agent_runtime.emit_event("agent.failed", {"reason": "Cancelado via API"})
+    runtime = _runtime_for_user(str(user.get("id", "default")))
+    runtime.cancel()
+    await runtime.emit_event("agent.failed", {"reason": "Cancelado via API"})
     return {"status": "cancelled"}
 
 
 @router.get("/stream")
 async def agent_events_stream(user: dict = Depends(require_local_or_authenticated)):
     """Streaming de eventos em tempo real do Agent Runtime via SSE."""
+    runtime = _runtime_for_user(str(user.get("id", "default")))
     return StreamingResponse(
-        agent_runtime.event_stream(),
+        runtime.event_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -12,7 +12,12 @@ from api.services.audit_service import (
     get_audit_metrics,
     get_audit_users_summary,
 )
-from api.services.chat_persistence import save_message_feedback_record, _in_memory_feedback
+from api.services.chat_persistence import (
+    save_message_feedback_record,
+    _in_memory_feedback,
+    _in_memory_messages,
+    _in_memory_sessions,
+)
 from api.security.rate_limiter import (
     rate_limiter,
     _in_memory_suspended_users,
@@ -24,12 +29,16 @@ from api.security.rate_limiter import (
 def clean_audit_state():
     clear_memory_audit_logs()
     _in_memory_feedback.clear()
+    _in_memory_messages.clear()
+    _in_memory_sessions.clear()
     _in_memory_suspended_users.clear()
     _in_memory_user_quotas.clear()
     rate_limiter.reset_all()
     yield
     clear_memory_audit_logs()
     _in_memory_feedback.clear()
+    _in_memory_messages.clear()
+    _in_memory_sessions.clear()
     _in_memory_suspended_users.clear()
     _in_memory_user_quotas.clear()
     rate_limiter.reset_all()
@@ -109,7 +118,20 @@ def test_cost_source_separation_and_technical_percentiles():
                 error_category="provider_timeout",
             )
 
-            # Registra feedbacks 👍 e 👎
+            # Registra feedbacks em mensagens reais dos respectivos usuários.
+            for session_id, message_id, owner_id in (
+                ("sess_1", "msg_ok_1", "00000000-0000-4000-8000-000000000010"),
+                ("sess_2", "msg_bad_1", "00000000-0000-4000-8000-000000000020"),
+            ):
+                _in_memory_sessions[session_id] = {"id": session_id, "user_id": owner_id}
+                _in_memory_messages[session_id] = [{
+                    "id": message_id,
+                    "session_id": session_id,
+                    "user_id": owner_id,
+                    "role": "assistant",
+                    "content": "Resposta",
+                }]
+
             await save_message_feedback_record(
                 pool=None,
                 message_id="msg_ok_1",

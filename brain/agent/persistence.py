@@ -115,7 +115,7 @@ class AgentPersistence:
             # Verifica titularidade se sessão já existir
             cursor.execute("SELECT user_id FROM agent_sessions WHERE id = ?", (session_id,))
             existing = cursor.fetchone()
-            if existing and existing["user_id"] not in ("default", uid) and uid != "default":
+            if existing and str(existing["user_id"]) != uid:
                 raise PermissionError("Esta sessão pertence a outro usuário.")
 
             cursor.execute(
@@ -159,9 +159,9 @@ class AgentPersistence:
     def get_session(self, session_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            if user_id and user_id not in ("default", "local-loopback"):
+            if user_id is not None:
                 cursor.execute(
-                    "SELECT * FROM agent_sessions WHERE id = ? AND (user_id = ? OR user_id = 'default')",
+                    "SELECT * FROM agent_sessions WHERE id = ? AND user_id = ?",
                     (session_id, str(user_id)),
                 )
             else:
@@ -192,7 +192,7 @@ class AgentPersistence:
     ) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            filter_user = user_id and user_id not in ("default", "local-loopback")
+            filter_user = user_id is not None
             if status and filter_user:
                 cursor.execute(
                     """
@@ -200,7 +200,7 @@ class AgentPersistence:
                            tasks_count, completed_count, failed_count,
                            started_at, updated_at, completed_at
                     FROM agent_sessions
-                    WHERE status = ? AND (user_id = ? OR user_id = 'default')
+                    WHERE status = ? AND user_id = ?
                     ORDER BY started_at DESC
                     LIMIT ? OFFSET ?
                     """,
@@ -226,7 +226,7 @@ class AgentPersistence:
                            tasks_count, completed_count, failed_count,
                            started_at, updated_at, completed_at
                     FROM agent_sessions
-                    WHERE (user_id = ? OR user_id = 'default')
+                    WHERE user_id = ?
                     ORDER BY started_at DESC
                     LIMIT ? OFFSET ?
                     """,
@@ -250,9 +250,9 @@ class AgentPersistence:
     def delete_session(self, session_id: str, user_id: Optional[str] = None) -> bool:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            if user_id and user_id not in ("default", "local-loopback"):
+            if user_id is not None:
                 cursor.execute(
-                    "DELETE FROM agent_sessions WHERE id = ? AND (user_id = ? OR user_id = 'default')",
+                    "DELETE FROM agent_sessions WHERE id = ? AND user_id = ?",
                     (session_id, str(user_id)),
                 )
             else:
@@ -263,7 +263,7 @@ class AgentPersistence:
     def get_metrics(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            if user_id and user_id not in ("default", "local-loopback"):
+            if user_id is not None:
                 cursor.execute(
                     """
                     SELECT
@@ -273,7 +273,7 @@ class AgentPersistence:
                         SUM(tasks_count) as total_tasks,
                         SUM(completed_count) as total_completed_tasks
                     FROM agent_sessions
-                    WHERE (user_id = ? OR user_id = 'default')
+                    WHERE user_id = ?
                     """,
                     (str(user_id),),
                 )

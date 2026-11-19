@@ -130,6 +130,7 @@ class TaskGraph:
     """Grafo de Tarefas orientado a dependências (DAG) com ciclo de verificação e ReAct."""
 
     def __init__(self, goal: str, project: str = "Charlie") -> None:
+        self.id: Optional[str] = None
         self.goal = goal
         self.project = project
         self.nodes: Dict[str, TaskNode] = {}
@@ -289,6 +290,7 @@ class TaskGraph:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "id": self.id,
             "goal": self.goal,
             "project": self.project,
             "progress": self.progress_percentage(),
@@ -304,6 +306,7 @@ class TaskGraph:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> TaskGraph:
         graph = cls(goal=data.get("goal", ""), project=data.get("project", "Charlie"))
+        graph.id = data.get("id")
         graph.parsed_goal = data.get("parsedGoal")
         graph.working_memory_state = data.get("workingMemory")
         for t_dict in data.get("tasks", []):
