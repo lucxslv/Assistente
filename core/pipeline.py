@@ -368,7 +368,14 @@ class AssistantPipeline:
             except Exception as w_err:
                 logger.warning(f"Aviso ao emitir widget de hardware: {w_err}")
 
-        MAX_ITERATIONS = 5
+        # O orçamento é acumulativo para todo o turno, não reiniciado a cada ciclo.
+        max_steps = max(1, int(
+            _test_max_steps_per_turn
+            or getattr(self, "_max_agent_steps_per_turn", None)
+            or config_module.config.max_agent_steps_per_turn
+        ))
+        max_iterations = max_steps
+        steps_this_turn = 0
         iterations = 0
         final_reply = ""
         emitted_any_token = False
@@ -401,7 +408,7 @@ class AssistantPipeline:
                 pass
             return active_llm_instance.chat_stream(**stream_kwargs)
 
-        while iterations < MAX_ITERATIONS:
+        while iterations < max_iterations and steps_this_turn < max_steps:
             if _is_cancelled():
                 break
             iterations += 1
@@ -550,10 +557,6 @@ class AssistantPipeline:
                 final_reply = iteration_reply or final_reply
                 break
 
-            # Step budget: limite de passos por turno
-            max_steps = _test_max_steps_per_turn or getattr(self, "_max_agent_steps_per_turn", None) or config_module.config.max_agent_steps_per_turn
-            steps_this_turn = 0
-
             # Executa ferramentas via transport (LocalExecutor no device, RemoteHostExecutor no cloud)
             from core.execution.transport import get_transport
             transport = get_transport()
@@ -698,8 +701,11 @@ class AssistantPipeline:
 
             yield StreamEvent(type="status", data={"status": "thinking", "text": "Sintetizando resposta..."})
 
-            if iterations == MAX_ITERATIONS:
-                final_reply = iteration_reply or "Atingi o limite máximo de ações consecutivas."
+            if steps_this_turn >= max_steps or iterations >= max_iterations:
+                final_reply = iteration_reply or (
+                    f"Limite de passos do turno atingido ({max_steps}). "
+                    "Não foi possível concluir todas as ações com evidências."
+                )
                 break
 
         from core.message_parser import parse_assistant_message_content

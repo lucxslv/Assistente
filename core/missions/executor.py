@@ -22,16 +22,22 @@ from tools.registry import registry as default_registry
 
 def _tool_requires_permission(tool_name: str) -> bool:
     """Verifica se tool exige permissão (risk_level alto/crítico)."""
-    # Delegate to governance permission_gate risk assessment
     try:
-        tool_info = default_registry._schemas.get(tool_name)
-        if tool_info:
-            from brain.agent.governance import assess_risk
-            risk = assess_risk(tool_name, {})
-            return risk.value >= 3  # HIGH=3, CRITICAL=4
+        if not default_registry._schemas.get(tool_name):
+            return False
+        from brain.agent.governance import permission_gate
+        risk = permission_gate.assess_risk(tool_name, {})
+        return risk in (RiskLevel.HIGH, RiskLevel.CRITICAL)
     except Exception:
-        pass
-    return False
+        return False
+
+
+def _task_id_from_call_id(call_id: str) -> str:
+    """Extrai task.id de ``call_<task_id>_<uuid>`` sem confundir com o nome da tool."""
+    if not call_id.startswith("call_"):
+        return call_id
+    parts = call_id[5:].split("_")
+    return "_".join(parts[:-1]) if len(parts) >= 2 else parts[0]
 
 
 def _get_tool_scope(tool_name: str) -> ToolScope:
@@ -94,25 +100,36 @@ async def _execution_loop(
             if result.call_id in completed_call_ids:
                 continue
             completed_call_ids.add(result.call_id)
-            # Encontra task correspondente pelo call_id ou tool name
+            # Encontra a task pelo task.id embutido no call_id.
+            result_task_id = _task_id_from_call_id(result.call_id)
             for task in graph.nodes.values():
-                if task.status == TaskStatus.RUNNING and task.tool == result.call_id.split("_")[0] if "_" in result.call_id else task.tool:
-                    task.status = TaskStatus.SUCCESS if result.status == "success" else TaskStatus.FAILURE
-                    if result.status != "success":
-                        task.error = result.output
-                    # Verifica evidência se tool completed
-                    if result.status == "success" and task.expected_evidence_type:
-                        passed, evidence = await Verifier.verify_task(task, result.output)
-                        if not passed:
-                            task.status = TaskStatus.FAILURE
-                            task.error = evidence.summary
-                    break
+                if task.status != TaskStatus.RUNNING or task.id != result_task_id:
+                    continue
+                task.status = TaskStatus.SUCCESS if result.status == "success" else TaskStatus.FAILURE
+                task.observation = result.output
+                if result.status != "success":
+                    task.error = result.output
+                    task.attempts = task.max_attempts
+                # Verifica evidência se tool completed
+                if result.status == "success" and task.expected_evidence_type:
+                    passed, evidence = await Verifier.verify_task(task, result.output)
+                    if not passed:
+                        task.status = TaskStatus.FAILURE
+                        task.error = evidence.summary
+                        task.attempts = task.max_attempts
+                break
     
     # Processa permission_resolved
-    if permission_resolved and permission_resolved.get("approved"):
+    if permission_resolved:
         task_id = permission_resolved.get("task_id")
         if task_id in graph.nodes:
-            graph.nodes[task_id].status = TaskStatus.PENDING  # Reativa para execução
+            if permission_resolved.get("approved"):
+                graph.nodes[task_id].status = TaskStatus.PENDING
+            else:
+                task = graph.nodes[task_id]
+                task.status = TaskStatus.FAILURE
+                task.attempts = task.max_attempts
+                task.error = permission_resolved.get("reason") or "Permissão rejeitada pelo usuário."
     
     # Loop de execução até próximo ponto de espera
     max_steps = 10  # Safety limit por iteração
@@ -124,6 +141,10 @@ async def _execution_loop(
         if not ready_tasks:
             if graph.is_completed():
                 session.status = "completed"
+                session.completed_at = datetime.now(timezone.utc)
+            elif graph.has_active_failures():
+                session.status = "failed"
+                session.completed_at = datetime.now(timezone.utc)
             break
         
         # Executa uma task por iteração (event-driven: um passo por avanço)
@@ -144,28 +165,34 @@ async def _execution_loop(
                     tool=task.tool,
                     arguments=task.arguments,
                     description=f"Missão: {task.title}",
-                    risk_level=_get_risk_level(task.tool),
+                    user_id=user_id,
                 )
                 # Marca task como waiting_permission e sai do loop
                 # A retomada virá via permission_resolved no próximo advance_session
                 break
             
-            # Executa via transport
+            # Executa via transport com o usuário que iniciou a sessão
             call_id = f"call_{task.id}_{uuid4().hex[:8]}"
-            result = await _execute_tool_via_transport(task.tool, task.arguments, task.user_id if hasattr(task, 'user_id') else "unknown", call_id)
-            
-            # Processa resultado
-            if result.status == "success":
-                task.status = TaskStatus.SUCCESS
-                # Verifica evidência
-                if task.expected_evidence_type:
-                    passed, evidence = await Verifier.verify_task(task, result.output)
-                    if not passed:
-                        task.status = TaskStatus.FAILURE
-                        task.error = evidence.summary
-            else:
+            try:
+                result = await _execute_tool_via_transport(task.tool, task.arguments, user_id, call_id)
+                if result.status == "success":
+                    task.status = TaskStatus.SUCCESS
+                    task.observation = result.output
+                    # Verifica evidência
+                    if task.expected_evidence_type:
+                        passed, evidence = await Verifier.verify_task(task, result.output)
+                        if not passed:
+                            task.status = TaskStatus.FAILURE
+                            task.error = evidence.summary
+                            task.attempts = task.max_attempts
+                else:
+                    task.status = TaskStatus.FAILURE
+                    task.error = result.output
+                    task.attempts = task.max_attempts
+            except Exception as exc:
                 task.status = TaskStatus.FAILURE
-                task.error = result.output
+                task.error = str(exc)
+                task.attempts = task.max_attempts
         
         else:
             # CLOUD tool - executa in-process via registry
@@ -178,11 +205,13 @@ async def _execution_loop(
                 if is_err:
                     task.status = TaskStatus.FAILURE
                     task.error = result_output
+                    task.attempts = task.max_attempts
                 else:
                     task.status = TaskStatus.SUCCESS
             except Exception as e:
                 task.status = TaskStatus.FAILURE
                 task.error = str(e)
+                task.attempts = task.max_attempts
         
         # Atualiza state_json
         session.state_json = {
@@ -206,7 +235,15 @@ async def _execution_loop(
         steps += 1
         if steps >= 5:  # Limit steps per advance
             break
-    
+
+    # Persiste também conclusões alcançadas apenas pelo resultado retomado.
+    session.graph_json = graph.to_json()
+    session.state_json = {
+        **session.state_json,
+        "completed_call_ids": list(completed_call_ids),
+        "step": step,
+    }
+    session.updated_at = datetime.now(timezone.utc)
     return session
 
 

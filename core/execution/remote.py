@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+import inspect
 import time
 import uuid
 from typing import Callable, Optional
@@ -16,14 +17,19 @@ class RemoteHostExecutor:
     def __init__(self, pool_factory: Optional[Callable] = None, sleep_func: Optional[Callable] = None):
         self.pool_factory = pool_factory or get_or_init_db_pool
         self._sleep_func = sleep_func or asyncio.sleep
-    
+
+    async def _resolve_pool(self):
+        """Aceita factories síncronas (testes) e assíncronas (get_or_init_db_pool)."""
+        candidate = self.pool_factory()
+        return await candidate if inspect.isawaitable(candidate) else candidate
+
     async def hosts_for(self, user_id: str) -> list[HostInfo]:
         """Retorna hosts online do usuário (last_seen_at > now - 30s)."""
         return await self._get_online_hosts(user_id)
     
     async def _get_online_hosts(self, user_id: str) -> list[HostInfo]:
         """Busca hosts online do usuário (last_seen_at > now - 30s)."""
-        pool = self.pool_factory()
+        pool = await self._resolve_pool()
         if not pool:
             return []
         
@@ -50,7 +56,7 @@ class RemoteHostExecutor:
         start_time = time.time()
         
         # 1. Verifica pool
-        pool = self.pool_factory()
+        pool = await self._resolve_pool()
         if not pool:
             return ToolResult(
                 call_id=call.call_id,

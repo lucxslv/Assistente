@@ -75,7 +75,7 @@ class AgentRuntime:
             ev = await self._event_queue.get()
             yield f"event: {ev['type']}\ndata: {json.dumps(ev['data'])}\n\n"
 
-    async def start_session(self, goal: str, project: str = "Charlie") -> TaskGraph:
+    async def start_session(self, goal: str, project: str = "Charlie", user_id: Optional[str] = None) -> TaskGraph:
         """Inicia um novo objetivo: parsing, instanciação do MAS, planejamento DAG e loop autônomo."""
         self.is_paused = False
         self.is_cancelled = False
@@ -87,6 +87,7 @@ class AgentRuntime:
             "project": project,
             "target_os": "Windows",
             "working_directory": "C:\\",
+            "user_id": user_id or "default",
         })
         self.multi_agent_coordinator = MultiAgentCoordinator(session_id=session_id)
 
@@ -330,7 +331,22 @@ class AgentRuntime:
                     "arguments": resolved_args,
                 })
 
-                tool_result = await self.tools.execute(task.tool, resolved_args)
+                from core.execution.contracts import ToolCall
+                from core.execution.transport import get_transport
+
+                user_id = self.working_memory.get_variable("user_id") or "default"
+                result = await get_transport().execute(
+                    ToolCall(
+                        call_id=f"call_{task.id}_{uuid.uuid4().hex[:8]}",
+                        name=task.tool,
+                        arguments=resolved_args,
+                    ),
+                    user_id=user_id,
+                    timeout=15.0,
+                )
+                tool_result = result.output
+                if result.status != "success":
+                    tool_result = f"Erro ({result.status}): {result.output}"
 
                 if self.multi_agent_coordinator:
                     self.multi_agent_coordinator.record_tool_used(AgentRole.EXECUTOR, task.tool)

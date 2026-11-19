@@ -27,7 +27,11 @@ class SessionSaveRequest(BaseModel):
 async def start_goal(req: GoalRequest, user: dict = Depends(require_local_or_authenticated)):
     """Inicia um novo objetivo para o Charlie Agent Runtime."""
     uid = str(user.get("id", "default"))
-    graph = await agent_runtime.start_session(goal=req.goal, project=req.project or "Charlie")
+    graph = await agent_runtime.start_session(
+        goal=req.goal,
+        project=req.project or "Charlie",
+        user_id=uid,
+    )
     graph_dict = graph.to_dict()
     graph_dict["user_id"] = uid
     # Salva no banco SQLite

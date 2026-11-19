@@ -92,6 +92,8 @@ class TaskNode:
             "observation": self.observation,
             "reflection": self.reflection,
             "agentRole": self.agent_role,
+            "expectedEvidenceType": self.expected_evidence_type,
+            "expectedEvidenceCriteria": self.expected_evidence_criteria,
             "startedAt": self.started_at,
             "completedAt": self.completed_at,
         }
@@ -117,6 +119,8 @@ class TaskNode:
             observation=data.get("observation"),
             reflection=data.get("reflection"),
             agent_role=data.get("agentRole"),
+            expected_evidence_type=data.get("expectedEvidenceType", "system"),
+            expected_evidence_criteria=data.get("expectedEvidenceCriteria", {}),
             started_at=data.get("startedAt"),
             completed_at=data.get("completedAt"),
         )
@@ -293,6 +297,10 @@ class TaskGraph:
             "tasks": [task.to_dict() for task in self.nodes.values()],
         }
 
+    def to_json(self) -> Dict[str, Any]:
+        """Serializa o grafo para persistência JSON (compatibilidade com missions)."""
+        return self.to_dict()
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> TaskGraph:
         graph = cls(goal=data.get("goal", ""), project=data.get("project", "Charlie"))
@@ -301,3 +309,8 @@ class TaskGraph:
         for t_dict in data.get("tasks", []):
             graph.add_task(TaskNode.from_dict(t_dict))
         return graph
+
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> TaskGraph:
+        """Reconstrói um grafo persistido (compatibilidade com missions)."""
+        return cls.from_dict(data)
