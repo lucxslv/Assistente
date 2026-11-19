@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { startHostService, stopHostService, isHostServiceRunning, getHostConfig } from './hostService';
+import { startHostService, stopHostService, isHostServiceRunning, getHostConfig, HOST_CAPABILITIES } from './hostService';
 
 interface BatteryStats {
   percent: number;
@@ -52,33 +52,7 @@ export async function startDeviceHeartbeat(apiBaseUrl: string, token: string, ho
     apiBaseUrl: apiBaseUrl,
     token: token,
     name: hostName || telemetry.computer_name,
-    capabilities: [
-      "list_directory",
-      "read_file",
-      "write_file",
-      "execute_command",
-      "create_local_directory",
-      "system_power_action",
-      "set_system_volume",
-      "take_screenshot",
-      "get_process_list",
-      "list_local_directory",
-      "read_local_file",
-      "open_path_or_app",
-      "manage_application",
-      "toggle_mute",
-      "send_media_key",
-      "send_media_control",
-      "lock_workstation",
-      "minimize_all_windows",
-      "take_screenshot",
-      "get_local_ip",
-      // Background process family
-      "start_background_process",
-      "get_background_process_logs",
-      "list_background_processes",
-      "kill_background_process",
-    ],
+    capabilities: [...HOST_CAPABILITIES],
     pollIntervalMs: 2000,
   }).catch(err => {
     console.error('[HostService] Failed to start:', err);

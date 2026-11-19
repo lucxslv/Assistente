@@ -163,8 +163,8 @@ async def test_e2e_device_mode_turn_with_tool(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_e2e_cloud_mode_device_tool_suspends_turn(monkeypatch):
-    """Cloud mode: DEVICE tool suspends turn (turn_suspended), no tool_end until host executes."""
+async def test_e2e_cloud_mode_device_tool_executes_through_transport(monkeypatch):
+    """Cloud mode: DEVICE tool vai à fila do host e retorna no mesmo turno."""
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.delenv("CHARLIE_RUNTIME_MODE", raising=False)
     import importlib
@@ -173,27 +173,31 @@ async def test_e2e_cloud_mode_device_tool_suspends_turn(monkeypatch):
     import core.pipeline as pipeline_module
     importlib.reload(pipeline_module)
     from core.pipeline import AssistantPipeline
-    
-    # Fake transport (not used for DEVICE tools in cloud mode)
-    fake_transport = FakeTransport([])
-    
-    # Patch the transport factory at module level
+
+    fake_transport = FakeTransport([ToolResult(
+        call_id="call-1",
+        status="success",
+        output="listagem concluída",
+        host_id="host-1",
+    )])
+
     import core.execution.transport as transport_module
     original_get_transport = transport_module.get_transport
     transport_module.get_transport = lambda: fake_transport
-    
+
     try:
-        # Mock the LLM provider with chat_stream - returns a DEVICE tool call
         fake_provider = MagicMock()
         tool_call_chunk = MockChunk(tool_calls=[MockToolCall(
             "call-1", "list_directory", {"path": "/"}
         )])
-        fake_provider.chat_stream = MagicMock(return_value=MockChatStream([tool_call_chunk]))
-        
-        # Create pipeline with fake provider
+        fake_provider.chat_stream = MagicMock(side_effect=[
+            MockChatStream([tool_call_chunk]),
+            MockChatStream([MockChunk(text="Arquivos listados.")]),
+        ])
+
         pipeline = AssistantPipeline()
         pipeline.llm = fake_provider
-        
+
         events = []
         async for event in pipeline.run_pipeline_stream(
             user_text="Liste meus arquivos",
@@ -201,18 +205,14 @@ async def test_e2e_cloud_mode_device_tool_suspends_turn(monkeypatch):
             user_id="user1"
         ):
             events.append(event)
-        
-        # Verify: tool_start + turn_suspended emitted (no tool_end, no client_tool_request)
+
         event_types = [e.type for e in events]
-        assert "tool_start" in event_types
-        assert "turn_suspended" in event_types
-        assert "tool_end" not in event_types  # DEVICE tool suspends, doesn't execute
+        assert fake_transport.call_count == 1
+        assert event_types.count("tool_start") == 1
+        assert event_types.count("tool_end") == 1
+        assert "turn_suspended" not in event_types
         assert "client_tool_request" not in event_types
-        
-        # Verify turn_suspended has correct data
-        suspended_event = next(e for e in events if e.type == "turn_suspended")
-        assert suspended_event.data.get("request_id") is not None
-        assert suspended_event.data.get("status") == "awaiting_device_execution"
+        assert next(e for e in events if e.type == "tool_end").data["host_id"] == "host-1"
     finally:
         transport_module.get_transport = original_get_transport
 

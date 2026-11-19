@@ -667,45 +667,8 @@ class AssistantPipeline:
                     arguments=call.arguments,
                 )
 
-                # Cloud mode + DEVICE tool: suspend turn and enqueue for remote execution
-                if is_cloud and scope_enum == ToolScope.DEVICE:
-                    # Update turn state to suspended with pending tool calls
-                    await self._persist_turn_state(
-                        request_id, uid, thread_id, req_memory, "suspended",
-                        pending_tools=[{
-                            "call_id": c_id,
-                            "name": call.name,
-                            "arguments": call.arguments,
-                            "scope": scope_enum.value,
-                        }],
-                        steps_this_turn=steps_this_turn,
-                        iterations=iterations,
-                        completed_call_ids=completed_call_ids,
-                    )
-                    # Yield tool_start for UI feedback, then suspend
-                    yield StreamEvent(
-                        type="tool_start",
-                        data={
-                            "name": call.name,
-                            "friendly_name": friendly_label,
-                            "args": call.arguments,
-                            "scope": scope_enum.value,
-                            "call_id": c_id,
-                            "request_id": request_id,
-                        },
-                    )
-                    # Yield suspension event instead of executing
-                    yield StreamEvent(
-                        type="turn_suspended",
-                        data={
-                            "request_id": request_id,
-                            "thread_id": thread_id,
-                            "status": "awaiting_device_execution",
-                            "message": "Aguardando execução no dispositivo remoto...",
-                        },
-                    )
-                    return  # Suspend turn - will resume when tool results arrive
-
+                # DEVICE sempre sai pelo ExecutorTransport. Em cloud, o
+                # RemoteHostExecutor enfileira a call e aguarda o host concluir.
                 # DEVICE usa o transporte; CLOUD/HOME executam no registry.
                 try:
                     if scope_enum == ToolScope.DEVICE:

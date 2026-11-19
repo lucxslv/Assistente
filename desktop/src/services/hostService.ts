@@ -6,6 +6,8 @@ export const HOST_CAPABILITIES = [
   "list_directory",
   "read_file",
   "write_file",
+  "replace_in_file",
+  "create_folder",
   "execute_command",
   "create_local_directory",
   "system_power_action",
@@ -69,6 +71,26 @@ let hostConfig: HostConfig | null = null;
 let pollingInterval: ReturnType<typeof setInterval> | null = null;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let isPolling = false;
+const HEARTBEAT_INTERVAL_MS = 15000;
+
+const HOST_ROUTES = {
+  heartbeat: "/host/heartbeat",
+  pendingCalls: "/host/pending-calls",
+  results: "/host/tool-results",
+} as const;
+
+function hostApiUrl(path: string): string {
+  const configured = (hostConfig?.apiBaseUrl || getApiBase()).replace(/\/+$/, "");
+  const root = configured.replace(/\/api$/, "");
+  return `${root}/api${path}`;
+}
+
+function hostAuthHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${hostConfig?.token || ""}`,
+  };
+}
 
 /** Start the authenticated host service */
 export async function startHostService(config: HostConfig): Promise<void> {
@@ -91,10 +113,10 @@ export async function startHostService(config: HostConfig): Promise<void> {
     throw err;
   }
 
-  // Start heartbeat (every 30s)
+  // Heartbeat com margem: o backend considera o host offline após 30 s.
   heartbeatInterval = setInterval(() => {
     sendHeartbeat().catch(err => console.error("[HostService] Heartbeat error:", err));
-  }, 30000);
+  }, HEARTBEAT_INTERVAL_MS);
 
   // Start polling for tool claims (every 2s by default)
   isPolling = true;
@@ -131,26 +153,24 @@ export function getHostConfig(): HostConfig | null {
   return hostConfig;
 }
 
-/** Register this host with the cloud API */
+/** Register this host through the canonical heartbeat endpoint. */
 async function registerHost(): Promise<void> {
   if (!hostConfig) throw new Error("Host config not set");
 
-  const base = hostConfig.apiBaseUrl || getApiBase();
-  // const url = `${base.replace(/\/api$/, "")}/api/host/register`; // unused
+  const hostId = hostConfig.hostId || `host_${Date.now()}`;
+  const name = hostConfig.name || `Windows Host ${navigator.platform}`;
+  hostConfig.hostId = hostId;
+  hostConfig.name = name;
 
-  const payload = {
-    host_id: hostConfig.hostId || `host_${Date.now()}`,
-    name: hostConfig.name || `Windows Host ${navigator.platform}`,
-    capabilities: hostConfig.capabilities,
-  };
-
-  const res = await fetch(`${base}/api/host/register`, {
+  const res = await fetch(hostApiUrl(HOST_ROUTES.heartbeat), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${hostConfig.token}`,
-    },
-    body: JSON.stringify(payload),
+    headers: hostAuthHeaders(),
+    body: JSON.stringify({
+      host_id: hostId,
+      name,
+      capabilities: hostConfig.capabilities,
+      telemetry: {},
+    }),
   });
 
   if (!res.ok) {
@@ -159,9 +179,8 @@ async function registerHost(): Promise<void> {
   }
 
   const data = await res.json();
-  if (data.host_id && !hostConfig?.hostId) {
-    // Update config with assigned host_id if not set
-    if (hostConfig) hostConfig.hostId = data.host_id;
+  if (data.host_id && hostConfig) {
+    hostConfig.hostId = data.host_id;
   }
 }
 
@@ -195,17 +214,14 @@ async function sendHeartbeat(): Promise<void> {
 
     const payload = {
       host_id: hostConfig!.hostId,
+      name: hostConfig!.name || "Windows Host",
       capabilities: hostConfig!.capabilities,
       telemetry,
     };
 
-    const base = hostConfig!.apiBaseUrl || getApiBase();
-    const res = await fetch(`${base.replace(/\/api$/, "")}/api/host/heartbeat`, {
+    const res = await fetch(hostApiUrl(HOST_ROUTES.heartbeat), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${hostConfig!.token}`,
-      },
+      headers: hostAuthHeaders(),
       body: JSON.stringify(payload),
     });
 
@@ -222,14 +238,9 @@ async function pollForTools(): Promise<void> {
   if (!hostConfig || !isPolling) return;
 
   try {
-    const base = hostConfig!.apiBaseUrl || getApiBase().replace(/\/api$/, "");
-    const res = await fetch(`${base}/api/host/claim`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${hostConfig!.token}`,
-      },
-      body: JSON.stringify({ host_id: hostConfig!.hostId }),
+    const res = await fetch(hostApiUrl(`${HOST_ROUTES.pendingCalls}?limit=10`), {
+      method: "GET",
+      headers: hostAuthHeaders(),
     });
 
     if (res.status === 204 || res.status === 404) {
@@ -241,8 +252,9 @@ async function pollForTools(): Promise<void> {
       return;
     }
 
-    const tools: any[] = await res.json();
-    if (!tools || tools.length === 0) return;
+    const payload = await res.json();
+    const tools: ClaimedToolCall[] = Array.isArray(payload) ? payload : (payload.calls || []);
+    if (tools.length === 0) return;
 
     console.log(`[HostService] Claimed ${tools.length} tool(s)`);
 
@@ -254,7 +266,7 @@ async function pollForTools(): Promise<void> {
         // Submit result back to cloud
         await submitToolResult({
           call_id: tool.call_id,
-          status: "success",
+          status: "done",
           output,
           duration_ms: 0,
           error_type: undefined,
@@ -284,13 +296,9 @@ async function submitToolResult(result: ToolResultSubmission): Promise<void> {
   if (!hostConfig) return;
 
   try {
-    const base = hostConfig!.apiBaseUrl || getApiBase().replace(/\/api$/, "");
-    const res = await fetch(`${base}/api/host/result`, {
+    const res = await fetch(hostApiUrl(HOST_ROUTES.results), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${hostConfig!.token}`,
-      },
+      headers: hostAuthHeaders(),
       body: JSON.stringify(result),
     });
 

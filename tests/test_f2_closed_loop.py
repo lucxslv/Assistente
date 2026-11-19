@@ -76,8 +76,8 @@ class TestPipelineClosedLoop:
     """Testes para o loop fechado no pipeline."""
     
     @pytest.mark.asyncio
-    async def test_cloud_device_tool_suspends_turn(self, monkeypatch):
-        """Cloud mode: DEVICE tool suspende o turno (turn_suspended)."""
+    async def test_cloud_device_tool_executes_through_transport(self, monkeypatch):
+        """Cloud mode: DEVICE tool usa a fila e conclui sem suspender o turno."""
         monkeypatch.setenv("VERCEL", "1")
         monkeypatch.delenv("CHARLIE_RUNTIME_MODE", raising=False)
         import importlib
@@ -86,49 +86,41 @@ class TestPipelineClosedLoop:
         import core.pipeline as pipeline_module
         importlib.reload(pipeline_module)
         from core.pipeline import AssistantPipeline
-               
-        # Fake transport (not used for DEVICE tools in cloud mode)
-        fake_transport = FakeTransport([])
-        
-        # Patch the transport factory
+
+        fake_transport = FakeTransport([ToolResult(
+            call_id="call-1",
+            status="success",
+            output="listagem concluída",
+            host_id="host-1",
+        )])
+
         import core.execution.transport as transport_module
         original_get_transport = transport_module.get_transport
         transport_module.get_transport = lambda: fake_transport
-        
-        # Mock the LLM provider with chat_stream - returns a DEVICE tool call
+
         fake_provider = MagicMock()
         tool_call_chunk = MockChunk(tool_calls=[MockToolCall(
             "call-1", "list_directory", {"path": "test"}
         )])
-        fake_provider.chat_stream = MagicMock(return_value=MockChatStream([
-            tool_call_chunk,
-        ]))
-        
-        # Create pipeline with fake provider
+        fake_provider.chat_stream = MagicMock(side_effect=[
+            MockChatStream([tool_call_chunk]),
+            MockChatStream([MockChunk(text="Arquivos listados.")]),
+        ])
+
         pipeline = AssistantPipeline()
         pipeline.llm = fake_provider
-        
-        # Patch the transport factory
-        transport_module.get_transport = lambda: fake_transport
-        
+
         events = []
         async for event in pipeline.run_pipeline_stream("list files", thread_id="test-thread", user_id="user1"):
             events.append(event)
-        
-        # Verify: tool_start + turn_suspended emitted (no tool_end, no client_tool_request)
+
         event_types = [e.type for e in events]
-        assert "tool_start" in event_types
-        assert "turn_suspended" in event_types
-        assert "tool_end" not in event_types  # DEVICE tool suspends, doesn't execute
+        assert fake_transport.call_count == 1
+        assert event_types.count("tool_start") == 1
+        assert event_types.count("tool_end") == 1
+        assert "turn_suspended" not in event_types
         assert "client_tool_request" not in event_types
-        
-        # Verify turn_suspended has correct data
-        suspended_event = next(e for e in events if e.type == "turn_suspended")
-        assert suspended_event.data["request_id"] is not None
-        assert suspended_event.data["status"] == "awaiting_device_execution"
-        
-        # Restore
-        import core.execution.transport as transport_module
+
         transport_module.get_transport = original_get_transport
 
     @pytest.mark.asyncio
