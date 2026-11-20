@@ -157,3 +157,49 @@ def test_device_heartbeat_waits_for_api_detection_before_registering():
 
     assert "detectApiBase()" in source
     assert "apiBaseUrl: resolvedApiBase" in source
+
+
+@pytest.mark.asyncio
+async def test_remote_host_window_tolerates_transient_network_gap():
+    """Uma oscilação de rede de dois minutos não pode derrubar o host."""
+    import time
+    from core.execution.remote import RemoteHostExecutor
+
+    conn = AsyncMock()
+    conn.fetch = AsyncMock(return_value=[])
+
+    class Scope:
+        async def __aenter__(self):
+            return conn
+
+        async def __aexit__(self, *args):
+            return None
+
+    pool = MagicMock()
+    pool.acquire.return_value = Scope()
+    executor = RemoteHostExecutor(pool_factory=lambda: pool)
+
+    await executor._get_online_hosts("user-1")
+
+    cutoff = conn.fetch.await_args.args[2]
+    assert 295 <= time.time() - cutoff <= 305
+
+
+def test_host_network_requests_are_bounded_and_serialized():
+    """Requests lentos não podem se acumular a cada tick do intervalo."""
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "desktop/src/services/hostService.ts").read_text(encoding="utf-8")
+
+    assert "isClaimPollInFlight" in source
+    assert "isHeartbeatInFlight" in source
+    assert source.count("AbortSignal.timeout(10000)") >= 2
+
+
+def test_chat_stream_refreshes_host_presence_before_sending():
+    """Uma ação do usuário deve marcar o host online antes da tool ser despachada."""
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "desktop/src/services/api.ts").read_text(encoding="utf-8")
+
+    assert 'await import("./hostService")' in source
+    assert "await refreshHostPresence()" in source
+    assert source.index("await refreshHostPresence()") < source.index('fetch(`${base}/chat/stream`')

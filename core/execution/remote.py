@@ -12,6 +12,8 @@ from typing import Callable, Optional
 from core.execution.contracts import ToolCall, ToolResult, HostInfo
 from api.db import get_or_init_db_pool
 
+HOST_ONLINE_WINDOW_SECONDS = 300
+
 
 def _json_value(value, default):
     if value is None:
@@ -51,7 +53,7 @@ class RemoteHostExecutor:
                 SELECT id, user_id, name, capabilities, telemetry, last_seen_at, created_at
                 FROM agent_hosts
                 WHERE user_id = $1 AND last_seen_at > $2
-            """, user_id, time.time() - 30)
+            """, user_id, time.time() - HOST_ONLINE_WINDOW_SECONDS)
         
         return [
             HostInfo(

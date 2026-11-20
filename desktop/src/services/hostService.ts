@@ -71,6 +71,8 @@ let hostConfig: HostConfig | null = null;
 let pollingInterval: ReturnType<typeof setInterval> | null = null;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let isPolling = false;
+let isClaimPollInFlight = false;
+let isHeartbeatInFlight = false;
 const HEARTBEAT_INTERVAL_MS = 15000;
 
 const HOST_ROUTES = {
@@ -186,7 +188,8 @@ async function registerHost(): Promise<void> {
 
 /** Send heartbeat with telemetry */
 async function sendHeartbeat(): Promise<void> {
-  if (!hostConfig) return;
+  if (!hostConfig || isHeartbeatInFlight) return;
+  isHeartbeatInFlight = true;
 
   try {
     // Get system telemetry via Tauri invoke
@@ -223,6 +226,7 @@ async function sendHeartbeat(): Promise<void> {
       method: "POST",
       headers: hostAuthHeaders(),
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -230,17 +234,26 @@ async function sendHeartbeat(): Promise<void> {
     }
   } catch (err) {
     console.error("[HostService] Heartbeat error:", err);
+  } finally {
+    isHeartbeatInFlight = false;
   }
+}
+
+/** Refresh presence immediately before a user-initiated chat action. */
+export async function refreshHostPresence(): Promise<void> {
+  await sendHeartbeat();
 }
 
 /** Poll for pending tool calls from the cloud */
 async function pollForTools(): Promise<void> {
-  if (!hostConfig || !isPolling) return;
+  if (!hostConfig || !isPolling || isClaimPollInFlight) return;
+  isClaimPollInFlight = true;
 
   try {
     const res = await fetch(hostApiUrl(`${HOST_ROUTES.pendingCalls}?limit=10`), {
       method: "GET",
       headers: hostAuthHeaders(),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (res.status === 204 || res.status === 404) {
@@ -288,6 +301,8 @@ async function pollForTools(): Promise<void> {
     }
   } catch (err) {
     console.error("[HostService] Poll error:", err);
+  } finally {
+    isClaimPollInFlight = false;
   }
 }
 

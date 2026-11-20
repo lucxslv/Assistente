@@ -553,6 +553,15 @@ export async function sendChatMessageStream(
     payload.tool_results = toolResults;
   }
 
+  // Refresh presence on user action so a throttled/transient heartbeat does
+  // not make the backend reject the next DEVICE tool as host_offline.
+  try {
+    const { refreshHostPresence } = await import("./hostService");
+    await refreshHostPresence();
+  } catch {
+    // The chat request still handles network failures normally.
+  }
+
   const res = await fetch(`${base}/chat/stream`, {
     method: "POST",
     headers: getAuthHeaders(),
