@@ -45,6 +45,20 @@ def test_media_executor_uses_real_vlc_ytdlp_and_pid_lifecycle():
         assert function in source
 
 
+def test_vlc_is_headless_and_does_not_fragment_user_agent_into_inputs():
+    source = (ROOT / "desktop/src/services/mediaExecutor.ts").read_text(encoding="utf-8")
+
+    assert '"--intf=dummy"' in source
+    assert '"--dummy-quiet"' in source
+    assert '"--play-and-exit"' in source
+    assert "-WindowStyle Hidden" in source
+    assert "--http-user-agent" not in source
+    assert "media.userAgent" not in source
+    # Opções Qt/diálogo recarregam a interface gráfica nesta instalação do VLC.
+    assert "--no-qt-privacy-ask" not in source
+    assert "--no-error-dialogs" not in source
+
+
 def test_host_marks_textual_tool_failures_as_errors():
     source = (ROOT / "desktop/src/services/hostService.ts").read_text(encoding="utf-8")
     assert "isDeviceToolError" in source

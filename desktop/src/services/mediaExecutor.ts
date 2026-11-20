@@ -11,7 +11,6 @@ interface CommandExecutionResult {
 interface YoutubeMedia {
   title: string;
   url: string;
-  userAgent?: string;
 }
 
 const PID_KEY = "charlie_music_vlc_pid";
@@ -142,7 +141,6 @@ async function resolveYoutubeMedia(query: string): Promise<YoutubeMedia> {
   return {
     title: String(entry.title || query),
     url: streamUrl,
-    userAgent: entry.http_headers?.["User-Agent"],
   };
 }
 
@@ -152,17 +150,19 @@ export async function playMusic(query: string): Promise<string> {
 
   await stopActiveVlc();
   const [vlcPath, media] = await Promise.all([findVlcPath(), resolveYoutubeMedia(clean)]);
+  // Mantém o VLC estritamente headless: opções Qt/diálogo recarregam a GUI
+  // em algumas instalações Windows, mesmo com a interface dummy.
   const vlcArgs = [
+    "--intf=dummy",
+    "--dummy-quiet",
     "--no-video",
-    "--quiet",
-    "--network-caching=1000",
+    "--play-and-exit",
     `--volume=${Math.round(storedVolume() * 2.56)}`,
   ];
-  if (media.userAgent) vlcArgs.push(`--http-user-agent=${media.userAgent}`);
   vlcArgs.push(media.url);
 
   const result = await run(`
-    $p = Start-Process -FilePath ${ps(vlcPath)} -ArgumentList @(${vlcArgs.map(ps).join(",")}) -PassThru
+    $p = Start-Process -FilePath ${ps(vlcPath)} -ArgumentList @(${vlcArgs.map(ps).join(",")}) -WindowStyle Hidden -PassThru
     Start-Sleep -Milliseconds 750
     if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) {
       $p.Id
