@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { detectApiBase } from './api';
 import { startHostService, stopHostService, isHostServiceRunning, getHostConfig, HOST_CAPABILITIES } from './hostService';
 
 interface BatteryStats {
@@ -47,9 +48,13 @@ export async function startDeviceHeartbeat(apiBaseUrl: string, token: string, ho
   const telemetry = await collectTelemetry();
   lastTelemetry = telemetry;
 
+  // Resolve local vs. cloud before the first registration; otherwise the
+  // initial LOCAL_API can fail permanently before detectApiBase finishes.
+  const resolvedApiBase = await detectApiBase().catch(() => apiBaseUrl);
+
   // Start the authenticated host service
   startHostService({
-    apiBaseUrl: apiBaseUrl,
+    apiBaseUrl: resolvedApiBase,
     token: token,
     name: hostName || telemetry.computer_name,
     capabilities: [...HOST_CAPABILITIES],

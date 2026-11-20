@@ -122,17 +122,18 @@ async def pending_calls(
     
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            UPDATE agent_tool_calls
-            SET status = 'delivered', host_id = $1
-            WHERE call_id IN (
+            WITH pending AS (
                 SELECT call_id FROM agent_tool_calls
                 WHERE user_id = $2 AND status = 'queued'
                 ORDER BY created_at
                 LIMIT $3
                 FOR UPDATE SKIP LOCKED
-                RETURNING call_id
             )
-            RETURNING call_id, tool, args
+            UPDATE agent_tool_calls AS calls
+            SET status = 'delivered', host_id = $1
+            FROM pending
+            WHERE calls.call_id = pending.call_id
+            RETURNING calls.call_id, calls.tool, calls.args
         """, f"host_{uuid.uuid4().hex[:8]}", user_id, limit)
         
         calls = [

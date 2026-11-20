@@ -119,3 +119,41 @@ def test_host_heartbeat_stays_inside_the_online_window():
 
     assert "const HEARTBEAT_INTERVAL_MS = 15000" in source
     assert "}, HEARTBEAT_INTERVAL_MS);" in source
+
+
+@pytest.mark.asyncio
+async def test_pending_claim_uses_postgres_valid_atomic_cte(monkeypatch):
+    """O claim não pode conter RETURNING dentro do subselect."""
+    import api.routes.host as host_module
+
+    conn = AsyncMock()
+    conn.fetch = AsyncMock(return_value=[])
+
+    class Scope:
+        async def __aenter__(self):
+            return conn
+
+        async def __aexit__(self, *args):
+            return None
+
+    pool = MagicMock()
+    pool.acquire.return_value = Scope()
+    monkeypatch.setattr(host_module, "get_or_init_db_pool", AsyncMock(return_value=pool))
+    monkeypatch.setattr(host_module, "get_authorized_device_async", AsyncMock(return_value={"user_id": "user-1"}))
+
+    result = await host_module.pending_calls(limit=10, authorization="Bearer token")
+
+    assert result == {"calls": []}
+    query = " ".join(conn.fetch.await_args.args[0].split())
+    assert query.startswith("WITH pending AS (")
+    assert "FOR UPDATE SKIP LOCKED ) UPDATE agent_tool_calls AS calls" in query
+    assert "FOR UPDATE SKIP LOCKED RETURNING call_id" not in query
+
+
+def test_device_heartbeat_waits_for_api_detection_before_registering():
+    """O registro inicial não pode ficar preso ao backend local que está desligado."""
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "desktop/src/services/deviceHeartbeat.ts").read_text(encoding="utf-8")
+
+    assert "detectApiBase()" in source
+    assert "apiBaseUrl: resolvedApiBase" in source
