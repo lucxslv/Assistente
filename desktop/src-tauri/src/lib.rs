@@ -457,9 +457,10 @@ pub struct LocalProcessInfo {
 }
 
 #[tauri::command]
-fn execute_system_command(command: String, cwd: Option<String>) -> Result<CommandExecutionResult, String> {
-    let start = std::time::Instant::now();
-    let working_dir = cwd.map(|c| resolve_local_user_path(&c));
+async fn execute_system_command(command: String, cwd: Option<String>) -> Result<CommandExecutionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let start = std::time::Instant::now();
+        let working_dir = cwd.map(|c| resolve_local_user_path(&c));
 
     #[cfg(windows)]
     {
@@ -510,6 +511,9 @@ fn execute_system_command(command: String, cwd: Option<String>) -> Result<Comman
             execution_time_ms: duration,
         })
     }
+    })
+    .await
+    .map_err(|e| format!("Erro na tarefa de execução do comando: {}", e))?
 }
 
 #[tauri::command]

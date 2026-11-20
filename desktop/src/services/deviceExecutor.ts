@@ -1,5 +1,12 @@
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  playMusic,
+  pauseMusic,
+  resumeMusic,
+  stopMusic,
+  setMusicVolume,
+} from "./mediaExecutor";
 
 export interface CommandExecutionResult {
   stdout: string;
@@ -183,6 +190,15 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
       return b64;
     }
 
+    if (name === "play_music") {
+      return await playMusic(String(args.query || ""));
+    }
+
+    if (name === "pause_music") return await pauseMusic();
+    if (name === "resume_music") return await resumeMusic();
+    if (name === "stop_music") return await stopMusic();
+    if (name === "set_volume") return await setMusicVolume(Number(args.level ?? 80));
+
     if (name === "set_system_volume" || name === "volume") {
       const level = args.level !== undefined ? Number(args.level) : 50;
       const res = await invoke<string>("set_system_volume", { level });
@@ -220,5 +236,9 @@ export async function executeDeviceTool(name: string, args: Record<string, any>)
     return `Falha ao executar ${name}: ${err?.message || err}`;
   }
 
-  return `Comando '${name}' processado no dispositivo.`;
+  return `Erro: Ferramenta '${name}' não é suportada neste dispositivo.`;
+}
+
+export function isDeviceToolError(output: string): boolean {
+  return /^(erro\b|falha\b|não encontrei\b|não foi possível\b|sem executor\b)/i.test(output.trim());
 }

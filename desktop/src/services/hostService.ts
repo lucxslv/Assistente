@@ -1,5 +1,5 @@
 import { getApiBase } from "./api";
-import { executeDeviceTool } from "./deviceExecutor";
+import { executeDeviceTool, isDeviceToolError } from "./deviceExecutor";
 
 /** Capabilities supported by the Windows host */
 export const HOST_CAPABILITIES = [
@@ -30,6 +30,11 @@ export const HOST_CAPABILITIES = [
   "get_background_process_logs",
   "list_background_processes",
   "kill_background_process",
+  "play_music",
+  "pause_music",
+  "resume_music",
+  "stop_music",
+  "set_volume",
 ] as const;
 
 export interface HostConfig {
@@ -327,15 +332,16 @@ async function pollForTools(): Promise<void> {
     for (const tool of tools) {
       try {
         const output = await executeDeviceTool(tool.tool, tool.args || {});
-        
-        // Submit result back to cloud
+        const isError = isDeviceToolError(output);
+
+        // Submit the real execution outcome back to the cloud.
         await submitToolResult({
           call_id: tool.call_id,
-          status: "done",
+          status: isError ? "error" : "done",
           output,
           duration_ms: 0,
-          error_type: undefined,
-          is_recoverable: false,
+          error_type: isError ? "tool_reported_error" : undefined,
+          is_recoverable: isError,
         });
       } catch (err: any) {
         const errStr = `Erro ao executar no dispositivo: ${err?.message || err}`;
