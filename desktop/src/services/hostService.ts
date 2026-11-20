@@ -35,6 +35,7 @@ export const HOST_CAPABILITIES = [
 export interface HostConfig {
   apiBaseUrl: string;
   token: string;
+  userToken?: string;
   hostId?: string;
   name?: string;
   capabilities?: string[];
@@ -81,6 +82,17 @@ const HOST_ROUTES = {
   results: "/host/tool-results",
 } as const;
 
+const HOST_TOKEN_KEY = "charlie_host_token";
+const HOST_ID_KEY = "charlie_host_id";
+
+function getOrCreateHostId(): string {
+  const stored = localStorage.getItem(HOST_ID_KEY);
+  if (stored) return stored;
+  const hostId = `host_${Date.now()}`;
+  localStorage.setItem(HOST_ID_KEY, hostId);
+  return hostId;
+}
+
 function hostApiUrl(path: string): string {
   const configured = (hostConfig?.apiBaseUrl || getApiBase()).replace(/\/+$/, "");
   const root = configured.replace(/\/api$/, "");
@@ -101,33 +113,35 @@ export async function startHostService(config: HostConfig): Promise<void> {
     return;
   }
 
+  const userToken = config.userToken || config.token;
   hostConfig = {
     ...config,
+    token: localStorage.getItem(HOST_TOKEN_KEY) || userToken,
+    userToken,
+    hostId: config.hostId || getOrCreateHostId(),
     capabilities: config.capabilities || [...HOST_CAPABILITIES],
     pollIntervalMs: config.pollIntervalMs || 2000,
   };
 
-  // Register this host
+  // O serviço continua ativo mesmo se o primeiro registro falhar; o heartbeat
+  // periódico repete a autenticação em vez de deixar o host morto para sempre.
+  isPolling = true;
   try {
     await registerHost();
   } catch (err) {
-    console.error("[HostService] Failed to register host:", err);
-    throw err;
+    console.error("[HostService] Initial registration failed; retrying in background:", err);
   }
 
-  // Heartbeat com margem: o backend considera o host offline após 30 s.
   heartbeatInterval = setInterval(() => {
     sendHeartbeat().catch(err => console.error("[HostService] Heartbeat error:", err));
   }, HEARTBEAT_INTERVAL_MS);
 
-  // Start polling for tool claims (every 2s by default)
-  isPolling = true;
   pollForTools();
   pollingInterval = setInterval(() => {
     pollForTools().catch(err => console.error("[HostService] Poll error:", err));
   }, hostConfig.pollIntervalMs);
 
-  console.log("[HostService] Started successfully");
+  console.log("[HostService] Service started");
 }
 
 /** Stop the host service */
@@ -155,29 +169,61 @@ export function getHostConfig(): HostConfig | null {
   return hostConfig;
 }
 
-/** Register this host through the canonical heartbeat endpoint. */
-async function registerHost(): Promise<void> {
-  if (!hostConfig) throw new Error("Host config not set");
+/** Issue a revocable host credential that does not expire with the user JWT. */
+async function mintHostCredential(): Promise<void> {
+  if (!hostConfig?.userToken) throw new Error("User token not available");
 
-  const hostId = hostConfig.hostId || `host_${Date.now()}`;
-  const name = hostConfig.name || `Windows Host ${navigator.platform}`;
-  hostConfig.hostId = hostId;
-  hostConfig.name = name;
-
-  const res = await fetch(hostApiUrl(HOST_ROUTES.heartbeat), {
+  const headers = hostAuthHeaders();
+  headers.Authorization = `Bearer ${hostConfig.userToken}`;
+  const res = await fetch(hostApiUrl("/pair/auto-link"), {
     method: "POST",
-    headers: hostAuthHeaders(),
+    headers,
     body: JSON.stringify({
-      host_id: hostId,
-      name,
-      capabilities: hostConfig.capabilities,
-      telemetry: {},
+      device_id: hostConfig.hostId,
+      device_name: hostConfig.name || "Charlie Desktop Host",
+      platform: "desktop_host",
     }),
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to register host: ${err}`);
+    throw new Error(`Failed to issue host credential: ${await res.text()}`);
+  }
+  const data = await res.json();
+  if (!data.token) throw new Error("Host credential missing from auto-link response");
+  hostConfig.token = data.token;
+  localStorage.setItem(HOST_TOKEN_KEY, data.token);
+}
+
+/** Register through heartbeat and renew the host credential on 401. */
+async function registerHost(): Promise<void> {
+  if (!hostConfig) throw new Error("Host config not set");
+
+  hostConfig.hostId = hostConfig.hostId || getOrCreateHostId();
+  hostConfig.name = hostConfig.name || `Windows Host ${navigator.platform}`;
+  if (!localStorage.getItem(HOST_TOKEN_KEY)) {
+    await mintHostCredential();
+  }
+
+  const sendRegistration = () => fetch(hostApiUrl(HOST_ROUTES.heartbeat), {
+    method: "POST",
+    headers: hostAuthHeaders(),
+    body: JSON.stringify({
+      host_id: hostConfig!.hostId,
+      name: hostConfig!.name,
+      capabilities: hostConfig!.capabilities,
+      telemetry: {},
+    }),
+  });
+
+  let res = await sendRegistration();
+  if (res.status === 401) {
+    localStorage.removeItem(HOST_TOKEN_KEY);
+    await mintHostCredential();
+    res = await sendRegistration();
+  }
+
+  if (!res.ok) {
+    throw new Error(`Failed to register host: ${await res.text()}`);
   }
 
   const data = await res.json();
@@ -228,6 +274,12 @@ async function sendHeartbeat(): Promise<void> {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000),
     });
+
+    if (res.status === 401) {
+      localStorage.removeItem(HOST_TOKEN_KEY);
+      await registerHost();
+      return;
+    }
 
     if (!res.ok) {
       console.warn("[HostService] Heartbeat failed:", await res.text());

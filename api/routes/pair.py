@@ -797,6 +797,7 @@ async def auto_link_device(
     uid = str(user.get("id", "default"))
     device_token = f"charlie_dev_{secrets.token_urlsafe(32)}"
     now = time.time()
+    permissions = ["host_executor" if req.platform == "desktop_host" else "mobile_client"]
     device_data = {
         "device_id": req.device_id,
         "device_name": req.device_name or "Dispositivo Móvel",
@@ -805,8 +806,45 @@ async def auto_link_device(
         "user_id": uid,
         "paired_at": now,
         "last_seen": now,
-        "permissions": ["mobile_client"],
+        "permissions": permissions,
     }
+
+    # Em cloud, a credencial precisa existir no Postgres antes de ser usada
+    # por outro worker. O conflito nunca transfere um dispositivo de tenant.
+    pool = await get_or_init_db_pool()
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                result = await conn.execute("""
+                    INSERT INTO device_authorized_devices (
+                        device_id, device_name, platform, token, user_id,
+                        paired_at, last_seen, permissions
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                    ON CONFLICT (device_id) DO UPDATE SET
+                        token = EXCLUDED.token,
+                        device_name = EXCLUDED.device_name,
+                        platform = EXCLUDED.platform,
+                        last_seen = EXCLUDED.last_seen,
+                        permissions = EXCLUDED.permissions
+                    WHERE device_authorized_devices.user_id = EXCLUDED.user_id;
+                """, req.device_id, req.device_name or "Dispositivo Móvel",
+                req.platform or "mobile", device_token, uid, now, now,
+                json.dumps(permissions))
+            if result == "INSERT 0 0":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Este dispositivo já pertence a outro usuário.",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning(f"Erro ao persistir auto-link no Supabase: {exc}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Não foi possível persistir a credencial do dispositivo.",
+            )
+
     _authorized_devices[req.device_id] = device_data
     _token_to_device[device_token] = req.device_id
     _save_authorized_devices()

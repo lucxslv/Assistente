@@ -34,7 +34,7 @@ import {
 import { executeDeviceTool } from "./services/deviceExecutor";
 import { AgentEnvironment } from "./components/agent/AgentEnvironment";
 import { useAgentRuntime, agentRuntimeStore } from "./services/agentRuntimeStore";
-import { startDeviceHeartbeat } from "./services/deviceHeartbeat";
+import { startDeviceHeartbeat, stopDeviceHeartbeat } from "./services/deviceHeartbeat";
 
 export function App() {
   const [activeView, setActiveView] = useState<"chat" | "agent">("chat");
@@ -98,19 +98,33 @@ export function App() {
     };
   }, []);
 
-  // Daemon de presença ativa do PC físico (Heartbeat a cada 10s)
+  // Daemon de presença do PC: reinicia com a identidade autenticada e para no logout.
   useEffect(() => {
+    if (!currentUser) {
+      stopDeviceHeartbeat();
+      return;
+    }
+
+    let cancelled = false;
     let stopHeartbeat: (() => void) | null = null;
-    // Get auth token and API base URL
     const token = getStoredToken() || "charlie_guest_token";
     const apiBase = getApiBase();
     startDeviceHeartbeat(apiBase, token).then(stopFn => {
-      stopHeartbeat = stopFn;
+      if (cancelled) {
+        stopFn();
+      } else {
+        stopHeartbeat = stopFn;
+      }
+    }).catch(err => {
+      console.error("[HostService] Failed to initialize:", err);
     });
+
     return () => {
+      cancelled = true;
       stopHeartbeat?.();
+      stopDeviceHeartbeat();
     };
-  }, []);
+  }, [currentUser?.id]);
 
   // Listener do evento emitido pelo atalho global do Windows (Ctrl + Alt + Espaço)
   useEffect(() => {
