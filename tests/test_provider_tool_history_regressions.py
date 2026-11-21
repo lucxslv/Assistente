@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from core.execution.contracts import ToolResult
+from core.memory import ConversationMemory
 from core.pipeline import AssistantPipeline
 from providers.base import ToolCall as ProviderToolCall
 from providers.gemini import GeminiProvider
@@ -68,6 +69,63 @@ def test_openai_history_preserves_native_tool_call_contract():
         "tool_call_id": "call-1",
         "content": "STDOUT:\narquivo.txt",
     }
+
+
+def test_gemini_drops_orphan_response_left_by_history_truncation():
+    history = [TOOL_HISTORY[1], *TOOL_HISTORY]
+    normalized = GeminiProvider._normalize_messages(history)
+
+    assert len(normalized) == 3
+    assert normalized[0]["role"] == "user"
+    assert "truncado" in normalized[0]["parts"][0].lower()
+    assert normalized[1]["role"] == "model"
+    assert normalized[1]["parts"][0]["function_call"]["name"] == "execute_command"
+    assert normalized[2]["role"] == "user"
+    assert len(normalized[2]["parts"]) == 1
+
+
+def test_gemini_groups_multiple_function_responses_in_one_turn():
+    assistant = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {"id": "call-1", "function": {"name": "execute_command", "arguments": {"command": "dir"}}},
+            {"id": "call-2", "function": {"name": "list_directory", "arguments": {"path": "."}}},
+        ],
+    }
+    responses = [
+        {"role": "tool", "name": "execute_command", "tool_call_id": "call-1", "content": "dir ok"},
+        {"role": "tool", "name": "list_directory", "tool_call_id": "call-2", "content": "list ok"},
+    ]
+    normalized = GeminiProvider._normalize_messages([assistant, *responses])
+
+    assert len(normalized) == 2
+    assert len(normalized[0]["parts"]) == 2
+    assert len(normalized[1]["parts"]) == 2
+    assert [p["function_response"]["name"] for p in normalized[1]["parts"]] == [
+        "execute_command", "list_directory"
+    ]
+
+
+def test_memory_truncation_never_leaves_leading_tool_result():
+    memory = ConversationMemory(max_messages=2)
+    memory.add_assistant_tool_calls([
+        ProviderToolCall(id="call-1", name="execute_command", arguments={"command": "dir"})
+    ])
+    memory.add_tool_result("execute_command", "dir ok", tool_call_id="call-1")
+    memory.add_assistant("erro transitório")
+
+    messages = memory.get_messages()
+    assert all(message.get("role") != "tool" for message in messages[:-1])
+    assert messages[0]["role"] != "tool"
+
+
+def test_unavailable_gemini_3_8_lite_is_not_a_fallback():
+    from brain.router.router import LLMRouter
+
+    assert "gemini-3.8-flash-lite" not in GeminiProvider._resolve_models_to_try("gemini-3.5-flash")
+    decision = LLMRouter().route("modo agente: execute uma tarefa completa")
+    assert all(model != "gemini-3.8-flash-lite" for _, model in LLMRouter().get_fallback_chain(decision))
 
 
 class _Chunk:

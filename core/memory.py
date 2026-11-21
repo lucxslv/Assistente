@@ -56,3 +56,6 @@ class ConversationMemory:
         self.messages.append(message)
         if len(self.messages) > self.max_messages:
             self.messages = self.messages[-self.max_messages :]
+            # Nunca inicia o histórico por uma resposta sem a function call correspondente.
+            while self.messages and self.messages[0].get("role") == "tool":
+                self.messages.pop(0)

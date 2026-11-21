@@ -27,7 +27,7 @@ class GeminiProvider(BaseLLMProvider):
             "gemini-3.8-flash": "gemini-3.8-flash",
             "gemini-3.5-flash": "gemini-3.5-flash",
             "gemini-3.5-flash-lite": "gemini-3.5-flash-lite",
-            "gemini-3.8-flash-lite": "gemini-3.8-flash-lite",
+            "gemini-3.8-flash-lite": "gemini-3.5-flash-lite",
         }
         target_model = alias_map.get(raw_model, raw_model or "gemini-3.5-flash-lite")
         models_to_try = [target_model]
@@ -35,7 +35,6 @@ class GeminiProvider(BaseLLMProvider):
             "gemini-3.8-flash",
             "gemini-3.5-flash",
             "gemini-3.5-flash-lite",
-            "gemini-3.8-flash-lite",
         ):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
@@ -368,7 +367,60 @@ class GeminiProvider(BaseLLMProvider):
                 if parts:
                     normalized.append({"role": "user", "parts": parts})
                     
-        return normalized
+        # Gemini exige que as respostas venham imediatamente após a chamada.
+        # Agrupa múltiplas respostas no mesmo turno e remove órfãs deixadas por truncamento.
+        grouped = []
+        index = 0
+        dropped_orphan = False
+
+        def is_function_response(item):
+            parts = item.get("parts", [])
+            return (
+                item.get("role") == "user"
+                and bool(parts)
+                and all(isinstance(part, dict) and "function_response" in part for part in parts)
+            )
+
+        while index < len(normalized):
+            item = normalized[index]
+            if not is_function_response(item):
+                grouped.append(item)
+                index += 1
+                continue
+
+            previous = grouped[-1] if grouped else None
+            previous_has_call = bool(
+                previous
+                and previous.get("role") == "model"
+                and any(
+                    isinstance(part, dict) and "function_call" in part
+                    for part in previous.get("parts", [])
+                )
+            )
+            if not previous_has_call:
+                dropped_orphan = True
+                logger.warning("Removendo function_response órfã do histórico Gemini")
+                index += 1
+                continue
+
+            response_parts = []
+            while index < len(normalized) and is_function_response(normalized[index]):
+                response_parts.extend(normalized[index]["parts"])
+                index += 1
+            grouped.append({"role": "user", "parts": response_parts})
+
+        if dropped_orphan and grouped and grouped[0].get("role") == "model":
+            first_parts = grouped[0].get("parts", [])
+            if any(isinstance(part, dict) and "function_call" in part for part in first_parts):
+                grouped.insert(0, {
+                    "role": "user",
+                    "parts": [
+                        "[Contexto truncado por limite de memória: mensagens anteriores foram omitidas. "
+                        "Use apenas o histórico de tools preservado abaixo.]"
+                    ],
+                })
+
+        return grouped
 
     @staticmethod
     def _convert_to_genai_contents(history: list[dict[str, Any]], types) -> list[Any]:

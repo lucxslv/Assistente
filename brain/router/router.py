@@ -245,7 +245,7 @@ class LLMRouter:
                 )
                 candidates.append(("gemini", alt_gemini))
                 # Adicionar modelos 3.x válidos como fallback adicional
-                for valid_model in ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash-lite"):
+                for valid_model in ("gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"):
                     if valid_model not in (decision.model_name, alt_gemini):
                         candidates.append(("gemini", valid_model))
                 if valid_model not in (decision.model_name, alt_gemini):
