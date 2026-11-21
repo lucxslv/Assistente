@@ -1,5 +1,6 @@
 """Regressões do runtime agêntico em missões longas e execução remota."""
 
+import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
@@ -485,3 +486,91 @@ async def test_pipeline_resume_restores_exhausted_budget_without_new_llm_call(mo
     done = next(event for event in events if event.type == "done")
     assert provider.chat_stream.call_count == 0
     assert "Limite de passos" in done.data["reply"]
+
+
+class _HangingStream:
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+def _configure_hung_pipeline(monkeypatch, pipeline_module, pipeline, provider):
+    monkeypatch.setenv("CHARLIE_RUNTIME_MODE", "device")
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setattr("api.db.get_or_init_db_pool", AsyncMock(return_value=None))
+    monkeypatch.setattr(pipeline_module, "_test_llm_stream_timeout", 0.05, raising=False)
+    monkeypatch.setattr(pipeline_module, "_test_llm_cycle_timeout", 0.5, raising=False)
+    pipeline.llm = provider
+    pipeline._get_llm_provider = lambda provider_name=None: provider
+    pipeline.retriever.get_summary_context = lambda **kwargs: ""
+    pipeline.context_manager.refresh_weather_if_needed = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        pipeline.router,
+        "get_fallback_chain",
+        lambda decision: [("gemini", "fallback-model")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_pipeline_hung_first_llm_response_times_out_and_uses_fallback(monkeypatch):
+    """Um modelo que nunca responde não pode deixar o turno aberto para sempre."""
+    import core.pipeline as pipeline_module
+
+    provider = MagicMock()
+    calls = {"count": 0}
+
+    def chat_stream(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return _HangingStream()
+        return _Stream([_Chunk(text="Fallback respondeu com evidências.")])
+
+    provider.chat_stream = chat_stream
+    pipeline = pipeline_module.AssistantPipeline()
+    _configure_hung_pipeline(monkeypatch, pipeline_module, pipeline, provider)
+
+    async def collect_events():
+        return [
+            event
+            async for event in pipeline.run_pipeline_stream(
+                "modo agente: execute uma tarefa completa",
+                thread_id="thread-hung-llm",
+                user_id="user-real-123",
+            )
+        ]
+
+    events = await asyncio.wait_for(collect_events(), timeout=5.0)
+    done = next(event for event in events if event.type == "done")
+    assert done.data["reply"] == "Fallback respondeu com evidências."
+    assert calls["count"] == 2
+    assert not any(event.type == "error" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_all_hung_llm_responses_return_error_and_done(monkeypatch):
+    """Esgotar os fallbacks deve produzir erro honesto e encerrar o stream."""
+    import core.pipeline as pipeline_module
+
+    provider = MagicMock()
+    provider.chat_stream = MagicMock(return_value=_HangingStream())
+    pipeline = pipeline_module.AssistantPipeline()
+    _configure_hung_pipeline(monkeypatch, pipeline_module, pipeline, provider)
+
+    async def collect_events():
+        return [
+            event
+            async for event in pipeline.run_pipeline_stream(
+                "modo agente: execute uma tarefa completa",
+                thread_id="thread-all-hung-llm",
+                user_id="user-real-123",
+            )
+        ]
+
+    events = await asyncio.wait_for(collect_events(), timeout=5.0)
+    assert any(event.type == "error" for event in events)
+    done = next(event for event in events if event.type == "done")
+    assert "instabilidade" in done.data["reply"].lower()
+    assert "sucesso" not in done.data["reply"].lower()

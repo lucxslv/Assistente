@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import platform
+import time
 from typing import Any, Optional
 
 import config as config_module
@@ -31,6 +32,45 @@ logger = logging.getLogger(__name__)
 
 # Test override for max steps per turn
 _test_max_steps_per_turn: Optional[int] = None
+
+# Deadlines evitam turnos eternamente "open" quando um provedor não responde.
+LLM_FIRST_CHUNK_TIMEOUT_SECONDS = 12.0
+LLM_STREAM_STALL_TIMEOUT_SECONDS = 30.0
+LLM_CYCLE_TIMEOUT_SECONDS = 45.0
+_test_llm_stream_timeout: Optional[float] = None
+_test_llm_cycle_timeout: Optional[float] = None
+
+
+async def _bounded_llm_stream(stream, deadline: float):
+    """Consome um stream com limites de primeiro chunk, inatividade e ciclo total."""
+    iterator = stream.__aiter__()
+    is_first_chunk = True
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Tempo limite total ao aguardar resposta do modelo.")
+            chunk_timeout = _test_llm_stream_timeout or (
+                LLM_FIRST_CHUNK_TIMEOUT_SECONDS if is_first_chunk else LLM_STREAM_STALL_TIMEOUT_SECONDS
+            )
+            try:
+                async with asyncio.timeout(min(remaining, chunk_timeout)):
+                    chunk = await iterator.__anext__()
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(
+                    f"Tempo limite ao aguardar resposta do modelo ({chunk_timeout:g}s)."
+                ) from exc
+            except StopAsyncIteration:
+                break
+            is_first_chunk = False
+            yield chunk
+    finally:
+        close = getattr(iterator, "aclose", None)
+        if close:
+            try:
+                await asyncio.wait_for(close(), timeout=1.0)
+            except Exception:
+                logger.debug("Falha ao encerrar stream do provedor após deadline", exc_info=True)
 
 
 
@@ -478,6 +518,7 @@ class AssistantPipeline:
             return active_llm_instance.chat_stream(**stream_kwargs)
 
         while iterations < max_iterations and steps_this_turn < max_steps:
+            llm_cycle_deadline = time.monotonic() + (_test_llm_cycle_timeout or LLM_CYCLE_TIMEOUT_SECONDS)
             if _is_cancelled():
                 break
             iterations += 1
@@ -487,7 +528,10 @@ class AssistantPipeline:
             # Streaming dos chunks e detecção de tool calls com suporte a fallback
             stream_parser = StreamingMessageParser()
             try:
-                async for chunk in _invoke_chat_stream(route_decision.model_name, route_decision.provider_name):
+                async for chunk in _bounded_llm_stream(
+                    _invoke_chat_stream(route_decision.model_name, route_decision.provider_name),
+                    llm_cycle_deadline,
+                ):
                     if _is_cancelled():
                         break
                     if chunk.tool_calls:
@@ -548,7 +592,10 @@ class AssistantPipeline:
                     stream_parser = StreamingMessageParser()
 
                     try:
-                        async for chunk in _invoke_chat_stream(fallback_model, fb_provider):
+                        async for chunk in _bounded_llm_stream(
+                            _invoke_chat_stream(fallback_model, fb_provider),
+                            llm_cycle_deadline,
+                        ):
                             if _is_cancelled():
                                 break
                             if chunk.tool_calls:
