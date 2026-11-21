@@ -41,6 +41,15 @@ class GeminiProvider(BaseLLMProvider):
                 models_to_try.append(fallback)
         return models_to_try
 
+    @staticmethod
+    def _extract_thought_signature(part: Any) -> Optional[str]:
+        signature = getattr(part, "thought_signature", None)
+        if not signature:
+            return None
+        if isinstance(signature, str):
+            return signature
+        return base64.b64encode(signature).decode("ascii")
+
     async def chat(
         self,
         system_prompt: str,
@@ -118,6 +127,7 @@ class GeminiProvider(BaseLLMProvider):
                                         id=f"call_{part.function_call.name}_{uuid.uuid4().hex[:6]}",
                                         name=part.function_call.name,
                                         arguments=args,
+                                        thought_signature=self._extract_thought_signature(part),
                                     )
                                 )
                             elif part.text:
@@ -235,6 +245,7 @@ class GeminiProvider(BaseLLMProvider):
                                             id=f"call_{part.function_call.name}_{uuid.uuid4().hex[:6]}",
                                             name=part.function_call.name,
                                             arguments=args,
+                                            thought_signature=self._extract_thought_signature(part),
                                         )
                                     )
                                 elif part.text:
@@ -292,37 +303,48 @@ class GeminiProvider(BaseLLMProvider):
             role = msg.get("role", "user")
             
             if role == "tool":
-                # Resposta de uma tool executada: formata claramente como observação interna do sistema
+                # Function response nativa: o modelo relaciona o resultado à chamada anterior.
                 func_name = msg.get("name", "unknown")
                 content = str(msg.get("content", ""))
                 normalized.append({
                     "role": "user",
-                    "parts": [
-                        f"[Observação interna do sistema - Retorno da ferramenta '{func_name}']:\n{content}\n"
-                        f"(Instrução: use o retorno acima para formular sua resposta ao usuário de forma natural, fluida e conversacional. "
-                        f"JAMAIS repita comandos de ferramentas, JSON ou strings como 'Chamando ferramenta:' na sua resposta.)"
-                    ]
+                    "parts": [{
+                        "function_response": {
+                            "name": func_name,
+                            "response": {"result": content},
+                        }
+                    }],
                 })
-                
+
             elif role == "assistant":
                 parts = []
                 content = msg.get("content")
                 if content and str(content).strip():
                     clean_content = str(content).strip()
-                    # Remove eventuais resíduos de chamadas de ferramenta acidentais
                     if not clean_content.startswith("Chamando ferramenta:"):
                         parts.append(clean_content)
-                if "tool_calls" in msg and not parts:
-                    # Chamada de ferramenta sem texto conversacional: registra como ação interna executada
-                    tool_names = []
-                    for tc in msg["tool_calls"]:
-                        if isinstance(tc, dict):
-                            fname = tc.get("function", {}).get("name") or tc.get("name")
-                            if fname:
-                                tool_names.append(fname)
-                    actions_str = ", ".join(tool_names) if tool_names else "ferramentas internas"
-                    parts.append(f"[Ação do assistente: consulta realizada aos sistemas via {actions_str}]")
-                
+
+                for tc in msg.get("tool_calls", []):
+                    if not isinstance(tc, dict):
+                        continue
+                    function = tc.get("function", {})
+                    fname = function.get("name") or tc.get("name")
+                    if not fname:
+                        continue
+                    args = function.get("arguments", tc.get("arguments", {}))
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (TypeError, ValueError):
+                            args = {"raw_arguments": args}
+                    call_part = {
+                        "name": fname,
+                        "args": args or {},
+                    }
+                    if tc.get("thought_signature"):
+                        call_part["thought_signature"] = tc["thought_signature"]
+                    parts.append({"function_call": call_part})
+
                 if parts:
                     normalized.append({"role": "model", "parts": parts})
                     
@@ -359,6 +381,21 @@ class GeminiProvider(BaseLLMProvider):
             for p in item.get("parts", []):
                 if isinstance(p, str):
                     parts.append(types.Part.from_text(text=p))
+                elif isinstance(p, dict) and "function_call" in p:
+                    call = p["function_call"]
+                    part = types.Part.from_function_call(
+                        name=call["name"],
+                        args=call.get("args", {}),
+                    )
+                    if call.get("thought_signature"):
+                        part.thought_signature = base64.b64decode(call["thought_signature"])
+                    parts.append(part)
+                elif isinstance(p, dict) and "function_response" in p:
+                    response = p["function_response"]
+                    parts.append(types.Part.from_function_response(
+                        name=response["name"],
+                        response=response.get("response", {}),
+                    ))
                 elif isinstance(p, dict) and "inline_data" in p:
                     try:
                         raw_bytes = base64.b64decode(p["inline_data"]["data"])

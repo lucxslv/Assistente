@@ -9,6 +9,8 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    # Assinatura opcional exigida pelo Gemini para continuar function calls.
+    thought_signature: Optional[str] = None
 
 
 @dataclass

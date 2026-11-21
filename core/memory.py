@@ -34,7 +34,18 @@ class ConversationMemory:
             {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{"id": tc.id, "function": {"name": tc.name, "arguments": tc.arguments}} for tc in tool_calls]
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                        **(
+                            {"thought_signature": tc.thought_signature}
+                            if getattr(tc, "thought_signature", None)
+                            else {}
+                        ),
+                    }
+                    for tc in tool_calls
+                ]
             }
         )
 
